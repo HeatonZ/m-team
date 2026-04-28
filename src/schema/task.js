@@ -173,9 +173,16 @@ export function formatTaskForHuman(task) {
     `📋 当前：${task.description}`,
     `ID: ${task.taskId}`,
     `优先级: ${priorityLabel[task.priority] || '🟡 中'}`,
-    `状态: ${getStatusLabel(task.status)}`,
-    `步骤历史: ${task.context.length} 步`
+    `状态: ${getStatusLabel(task.status)}`
   ];
+
+  const stepCount = task.context.length - 1; // 排除 input
+  if (stepCount === 0) {
+    lines.push('📝 还未开始执行');
+  } else {
+    lines.push(`📝 已完成 ${stepCount} 步`);
+  }
+
   if (task.executor) lines.push(`执行者: ${task.executor}`);
   if (task.lastExecutor) lines.push(`上一步: ${task.lastExecutor}`);
 

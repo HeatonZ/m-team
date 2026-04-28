@@ -251,7 +251,7 @@ describe('task schema', () => {
       expect(formatted).toContain('目标');
       expect(formatted).toContain('🔴 高');
       expect(formatted).toContain('⏳ 待认领');
-      expect(formatted).toContain('步骤历史: 1 步');
+      expect(formatted).toContain('📝 还未开始执行');
     });
 
     it('有 executor 时包含执行者', () => {
@@ -279,7 +279,7 @@ describe('task schema', () => {
       task.context.push({ executor: 'a', step: 's1', output: {}, completedAt: Date.now() });
       task.context.push({ executor: 'b', step: 's2', output: {}, completedAt: Date.now() });
       const formatted = formatTaskForHuman(task);
-      expect(formatted).toContain('步骤历史: 3 步');
+      expect(formatted).toContain('📝 已完成 2 步');
     });
   });
 
