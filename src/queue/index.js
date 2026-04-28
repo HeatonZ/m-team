@@ -1,21 +1,34 @@
 /**
- * M-Team Queue — 去中心化任务池
+ * M-Team Queue — 去中心化任务池（SQLite 版）
  */
 
 import fs from 'node:fs';
 import path from 'node:path';
 import {
+  openDb,
+  getDb,
+  closeDb,
+  getTaskRow,
+  getAllTaskRows,
+  getTaskRowsByStatus,
+  getTaskRowByExecutor,
+  insertTask,
+  updateTaskRow,
+  deleteTaskRow
+} from './db.js';
+import {
   TaskStatus,
   createTask,
-  getTaskWorkspace,
   ensureTaskWorkspace,
   setWorkspaceRoot as setSchemaWorkspaceRoot
 } from '../schema/task.js';
 
 let WORKSPACE_ROOT = '/mnt/d/code/m-team';
+let DB_PATH = null;
 
 export function setWorkspaceRoot(root) {
   WORKSPACE_ROOT = root;
+  DB_PATH = path.join(root, 'queue', 'm-team.db');
   setSchemaWorkspaceRoot(path.join(root, 'tasks'));
 }
 
@@ -23,186 +36,194 @@ function getTasksDir() {
   return path.join(WORKSPACE_ROOT, 'tasks');
 }
 
-function getQueueDir() {
-  return path.join(WORKSPACE_ROOT, 'queue');
+function getTaskPath(taskId) {
+  return path.join(ensureTaskWorkspace(taskId), 'task.json');
 }
 
-function getTasksIndexPath() {
-  return path.join(getQueueDir(), 'tasks.json');
+/** 同步 task.json 代理文件（供 agents 直接读文件系统） */
+function syncTaskJson(task) {
+  const p = getTaskPath(task.taskId);
+  fs.writeFileSync(p, JSON.stringify(task, null, 2), 'utf8');
 }
+
+// ============================================================
+// init
+// ============================================================
 
 function init() {
   fs.mkdirSync(getTasksDir(), { recursive: true });
-  fs.mkdirSync(getQueueDir(), { recursive: true });
-
-  const indexPath = getTasksIndexPath();
-  if (!fs.existsSync(indexPath)) {
-    fs.writeFileSync(indexPath, JSON.stringify({ tasks: [], version: 1 }, null, 2), 'utf8');
-  }
+  fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
+  openDb(DB_PATH);
 }
+
+// ============================================================
+// operations
+// ============================================================
 
 export function publishTask({ description, goal, input = {}, publisher = 'user', priority }) {
   init();
 
   const task = createTask({ description, goal, input, publisher, priority });
-  const taskDir = ensureTaskWorkspace(task.taskId);
 
-  const taskPath = path.join(taskDir, 'task.json');
-  fs.writeFileSync(taskPath, JSON.stringify(task, null, 2), 'utf8');
-
-  const index = JSON.parse(fs.readFileSync(getTasksIndexPath(), 'utf8'));
-  index.tasks.push(task.taskId);
-  fs.writeFileSync(getTasksIndexPath(), JSON.stringify(index, null, 2), 'utf8');
+  const db = getDb();
+  db.transaction(() => {
+    insertTask(task);
+    syncTaskJson(task);
+  })();
 
   console.log(`[m-team-queue] 任务发布: ${task.taskId} - ${description}`);
   return task.taskId;
 }
 
 export function claimTask(taskId, agentId) {
-  const taskDir = getTaskWorkspace(taskId);
-  const taskPath = path.join(taskDir, 'task.json');
-  const lockPath = path.join(taskDir, '.lock');
+  init();
 
-  if (!fs.existsSync(taskPath)) return false;
+  const db = getDb();
 
-  try {
-    fs.writeFileSync(lockPath, agentId, { flag: 'wx' });
-  } catch (e) {
-    if (e.code === 'EEXIST') return false;
-    throw e;
-  }
-
-  try {
-    const task = JSON.parse(fs.readFileSync(taskPath, 'utf8'));
-
+  return db.transaction(() => {
+    const task = getTaskRow(taskId);
+    if (!task) return false;
     if (task.status !== TaskStatus.PENDING) return false;
 
-    // 接力：上一个执行者成为 lastExecutor
-    if (task.executor) {
-      task.lastExecutor = task.executor;
-    }
+    // relay：上一个 executor 成为 lastExecutor
+    // claim 后设置 lastExecutor，只在有当前 executor 时才更新（不覆盖 relay 遗留的 lastExecutor）
+    const newLastExecutor = task.executor !== null ? task.executor : task.lastExecutor;
 
-    task.status = TaskStatus.RUNNING;
-    task.executor = agentId;
-    task.lastHeartbeatAt = Date.now();
-    fs.writeFileSync(taskPath, JSON.stringify(task, null, 2), 'utf8');
+    const patch = {
+      status: TaskStatus.RUNNING,
+      executor: agentId,
+      lastExecutor: newLastExecutor,
+      lastHeartbeatAt: Date.now()
+    };
+
+    const updated = db.prepare(
+      'UPDATE tasks SET status = ?, executor = ?, last_executor = ?, last_heartbeat_at = ? WHERE task_id = ? AND status = ?'
+    ).run(patch.status, patch.executor, patch.lastExecutor, patch.lastHeartbeatAt, taskId, TaskStatus.PENDING);
+
+    if (updated.changes === 0) return false; // 已被他人抢走
+
+    const updatedTask = getTaskRow(taskId);
+    syncTaskJson(updatedTask);
 
     console.log(`[m-team-queue] ${agentId} 认领了任务 ${taskId}`);
     return true;
-  } finally {
-    if (fs.existsSync(lockPath)) fs.unlinkSync(lockPath);
-  }
+  })();
 }
 
 export function getPendingTasks(agentId = null) {
   init();
-  const index = JSON.parse(fs.readFileSync(getTasksIndexPath(), 'utf8'));
 
   if (agentId && getAgentActiveTask(agentId)) return [];
 
-  const pending = [];
-  for (const tid of index.tasks) {
-    const taskPath = path.join(getTaskWorkspace(tid), 'task.json');
-    if (!fs.existsSync(taskPath)) continue;
-
-    const task = JSON.parse(fs.readFileSync(taskPath, 'utf8'));
-    if (task.status !== TaskStatus.PENDING) continue;
-
-    pending.push(task);
-  }
-
-  const PRIORITY_ORDER = { high: 0, normal: 1, low: 2 };
-  return pending.sort((a, b) => {
-    const pa = PRIORITY_ORDER[a.priority] ?? 1;
-    const pb = PRIORITY_ORDER[b.priority] ?? 1;
-    if (pa !== pb) return pa - pb;
-    return a.createdAt - b.createdAt;
-  });
+  const rows = getTaskRowsByStatus(TaskStatus.PENDING);
+  return rows;
 }
 
 export function getAgentActiveTask(agentId) {
-  const index = JSON.parse(fs.readFileSync(getTasksIndexPath(), 'utf8'));
-
-  for (const tid of index.tasks) {
-    const taskPath = path.join(getTaskWorkspace(tid), 'task.json');
-    if (!fs.existsSync(taskPath)) continue;
-
-    const task = JSON.parse(fs.readFileSync(taskPath, 'utf8'));
-    if (task.executor === agentId && task.status === TaskStatus.RUNNING) {
-      return task;
-    }
-  }
-  return null;
-}
-
-/**
- * 更新任务状态，或追加 context 步骤
- * @param {string} taskId
- * @param {string|null} status
- * @param {Object|null} contextEntry - 追加到 context 的步骤，格式 { executor, step, output }
- * @param {string|null} description - 更新当前步骤描述
- * @param {number|null} lastHeartbeatAt
- * @param {string|null} executorId - 执行者 ID（显式传入，不从 task 状态推断）
- */
-export function updateTask(taskId, status, contextEntry = null, description = null, lastHeartbeatAt = null, executorId = null) {
-  const taskPath = path.join(getTaskWorkspace(taskId), 'task.json');
-  if (!fs.existsSync(taskPath)) return null;
-
-  const task = JSON.parse(fs.readFileSync(taskPath, 'utf8'));
-
-  // 接力：任务重新放回 pending 时，保留 lastExecutor
-  if (status === TaskStatus.PENDING) {
-    if (task.executor) {
-      task.lastExecutor = task.executor;
-      task.executor = null;
-    }
-  }
-
-  if (status) task.status = status;
-  if (description) task.description = description;
-  if (lastHeartbeatAt) task.lastHeartbeatAt = lastHeartbeatAt;
-
-  // 追加步骤到 context
-  if (contextEntry) {
-    task.context.push({
-      executor: executorId || task.executor || 'unknown',
-      step: contextEntry.step,
-      output: contextEntry.output || {},
-      completedAt: Date.now()
-    });
-  }
-
-  if (status === TaskStatus.COMPLETED || status === TaskStatus.FAILED) {
-    task.completedAt = Date.now();
-  }
-  if (status === TaskStatus.RUNNING && !task.lastHeartbeatAt) {
-    task.lastHeartbeatAt = Date.now();
-  }
-
-  fs.writeFileSync(taskPath, JSON.stringify(task, null, 2), 'utf8');
-  console.log(`[m-team-queue] 任务 ${taskId} 状态: ${status}`);
-  return task;
+  init();
+  return getTaskRowByExecutor(agentId);
 }
 
 export function getTask(taskId) {
-  const taskPath = path.join(getTaskWorkspace(taskId), 'task.json');
-  if (!fs.existsSync(taskPath)) return null;
-  return JSON.parse(fs.readFileSync(taskPath, 'utf8'));
+  init();
+  return getTaskRow(taskId);
 }
 
 export function getAllTasks() {
   init();
-  const index = JSON.parse(fs.readFileSync(getTasksIndexPath(), 'utf8'));
-  const tasks = [];
-
-  for (const tid of index.tasks) {
-    const task = getTask(tid);
-    if (task) tasks.push(task);
-  }
-
-  return tasks.sort((a, b) => b.createdAt - b.createdAt);
+  return getAllTaskRows();
 }
 
 export function getTasksByExecutor(agentId) {
-  return getAllTasks().filter(t => t.executor === agentId);
+  init();
+  return getAllTaskRows().filter(t => t.executor === agentId);
+}
+
+/**
+ * @param {string} taskId
+ * @param {string|null} status
+ * @param {Object|null} contextEntry
+ * @param {string|null} description
+ * @param {number|null} lastHeartbeatAt
+ * @param {string|null} executorId
+ */
+export function updateTask(taskId, status, contextEntry = null, description = null, lastHeartbeatAt = null, executorId = null) {
+  init();
+
+  const db = getDb();
+
+  return db.transaction(() => {
+    const task = getTaskRow(taskId);
+    if (!task) return null;
+
+    // 接力：重新放回 pending 时，清空 executor，记录 lastExecutor
+    if (status === TaskStatus.PENDING) {
+      const patch = {
+        status: TaskStatus.PENDING,
+        executor: null,
+        lastExecutor: task.executor ?? null,
+        description: description ?? task.description,
+        lastHeartbeatAt: lastHeartbeatAt ?? null
+      };
+
+      // 追加 context 步骤
+      if (contextEntry) {
+        const newContext = [...task.context];
+        newContext.push({
+          executor: executorId || task.executor || 'unknown',
+          step: contextEntry.step,
+          output: contextEntry.output || {},
+          completedAt: Date.now()
+        });
+        patch.context = JSON.stringify(newContext);
+      }
+
+      updateTaskRow(taskId, patch);
+      const updated = getTaskRow(taskId);
+      syncTaskJson(updated);
+      return updated;
+    }
+
+    // 普通状态更新
+    if (status) {
+      const patch = { status };
+      if (status === TaskStatus.COMPLETED || status === TaskStatus.FAILED) {
+        patch.completedAt = Date.now();
+      }
+      if (status === TaskStatus.RUNNING && !task.lastHeartbeatAt) {
+        patch.lastHeartbeatAt = Date.now();
+      }
+      if (description) patch.description = description;
+      if (lastHeartbeatAt) patch.lastHeartbeatAt = lastHeartbeatAt;
+
+      updateTaskRow(taskId, patch);
+    } else {
+      // 只更新心跳
+      if (lastHeartbeatAt) {
+        updateTaskRow(taskId, { lastHeartbeatAt });
+      }
+      if (description) {
+        updateTaskRow(taskId, { description });
+      }
+    }
+
+    // 追加 context 步骤（任何状态都可能需要追加 context）
+    if (contextEntry) {
+      const current = getTaskRow(taskId);
+      const newContext = [...current.context];
+      newContext.push({
+        executor: executorId || current.executor || 'unknown',
+        step: contextEntry.step,
+        output: contextEntry.output || {},
+        completedAt: Date.now()
+      });
+      updateTaskRow(taskId, { context: JSON.stringify(newContext) });
+    }
+
+    const updated = getTaskRow(taskId);
+    syncTaskJson(updated);
+
+    console.log(`[m-team-queue] 任务 ${taskId} 状态: ${status}`);
+    return updated;
+  })();
 }

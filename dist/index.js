@@ -5,8 +5,8 @@ var __export = (target, all) => {
 };
 
 // src/index.js
-import fs3 from "node:fs";
-import path3 from "node:path";
+import fs4 from "node:fs";
+import path4 from "node:path";
 import { definePluginEntry, emptyPluginConfigSchema, jsonResult, readStringParam, readNumberParam } from "openclaw/plugin-sdk/core";
 
 // node_modules/@sinclair/typebox/build/esm/type/guard/value.mjs
@@ -2616,12 +2616,131 @@ __export(type_exports2, {
 var Type = type_exports2;
 
 // src/queue/index.js
-import fs2 from "node:fs";
-import path2 from "node:path";
+import fs3 from "node:fs";
+import path3 from "node:path";
 
-// src/schema/task.js
+// src/queue/db.js
+import Database from "better-sqlite3";
 import fs from "node:fs";
 import path from "node:path";
+var _db = null;
+function openDb(dbPath) {
+  if (_db) return _db;
+  fs.mkdirSync(path.dirname(dbPath), { recursive: true });
+  _db = new Database(dbPath);
+  _db.pragma("journal_mode = WAL");
+  _db.pragma("foreign_keys = ON");
+  initSchema(_db);
+  return _db;
+}
+function getDb() {
+  if (!_db) throw new Error("[m-team] db not opened, call openDb first");
+  return _db;
+}
+function initSchema(db) {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS tasks (
+      task_id        TEXT PRIMARY KEY,
+      description    TEXT NOT NULL,
+      goal           TEXT NOT NULL,
+      context        TEXT NOT NULL DEFAULT '[]',
+      priority       TEXT NOT NULL DEFAULT 'normal',
+      publisher      TEXT NOT NULL DEFAULT 'user',
+      status         TEXT NOT NULL DEFAULT 'pending',
+      executor       TEXT,
+      last_executor  TEXT,
+      created_at     INTEGER NOT NULL,
+      completed_at   INTEGER,
+      last_heartbeat_at INTEGER
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_tasks_status      ON tasks(status);
+    CREATE INDEX IF NOT EXISTS idx_tasks_executor   ON tasks(executor);
+    CREATE INDEX IF NOT EXISTS idx_tasks_priority    ON tasks(priority);
+    CREATE INDEX IF NOT EXISTS idx_tasks_created_at  ON tasks(created_at);
+  `);
+}
+function getTaskRow(taskId) {
+  const db = getDb();
+  const row = db.prepare("SELECT * FROM tasks WHERE task_id = ?").get(taskId);
+  if (!row) return null;
+  return deserializeTask(row);
+}
+function getAllTaskRows() {
+  const db = getDb();
+  const rows = db.prepare("SELECT * FROM tasks ORDER BY created_at DESC").all();
+  return rows.map(deserializeTask);
+}
+function getTaskRowsByStatus(status) {
+  const db = getDb();
+  const rows = db.prepare("SELECT * FROM tasks WHERE status = ? ORDER BY priority ASC, created_at ASC").all(status);
+  return rows.map(deserializeTask);
+}
+function getTaskRowByExecutor(executor) {
+  const db = getDb();
+  const row = db.prepare("SELECT * FROM tasks WHERE executor = ? AND status = ?").get(executor, "running");
+  if (!row) return null;
+  return deserializeTask(row);
+}
+function insertTask(task) {
+  const db = getDb();
+  db.prepare(`
+    INSERT INTO tasks (task_id, description, goal, context, priority, publisher, status, executor, last_executor, created_at, completed_at, last_heartbeat_at)
+    VALUES (@taskId, @description, @goal, @context, @priority, @publisher, @status, @executor, @lastExecutor, @createdAt, @completedAt, @lastHeartbeatAt)
+  `).run(serializeTask(task));
+}
+function updateTaskRow(taskId, patch) {
+  const db = getDb();
+  const sets = Object.keys(patch).map((k) => `${sqlFieldName(k)} = @${k}`).join(", ");
+  const stmt = db.prepare(`UPDATE tasks SET ${sets} WHERE task_id = @taskId`);
+  stmt.run({ ...patch, taskId });
+  return getTaskRow(taskId);
+}
+function serializeTask(task) {
+  return {
+    taskId: task.taskId,
+    description: task.description,
+    goal: task.goal,
+    context: JSON.stringify(task.context),
+    priority: task.priority,
+    publisher: task.publisher,
+    status: task.status,
+    executor: task.executor,
+    lastExecutor: task.lastExecutor,
+    createdAt: task.createdAt,
+    completedAt: task.completedAt ?? null,
+    lastHeartbeatAt: task.lastHeartbeatAt ?? null
+  };
+}
+function deserializeTask(row) {
+  return {
+    taskId: row.task_id,
+    description: row.description,
+    goal: row.goal,
+    context: JSON.parse(row.context),
+    priority: row.priority,
+    publisher: row.publisher,
+    status: row.status,
+    executor: row.executor,
+    lastExecutor: row.last_executor,
+    createdAt: row.created_at,
+    completedAt: row.completed_at,
+    lastHeartbeatAt: row.last_heartbeat_at
+  };
+}
+function sqlFieldName(key) {
+  const map = {
+    taskId: "task_id",
+    completedAt: "completed_at",
+    lastHeartbeatAt: "last_heartbeat_at",
+    lastExecutor: "last_executor"
+  };
+  return map[key] ?? key;
+}
+
+// src/schema/task.js
+import fs2 from "node:fs";
+import path2 from "node:path";
 var TaskStatus = {
   PENDING: "pending",
   RUNNING: "running",
@@ -2633,11 +2752,11 @@ function setWorkspaceRoot(rootPath) {
   WORKSPACE_ROOT = rootPath;
 }
 function getTaskWorkspace(taskId) {
-  return path.join(WORKSPACE_ROOT, taskId);
+  return path2.join(WORKSPACE_ROOT, taskId);
 }
 function ensureTaskWorkspace(taskId) {
   const ws = getTaskWorkspace(taskId);
-  fs.mkdirSync(ws, { recursive: true });
+  fs2.mkdirSync(ws, { recursive: true });
   return ws;
 }
 function createTask({ description, goal, input = {}, publisher = "user", priority = "normal" }) {
@@ -2666,143 +2785,144 @@ function createTask({ description, goal, input = {}, publisher = "user", priorit
 
 // src/queue/index.js
 var WORKSPACE_ROOT2 = "/mnt/d/code/m-team";
+var DB_PATH = null;
 function setWorkspaceRoot2(root) {
   WORKSPACE_ROOT2 = root;
-  setWorkspaceRoot(path2.join(root, "tasks"));
+  DB_PATH = path3.join(root, "queue", "m-team.db");
+  setWorkspaceRoot(path3.join(root, "tasks"));
 }
 function getTasksDir() {
-  return path2.join(WORKSPACE_ROOT2, "tasks");
+  return path3.join(WORKSPACE_ROOT2, "tasks");
 }
-function getQueueDir() {
-  return path2.join(WORKSPACE_ROOT2, "queue");
+function getTaskPath(taskId) {
+  return path3.join(ensureTaskWorkspace(taskId), "task.json");
 }
-function getTasksIndexPath() {
-  return path2.join(getQueueDir(), "tasks.json");
+function syncTaskJson(task) {
+  const p = getTaskPath(task.taskId);
+  fs3.writeFileSync(p, JSON.stringify(task, null, 2), "utf8");
 }
 function init() {
-  fs2.mkdirSync(getTasksDir(), { recursive: true });
-  fs2.mkdirSync(getQueueDir(), { recursive: true });
-  const indexPath = getTasksIndexPath();
-  if (!fs2.existsSync(indexPath)) {
-    fs2.writeFileSync(indexPath, JSON.stringify({ tasks: [], version: 1 }, null, 2), "utf8");
-  }
+  fs3.mkdirSync(getTasksDir(), { recursive: true });
+  fs3.mkdirSync(path3.dirname(DB_PATH), { recursive: true });
+  openDb(DB_PATH);
 }
 function publishTask({ description, goal, input = {}, publisher = "user", priority }) {
   init();
   const task = createTask({ description, goal, input, publisher, priority });
-  const taskDir = ensureTaskWorkspace(task.taskId);
-  const taskPath = path2.join(taskDir, "task.json");
-  fs2.writeFileSync(taskPath, JSON.stringify(task, null, 2), "utf8");
-  const index = JSON.parse(fs2.readFileSync(getTasksIndexPath(), "utf8"));
-  index.tasks.push(task.taskId);
-  fs2.writeFileSync(getTasksIndexPath(), JSON.stringify(index, null, 2), "utf8");
+  const db = getDb();
+  db.transaction(() => {
+    insertTask(task);
+    syncTaskJson(task);
+  })();
   console.log(`[m-team-queue] \u4EFB\u52A1\u53D1\u5E03: ${task.taskId} - ${description}`);
   return task.taskId;
 }
 function claimTask(taskId, agentId) {
-  const taskDir = getTaskWorkspace(taskId);
-  const taskPath = path2.join(taskDir, "task.json");
-  const lockPath = path2.join(taskDir, ".lock");
-  if (!fs2.existsSync(taskPath)) return false;
-  try {
-    fs2.writeFileSync(lockPath, agentId, { flag: "wx" });
-  } catch (e) {
-    if (e.code === "EEXIST") return false;
-    throw e;
-  }
-  try {
-    const task = JSON.parse(fs2.readFileSync(taskPath, "utf8"));
+  init();
+  const db = getDb();
+  return db.transaction(() => {
+    const task = getTaskRow(taskId);
+    if (!task) return false;
     if (task.status !== TaskStatus.PENDING) return false;
-    if (task.executor) {
-      task.lastExecutor = task.executor;
-    }
-    task.status = TaskStatus.RUNNING;
-    task.executor = agentId;
-    task.lastHeartbeatAt = Date.now();
-    fs2.writeFileSync(taskPath, JSON.stringify(task, null, 2), "utf8");
+    const newLastExecutor = task.executor !== null ? task.executor : task.lastExecutor;
+    const patch = {
+      status: TaskStatus.RUNNING,
+      executor: agentId,
+      lastExecutor: newLastExecutor,
+      lastHeartbeatAt: Date.now()
+    };
+    const updated = db.prepare(
+      "UPDATE tasks SET status = ?, executor = ?, last_executor = ?, last_heartbeat_at = ? WHERE task_id = ? AND status = ?"
+    ).run(patch.status, patch.executor, patch.lastExecutor, patch.lastHeartbeatAt, taskId, TaskStatus.PENDING);
+    if (updated.changes === 0) return false;
+    const updatedTask = getTaskRow(taskId);
+    syncTaskJson(updatedTask);
     console.log(`[m-team-queue] ${agentId} \u8BA4\u9886\u4E86\u4EFB\u52A1 ${taskId}`);
     return true;
-  } finally {
-    if (fs2.existsSync(lockPath)) fs2.unlinkSync(lockPath);
-  }
+  })();
 }
 function getPendingTasks(agentId = null) {
   init();
-  const index = JSON.parse(fs2.readFileSync(getTasksIndexPath(), "utf8"));
   if (agentId && getAgentActiveTask(agentId)) return [];
-  const pending = [];
-  for (const tid of index.tasks) {
-    const taskPath = path2.join(getTaskWorkspace(tid), "task.json");
-    if (!fs2.existsSync(taskPath)) continue;
-    const task = JSON.parse(fs2.readFileSync(taskPath, "utf8"));
-    if (task.status !== TaskStatus.PENDING) continue;
-    pending.push(task);
-  }
-  const PRIORITY_ORDER = { high: 0, normal: 1, low: 2 };
-  return pending.sort((a, b) => {
-    const pa = PRIORITY_ORDER[a.priority] ?? 1;
-    const pb = PRIORITY_ORDER[b.priority] ?? 1;
-    if (pa !== pb) return pa - pb;
-    return a.createdAt - b.createdAt;
-  });
+  const rows = getTaskRowsByStatus(TaskStatus.PENDING);
+  return rows;
 }
 function getAgentActiveTask(agentId) {
-  const index = JSON.parse(fs2.readFileSync(getTasksIndexPath(), "utf8"));
-  for (const tid of index.tasks) {
-    const taskPath = path2.join(getTaskWorkspace(tid), "task.json");
-    if (!fs2.existsSync(taskPath)) continue;
-    const task = JSON.parse(fs2.readFileSync(taskPath, "utf8"));
-    if (task.executor === agentId && task.status === TaskStatus.RUNNING) {
-      return task;
-    }
-  }
-  return null;
-}
-function updateTask(taskId, status, contextEntry = null, description = null, lastHeartbeatAt = null, executorId = null) {
-  const taskPath = path2.join(getTaskWorkspace(taskId), "task.json");
-  if (!fs2.existsSync(taskPath)) return null;
-  const task = JSON.parse(fs2.readFileSync(taskPath, "utf8"));
-  if (status === TaskStatus.PENDING) {
-    if (task.executor) {
-      task.lastExecutor = task.executor;
-      task.executor = null;
-    }
-  }
-  if (status) task.status = status;
-  if (description) task.description = description;
-  if (lastHeartbeatAt) task.lastHeartbeatAt = lastHeartbeatAt;
-  if (contextEntry) {
-    task.context.push({
-      executor: executorId || task.executor || "unknown",
-      step: contextEntry.step,
-      output: contextEntry.output || {},
-      completedAt: Date.now()
-    });
-  }
-  if (status === TaskStatus.COMPLETED || status === TaskStatus.FAILED) {
-    task.completedAt = Date.now();
-  }
-  if (status === TaskStatus.RUNNING && !task.lastHeartbeatAt) {
-    task.lastHeartbeatAt = Date.now();
-  }
-  fs2.writeFileSync(taskPath, JSON.stringify(task, null, 2), "utf8");
-  console.log(`[m-team-queue] \u4EFB\u52A1 ${taskId} \u72B6\u6001: ${status}`);
-  return task;
+  init();
+  return getTaskRowByExecutor(agentId);
 }
 function getTask(taskId) {
-  const taskPath = path2.join(getTaskWorkspace(taskId), "task.json");
-  if (!fs2.existsSync(taskPath)) return null;
-  return JSON.parse(fs2.readFileSync(taskPath, "utf8"));
+  init();
+  return getTaskRow(taskId);
 }
 function getAllTasks() {
   init();
-  const index = JSON.parse(fs2.readFileSync(getTasksIndexPath(), "utf8"));
-  const tasks = [];
-  for (const tid of index.tasks) {
-    const task = getTask(tid);
-    if (task) tasks.push(task);
-  }
-  return tasks.sort((a, b) => b.createdAt - b.createdAt);
+  return getAllTaskRows();
+}
+function updateTask(taskId, status, contextEntry = null, description = null, lastHeartbeatAt = null, executorId = null) {
+  init();
+  const db = getDb();
+  return db.transaction(() => {
+    const task = getTaskRow(taskId);
+    if (!task) return null;
+    if (status === TaskStatus.PENDING) {
+      const patch = {
+        status: TaskStatus.PENDING,
+        executor: null,
+        lastExecutor: task.executor ?? null,
+        description: description ?? task.description,
+        lastHeartbeatAt: lastHeartbeatAt ?? null
+      };
+      if (contextEntry) {
+        const newContext = [...task.context];
+        newContext.push({
+          executor: executorId || task.executor || "unknown",
+          step: contextEntry.step,
+          output: contextEntry.output || {},
+          completedAt: Date.now()
+        });
+        patch.context = JSON.stringify(newContext);
+      }
+      updateTaskRow(taskId, patch);
+      const updated2 = getTaskRow(taskId);
+      syncTaskJson(updated2);
+      return updated2;
+    }
+    if (status) {
+      const patch = { status };
+      if (status === TaskStatus.COMPLETED || status === TaskStatus.FAILED) {
+        patch.completedAt = Date.now();
+      }
+      if (status === TaskStatus.RUNNING && !task.lastHeartbeatAt) {
+        patch.lastHeartbeatAt = Date.now();
+      }
+      if (description) patch.description = description;
+      if (lastHeartbeatAt) patch.lastHeartbeatAt = lastHeartbeatAt;
+      updateTaskRow(taskId, patch);
+    } else {
+      if (lastHeartbeatAt) {
+        updateTaskRow(taskId, { lastHeartbeatAt });
+      }
+      if (description) {
+        updateTaskRow(taskId, { description });
+      }
+    }
+    if (contextEntry) {
+      const current = getTaskRow(taskId);
+      const newContext = [...current.context];
+      newContext.push({
+        executor: executorId || current.executor || "unknown",
+        step: contextEntry.step,
+        output: contextEntry.output || {},
+        completedAt: Date.now()
+      });
+      updateTaskRow(taskId, { context: JSON.stringify(newContext) });
+    }
+    const updated = getTaskRow(taskId);
+    syncTaskJson(updated);
+    console.log(`[m-team-queue] \u4EFB\u52A1 ${taskId} \u72B6\u6001: ${status}`);
+    return updated;
+  })();
 }
 
 // src/index.js
@@ -2811,10 +2931,10 @@ var DEFAULT_CONFIG = {
 };
 var config = { ...DEFAULT_CONFIG };
 function getTasksDir2() {
-  return path3.join(config.workspaceRoot, "tasks");
+  return path4.join(config.workspaceRoot, "tasks");
 }
-function getQueueDir2() {
-  return path3.join(config.workspaceRoot, "queue");
+function getQueueDir() {
+  return path4.join(config.workspaceRoot, "queue");
 }
 var index_default = definePluginEntry({
   id: "m-team",
@@ -2828,9 +2948,9 @@ var index_default = definePluginEntry({
       api.logger?.warn("[m-team] \u672A\u914D\u7F6E workspaceRoot\uFF0C\u8DF3\u8FC7\u521D\u59CB\u5316");
       return;
     }
-    fs3.mkdirSync(config.workspaceRoot, { recursive: true });
-    fs3.mkdirSync(getTasksDir2(), { recursive: true });
-    fs3.mkdirSync(getQueueDir2(), { recursive: true });
+    fs4.mkdirSync(config.workspaceRoot, { recursive: true });
+    fs4.mkdirSync(getTasksDir2(), { recursive: true });
+    fs4.mkdirSync(getQueueDir(), { recursive: true });
     setWorkspaceRoot2(config.workspaceRoot);
     api.registerTool({
       name: "mteam_publish_task",
@@ -2952,7 +3072,7 @@ var index_default = definePluginEntry({
     api.logger?.info("[m-team] \u4EFB\u52A1\u6C60\u534F\u4F5C\u63D2\u4EF6\u5DF2\u6FC0\u6D3B");
     api.logger?.info(`[m-team] Workspace: ${config.workspaceRoot}`);
     api.logger?.info(`[m-team] Tasks: ${getTasksDir2()}`);
-    api.logger?.info(`[m-team] Queue: ${getQueueDir2()}`);
+    api.logger?.info(`[m-team] Queue: ${getQueueDir()}`);
   }
 });
 export {
