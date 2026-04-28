@@ -2745,7 +2745,8 @@ var TaskStatus = {
   PENDING: "pending",
   RUNNING: "running",
   COMPLETED: "completed",
-  FAILED: "failed"
+  FAILED: "failed",
+  CANCELLED: "cancelled"
 };
 var WORKSPACE_ROOT = "/mnt/d/code/m-team/workspace";
 function setWorkspaceRoot(rootPath) {
@@ -2865,6 +2866,32 @@ function updateTask(taskId, status, contextEntry = null, description = null, las
   return db.transaction(() => {
     const task = getTaskRow(taskId);
     if (!task) return null;
+    if (task.status === TaskStatus.CANCELLED) {
+      if (status === TaskStatus.PENDING) {
+        return { error: "TASK_CANCELLED", task };
+      }
+      if (status === TaskStatus.COMPLETED || status === TaskStatus.FAILED) {
+        const patch = { status, completedAt: Date.now() };
+        updateTaskRow(taskId, patch);
+        const updated2 = getTaskRow(taskId);
+        syncTaskJson(updated2);
+        return updated2;
+      }
+      if (contextEntry) {
+        const newContext = [...task.context];
+        newContext.push({
+          executor: executorId || task.executor || "unknown",
+          step: contextEntry.step,
+          output: contextEntry.output || {},
+          completedAt: Date.now()
+        });
+        updateTaskRow(taskId, { context: JSON.stringify(newContext) });
+        const updated2 = getTaskRow(taskId);
+        syncTaskJson(updated2);
+        return updated2;
+      }
+      return task;
+    }
     if (status === TaskStatus.PENDING) {
       const patch = {
         status: TaskStatus.PENDING,
@@ -2922,6 +2949,53 @@ function updateTask(taskId, status, contextEntry = null, description = null, las
     syncTaskJson(updated);
     console.log(`[m-team-queue] \u4EFB\u52A1 ${taskId} \u72B6\u6001: ${status}`);
     return updated;
+  })();
+}
+function cancelTask(taskId, publisher, reason) {
+  init();
+  const db = getDb();
+  return db.transaction(() => {
+    const task = getTaskRow(taskId);
+    if (!task) return { success: false, task: null, reason: "TASK_NOT_FOUND" };
+    if (task.publisher !== publisher) {
+      return { success: false, task, reason: "NOT_PUBLISHER" };
+    }
+    if (task.status === TaskStatus.COMPLETED || task.status === TaskStatus.CANCELLED) {
+      return { success: false, task, reason: "ALREADY_TERMINAL" };
+    }
+    const patch = {
+      status: TaskStatus.CANCELLED,
+      completedAt: Date.now()
+    };
+    updateTaskRow(taskId, patch);
+    const updated = getTaskRow(taskId);
+    syncTaskJson(updated);
+    console.log(`[m-team-queue] \u4EFB\u52A1 ${taskId} \u88AB ${publisher} \u53D6\u6D88: ${reason ?? "\u65E0\u539F\u56E0"}`);
+    return { success: true, task: updated };
+  })();
+}
+function relinquishTask(taskId, executorId) {
+  init();
+  const db = getDb();
+  return db.transaction(() => {
+    const task = getTaskRow(taskId);
+    if (!task) return { success: false, task: null, reason: "TASK_NOT_FOUND" };
+    if (task.executor !== executorId) {
+      return { success: false, task, reason: "NOT_CURRENT_EXECUTOR" };
+    }
+    if (task.status === TaskStatus.CANCELLED) {
+      return { success: false, task, reason: "TASK_CANCELLED" };
+    }
+    const patch = {
+      status: TaskStatus.PENDING,
+      executor: null,
+      lastExecutor: executorId
+    };
+    updateTaskRow(taskId, patch);
+    const updated = getTaskRow(taskId);
+    syncTaskJson(updated);
+    console.log(`[m-team-queue] executor ${executorId} \u653E\u5F03\u4EFB\u52A1 ${taskId}`);
+    return { success: true, task: updated };
   })();
 }
 
@@ -2997,7 +3071,7 @@ var index_default = definePluginEntry({
       parameters: Type.Object({
         taskId: Type.String({ description: "\u4EFB\u52A1ID" }),
         agentId: Type.Optional(Type.String({ description: "\u6267\u884C\u8005 agentId\uFF08\u8FFD\u52A0 context \u65F6\u5FC5\u586B\uFF09" })),
-        status: Type.Optional(Type.String({ description: "\u72B6\u6001", enum: ["running", "completed", "failed", "pending"] })),
+        status: Type.Optional(Type.String({ description: "\u72B6\u6001", enum: ["running", "completed", "failed", "pending", "cancelled"] })),
         // 追加到 context 的步骤
         contextStep: Type.Optional(Type.String({ description: "\u5F53\u524D\u6B65\u9AA4\u63CF\u8FF0" })),
         contextOutput: Type.Optional(Type.Object({
@@ -3022,6 +3096,36 @@ var index_default = definePluginEntry({
         }
         const task = updateTask(taskId, status, contextEntry, description, lastHeartbeatAt, agentId);
         return jsonResult({ task });
+      }
+    });
+    api.registerTool({
+      name: "mteam_cancel_task",
+      description: "Publisher \u53D6\u6D88\u4EFB\u52A1\uFF08\u4E0D\u53EF\u518D relay\uFF09",
+      parameters: Type.Object({
+        taskId: Type.String({ description: "\u4EFB\u52A1ID" }),
+        publisher: Type.String({ description: "\u53D1\u5E03\u8005\uFF08\u9700\u4E0E\u521B\u5EFA\u65F6 publisher \u4E00\u81F4\uFF09" }),
+        reason: Type.Optional(Type.String({ description: "\u53D6\u6D88\u539F\u56E0" }))
+      }),
+      async execute(_toolCallId, rawParams) {
+        const taskId = readStringParam(rawParams, "taskId", { required: true });
+        const publisher = readStringParam(rawParams, "publisher", { required: true });
+        const reason = readStringParam(rawParams, "reason");
+        const result = cancelTask(taskId, publisher, reason);
+        return jsonResult(result);
+      }
+    });
+    api.registerTool({
+      name: "mteam_relinquish_task",
+      description: "Executor \u4E3B\u52A8\u653E\u5F03\u5F53\u524D\u4EFB\u52A1\uFF08\u653E\u56DE pending\uFF09",
+      parameters: Type.Object({
+        taskId: Type.String({ description: "\u4EFB\u52A1ID" }),
+        executorId: Type.String({ description: "\u6267\u884C\u8005 agentId" })
+      }),
+      async execute(_toolCallId, rawParams) {
+        const taskId = readStringParam(rawParams, "taskId", { required: true });
+        const executorId = readStringParam(rawParams, "executorId", { required: true });
+        const result = relinquishTask(taskId, executorId);
+        return jsonResult(result);
       }
     });
     api.registerTool({

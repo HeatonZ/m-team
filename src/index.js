@@ -15,7 +15,9 @@ import {
   getAgentActiveTask,
   updateTask,
   getTask,
-  getAllTasks
+  getAllTasks,
+  cancelTask,
+  relinquishTask
 } from './queue/index.js';
 
 const DEFAULT_CONFIG = {
@@ -102,7 +104,7 @@ export default definePluginEntry({
       parameters: Type.Object({
         taskId: Type.String({ description: '任务ID' }),
         agentId: Type.Optional(Type.String({ description: '执行者 agentId（追加 context 时必填）' })),
-        status: Type.Optional(Type.String({ description: '状态', enum: ['running', 'completed', 'failed', 'pending'] })),
+        status: Type.Optional(Type.String({ description: '状态', enum: ['running', 'completed', 'failed', 'pending', 'cancelled'] })),
         // 追加到 context 的步骤
         contextStep: Type.Optional(Type.String({ description: '当前步骤描述' })),
         contextOutput: Type.Optional(Type.Object({
@@ -129,6 +131,40 @@ export default definePluginEntry({
 
         const task = updateTask(taskId, status, contextEntry, description, lastHeartbeatAt, agentId);
         return jsonResult({ task });
+      }
+    });
+
+    // === mteam_cancel_task ===
+    api.registerTool({
+      name: 'mteam_cancel_task',
+      description: 'Publisher 取消任务（不可再 relay）',
+      parameters: Type.Object({
+        taskId: Type.String({ description: '任务ID' }),
+        publisher: Type.String({ description: '发布者（需与创建时 publisher 一致）' }),
+        reason: Type.Optional(Type.String({ description: '取消原因' }))
+      }),
+      async execute(_toolCallId, rawParams) {
+        const taskId = readStringParam(rawParams, 'taskId', { required: true });
+        const publisher = readStringParam(rawParams, 'publisher', { required: true });
+        const reason = readStringParam(rawParams, 'reason');
+        const result = cancelTask(taskId, publisher, reason);
+        return jsonResult(result);
+      }
+    });
+
+    // === mteam_relinquish_task ===
+    api.registerTool({
+      name: 'mteam_relinquish_task',
+      description: 'Executor 主动放弃当前任务（放回 pending）',
+      parameters: Type.Object({
+        taskId: Type.String({ description: '任务ID' }),
+        executorId: Type.String({ description: '执行者 agentId' })
+      }),
+      async execute(_toolCallId, rawParams) {
+        const taskId = readStringParam(rawParams, 'taskId', { required: true });
+        const executorId = readStringParam(rawParams, 'executorId', { required: true });
+        const result = relinquishTask(taskId, executorId);
+        return jsonResult(result);
       }
     });
 

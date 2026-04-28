@@ -23,7 +23,8 @@ export const TaskStatus = {
   PENDING: 'pending',
   RUNNING: 'running',
   COMPLETED: 'completed',
-  FAILED: 'failed'
+  FAILED: 'failed',
+  CANCELLED: 'cancelled'
 };
 
 // 任务优先级枚举
@@ -140,7 +141,8 @@ export function getStatusLabel(status) {
     pending: '⏳ 待认领',
     running: '⚙️ 执行中',
     completed: '✅ 完成',
-    failed: '❌ 失败'
+    failed: '❌ 失败',
+    cancelled: '🚫 已取消'
   };
   return labels[status] || status;
 }

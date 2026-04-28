@@ -20,6 +20,8 @@
 | `mteam_publish_task` | 管理者 | 发布任务（goal 必填，不可更改） |
 | `mteam_claim_task` | 执行者 | 认领任务 |
 | `mteam_update_task` | 执行者 | 更新状态/追加 context 步骤 |
+| `mteam_cancel_task` | 管理者 | Publisher 取消任务（不可再 relay） |
+| `mteam_relinquish_task` | 执行者 | Executor 主动放弃（放回 pending） |
 | `mteam_get_pending` | 执行者 | 查看待认领任务 |
 | `mteam_get_agent_active` | 执行者 | 查看自己进行中的任务 |
 | `mteam_get_task` | 执行者 | 查看任务详情 |
@@ -60,8 +62,9 @@ Publisher 不负责追踪任务执行，发布后即可结束。
 
 ```
 pending → running → completed
-                          ↘ failed
-                          ↘ pending（没完成，放回池子接力）
+                  ↘ failed
+                  ↘ pending（需下一步，taskId 不变）
+                  ↘ cancelled（publisher 取消，不可再 relay）
 ```
 
 | 状态 | 含义 |
@@ -70,6 +73,7 @@ pending → running → completed
 | `running` | 执行中 |
 | `completed` | 完成，达成目标 |
 | `pending`（接力） | 没完成，放回池子让下一个继续 |
+| `cancelled` | Publisher 主动取消，不可 relay |
 
 ---
 

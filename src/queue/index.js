@@ -156,7 +156,40 @@ export function updateTask(taskId, status, contextEntry = null, description = nu
     const task = getTaskRow(taskId);
     if (!task) return null;
 
-    // 接力：重新放回 pending 时，清空 executor，记录 lastExecutor
+    // cancelled 任务：允许追加 context，允许完成/失败；拒绝 relay
+    if (task.status === TaskStatus.CANCELLED) {
+      if (status === TaskStatus.PENDING) {
+        return { error: 'TASK_CANCELLED', task };
+      }
+
+      if (status === TaskStatus.COMPLETED || status === TaskStatus.FAILED) {
+        const patch = { status, completedAt: Date.now() };
+        updateTaskRow(taskId, patch);
+        const updated = getTaskRow(taskId);
+        syncTaskJson(updated);
+        return updated;
+      }
+
+      // 只追加 context 或心跳，保持 cancelled
+      if (contextEntry) {
+        const newContext = [...task.context];
+        newContext.push({
+          executor: executorId || task.executor || 'unknown',
+          step: contextEntry.step,
+          output: contextEntry.output || {},
+          completedAt: Date.now()
+        });
+        updateTaskRow(taskId, { context: JSON.stringify(newContext) });
+        const updated = getTaskRow(taskId);
+        syncTaskJson(updated);
+        return updated;
+      }
+
+      return task;
+    }
+
+    // 普通任务：原有逻辑
+    // relay：重新放回 pending 时，清空 executor，记录 lastExecutor
     if (status === TaskStatus.PENDING) {
       const patch = {
         status: TaskStatus.PENDING,
@@ -225,5 +258,83 @@ export function updateTask(taskId, status, contextEntry = null, description = nu
 
     console.log(`[m-team-queue] 任务 ${taskId} 状态: ${status}`);
     return updated;
+  })();
+}
+
+/**
+ * publisher 取消任务（不可再 relay）
+ * @param {string} taskId
+ * @param {string} publisher
+ * @param {string} [reason]
+ * @returns {{ success: boolean, task: object|null, reason?: string }}
+ */
+export function cancelTask(taskId, publisher, reason) {
+  init();
+  const db = getDb();
+
+  return db.transaction(() => {
+    const task = getTaskRow(taskId);
+    if (!task) return { success: false, task: null, reason: 'TASK_NOT_FOUND' };
+
+    // 只有 publisher 才能取消
+    if (task.publisher !== publisher) {
+      return { success: false, task, reason: 'NOT_PUBLISHER' };
+    }
+
+    // 终态任务不可取消
+    if (task.status === TaskStatus.COMPLETED || task.status === TaskStatus.CANCELLED) {
+      return { success: false, task, reason: 'ALREADY_TERMINAL' };
+    }
+
+    const patch = {
+      status: TaskStatus.CANCELLED,
+      completedAt: Date.now()
+    };
+
+    updateTaskRow(taskId, patch);
+    const updated = getTaskRow(taskId);
+    syncTaskJson(updated);
+
+    console.log(`[m-team-queue] 任务 ${taskId} 被 ${publisher} 取消: ${reason ?? '无原因'}`);
+    return { success: true, task: updated };
+  })();
+}
+
+/**
+ * executor 主动放弃当前任务（放回 pending）
+ * @param {string} taskId
+ * @param {string} executorId
+ * @returns {{ success: boolean, task: object|null, reason?: string }}
+ */
+export function relinquishTask(taskId, executorId) {
+  init();
+  const db = getDb();
+
+  return db.transaction(() => {
+    const task = getTaskRow(taskId);
+    if (!task) return { success: false, task: null, reason: 'TASK_NOT_FOUND' };
+
+    // 只有当前 executor 才能放弃
+    if (task.executor !== executorId) {
+      return { success: false, task, reason: 'NOT_CURRENT_EXECUTOR' };
+    }
+
+    // cancelled 任务不能 relinquish
+    if (task.status === TaskStatus.CANCELLED) {
+      return { success: false, task, reason: 'TASK_CANCELLED' };
+    }
+
+    const patch = {
+      status: TaskStatus.PENDING,
+      executor: null,
+      lastExecutor: executorId
+    };
+
+    updateTaskRow(taskId, patch);
+    const updated = getTaskRow(taskId);
+    syncTaskJson(updated);
+
+    console.log(`[m-team-queue] executor ${executorId} 放弃任务 ${taskId}`);
+    return { success: true, task: updated };
   })();
 }
