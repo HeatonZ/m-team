@@ -25,6 +25,12 @@
 | `mteam_get_task` | 执行者 | 查看任务详情 |
 | `mteam_get_all_tasks` | 任意 | 查看所有任务 |
 
+## Skill 列表
+
+| Skill | 用途 |
+|-------|------|
+| `mteam-task-health` | 执行者心跳健康检查（OpenClaw 心跳 + 任务心跳两层校验） |
+
 ---
 
 ## 孔明流程
@@ -38,7 +44,6 @@
 ```
 mteam_publish_task({
   description: "搜索收纳箱1688供应商",
-  requiredCapability: "captain",
   input: { keyword: "收纳箱", count: 10 },
   initiator: "ceo"
 })
@@ -50,7 +55,6 @@ mteam_publish_task({
 ```
 📋 任务已发布
 描述: {description}
-执行者: {requiredCapability}
 等待认领...
 ```
 
@@ -58,9 +62,9 @@ mteam_publish_task({
 
 ## 执行者 HEARTBEAT 配置
 
-执行者（captain/maker/scholar）需要在 HEARTBEAT.md 中加入任务池检查。以下是模板：
+执行者（captain/maker/scholar）心跳时执行两步检查：
 
-### captain 的 HEARTBEAT.md 增加：
+### 第一步：任务池检查（已有内容）
 
 ```markdown
 ## 任务池检查
@@ -69,6 +73,16 @@ mteam_publish_task({
 - [ ] 有任务且 status='running' → 跳过（正在执行中）
 - [ ] 无任务 → mteam_get_pending 抢新任务
 ```
+
+### 第二步：任务健康检查（新增）
+
+> 调用 `mteam-task-health` skill，判断任务是否真实在执行
+
+| verdict | 结论 | 操作 |
+|---------|------|------|
+| `healthy` | 正常 | 无 |
+| `task_stale` | 任务卡了 | 报告 manager |
+| `heartbeat_stale` | 心跳卡了 | 通知重启 |
 
 ### maker 的 HEARTBEAT.md 增加：
 
