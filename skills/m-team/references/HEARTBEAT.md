@@ -1,36 +1,21 @@
 # HEARTBEAT.md
 
-## 用途
+## 两种情况
 
-Executor 在执行任务过程中，定期更新心跳，证明任务仍在推进而非卡死。
-
----
-
-## 第一步：找到当前任务 ID
-
-调用 `mteam_get_agent_active()`，返回自己正在进行（status: running 或 pending 且有 executor）的任务列表：
+执行 heartbeat 检查前，先判断当前有没有任务：
 
 ```
 mteam_get_agent_active()
 ```
 
-返回示例：
-```json
-[
-  {
-    "taskId": "task_abc123",
-    "status": "running",
-    "goal": "搜索收纳箱1688供应商",
-    "lastHeartbeatAt": 1745800000000
-  }
-]
-```
-
-如果返回空数组，说明当前没有进行中的任务，不需要心跳。
+- **有任务** → 执行情况 A（更新心跳）
+- **无任务** → 执行情况 B（认领新任务）
 
 ---
 
-## 第二步：更新心跳
+## 情况 A：有任务时的心跳
+
+### 第一步：更新心跳
 
 拿到 taskId 后，调用 `mteam_update_task` 更新心跳：
 
@@ -42,30 +27,24 @@ mteam_update_task({
 })
 ```
 
-**心跳频率**：每 5 分钟更新一次。不要频繁调用（每次 API 调用都消耗 token）。
+**心跳频率**：每 5 分钟更新一次。
 
----
-
-## 第三步：判断任务是否卡住
+### 第二步：判断是否卡住
 
 读取当前任务的 `lastHeartbeatAt`，与当前时间比较：
 
 - 超过 30 分钟未更新 → 任务视为**疑似僵尸**
 - 超过 60 分钟未更新 → 任务判定为**已卡死**，需要介入
 
----
+### 第三步：卡住时的处理
 
-## 第四步：任务卡住时的处理
-
-如果发现任务疑似僵尸或卡死：
-
-### 情况 A：Executor 仍在运行，只是没有推进
+**情况 A1：Executor 仍在运行，只是没有推进**
 1. `sessions_list` 找到 Executor 的当前 session
 2. `sessions_send` 发消息："请继续执行当前任务，不要停留在上一步"
 
-### 情况 B：Executor 已失联（长时间无响应）
+**情况 A2：Executor 已失联**
 1. `sessions_list` 查看 session 状态
-2. 如果 session 已死，通过 `mteam_relinquish_task` 把任务放回池子：
+2. 通过 `mteam_relinquish_task` 把任务放回池子：
 
 ```
 mteam_relinquish_task({
@@ -75,7 +54,62 @@ mteam_relinquish_task({
 })
 ```
 
-3. 等待新的 Executor 认领
+---
+
+## 情况 B：空闲时主动认领任务
+
+如果 `mteam_get_agent_active()` 返回空数组，说明当前没有进行中的任务。
+
+此时不要闲着，应该主动去拿任务：
+
+### 第一步：查看待认领任务
+
+```
+mteam_get_pending()
+```
+
+返回示例：
+```json
+[
+  {
+    "taskId": "task_xyz789",
+    "goal": "搜索收纳箱1688供应商",
+    "priority": 5,
+    "createdAt": 1745800000000
+  }
+]
+```
+
+### 第二步：认领任务
+
+找到合适认领的任务后：
+
+```
+mteam_claim_task({
+  taskId: "task_xyz789",
+  agentId: "executor_1"
+})
+```
+
+返回成功后，该任务进入 running 状态，开始执行。
+
+### 认领策略
+
+- 优先认领 `priority` 高的任务
+- 优先认领创建时间早的任务（先发布先处理）
+- 不认领与自己技能不匹配的任务（检查 goal 内容）
+
+### 第三步：开始执行后立即更新心跳
+
+认领成功后立即发一次心跳，证明任务已开始：
+
+```
+mteam_update_task({
+  taskId: "task_xyz789",
+  agentId: "executor_1",
+  lastHeartbeatAt: Date.now()
+})
+```
 
 ---
 
@@ -83,4 +117,5 @@ mteam_relinquish_task({
 
 - **Publisher 不管心跳**：心跳是 Executor 的责任，Publisher 只负责发布和取消
 - **心跳不等于进度**：心跳只证明 Executor 还活着，不证明任务在推进
-- **真正的进度**是 context 里的 contextStep 有更新
+- **真正的进度**是 context 里有 contextStep 更新
+- **空闲是浪费**：没有任务时必须主动去 pending 队列认领，不等待
