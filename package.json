@@ -29,10 +29,13 @@
   },
   "scripts": {
     "build": "esbuild src/index.js --bundle --platform=node --outdir=dist --format=esm --external:node:* --external:openclaw --external:openclaw/plugin-sdk",
+    "test": "vitest",
+    "test:run": "vitest run",
     "prepublishOnly": "npm run build"
   },
   "devDependencies": {
     "@sinclair/typebox": "^0.34.0",
-    "esbuild": "^0.24.0"
+    "esbuild": "^0.24.0",
+    "vitest": "^4.1.5"
   }
 }
