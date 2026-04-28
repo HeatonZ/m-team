@@ -1,0 +1,16 @@
+{
+  "name": "m-team-chain",
+  "version": "0.1.0",
+  "description": "OpenClaw chain collaboration plugin - chain executor for captain/manager/maker",
+  "main": "index.js",
+  "author": "郑尚丰",
+  "license": "MIT",
+  "keywords": ["openclaw", "multi-agent", "chain", "collaboration"],
+  "openclaw": {
+    "pluginApi": "1.0.0",
+    "channels": ["feishu"]
+  },
+  "scripts": {
+    "build": "echo no build needed"
+  }
+}
