@@ -41,10 +41,10 @@ function init() {
   }
 }
 
-export function publishTask({ description, input = {}, publisher = 'user', priority }) {
+export function publishTask({ description, input = {}, publisher = 'user', executor = null, priority }) {
   init();
 
-  const task = createTask({ description, input, publisher, priority });
+  const task = createTask({ description, input, publisher, executor, priority });
   const taskDir = ensureTaskWorkspace(task.taskId);
 
   const taskPath = path.join(taskDir, 'task.json');

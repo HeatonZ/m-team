@@ -103,10 +103,11 @@ export function validateTask(task) {
  * @param {string} params.description
  * @param {Object} [params.input={}]
  * @param {string} [params.publisher='user']
+ * @param {string} [params.executor=null]
  * @param {string} [params.priority='normal']
  * @returns {Task}
  */
-export function createTask({ description, input = {}, publisher = 'user', priority = 'normal' }) {
+export function createTask({ description, input = {}, publisher = 'user', executor = null, priority = 'normal' }) {
   const taskId = `task_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
 
   return {
@@ -115,11 +116,11 @@ export function createTask({ description, input = {}, publisher = 'user', priori
     input: input || {},
     priority,
     publisher: publisher || 'user',
-    status: TaskStatus.PENDING,
-    executor: null,
+    executor: executor || null,
     lastExecutor: null,
+    status: executor ? TaskStatus.CLAIMED : TaskStatus.PENDING,
+    claimedAt: executor ? Date.now() : null,
     createdAt: Date.now(),
-    claimedAt: null,
     completedAt: null,
     lastHeartbeatAt: null,
     summary: null,

@@ -48,6 +48,23 @@ describe('task schema', () => {
       expect(task.input).toEqual({ url: 'https://example.com' });
     });
 
+    it('指定 executor 时任务直接进入 claimed 状态', () => {
+      const task = createTask({
+        description: '指定执行者',
+        executor: 'agent_1'
+      });
+      expect(task.executor).toBe('agent_1');
+      expect(task.status).toBe(TaskStatus.CLAIMED);
+      expect(task.claimedAt).not.toBeNull();
+    });
+
+    it('executor 为空时任务保持 pending', () => {
+      const task = createTask({ description: '待认领' });
+      expect(task.executor).toBeNull();
+      expect(task.status).toBe(TaskStatus.PENDING);
+      expect(task.claimedAt).toBeNull();
+    });
+
     it('priority 接受大小写混合输入', () => {
       // 内部不做 normalize，直接存储原值
       const task = createTask({ description: 'x', priority: 'HIGH' });
