@@ -17,8 +17,7 @@
       "./dist/index.js"
     ],
     "skills": [
-      "./skills/m-team",
-      "./skills/mteam-task-health"
+      "./skills/m-team"
     ],
     "compat": {
       "pluginApi": ">=2026.4.22"
