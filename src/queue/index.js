@@ -82,9 +82,9 @@ export function claimTask(taskId, agentId) {
       task.lastExecutor = task.executor;
     }
 
-    task.status = TaskStatus.CLAIMED;
+    task.status = TaskStatus.RUNNING;
     task.executor = agentId;
-    task.claimedAt = Date.now();
+    task.lastHeartbeatAt = Date.now();
     fs.writeFileSync(taskPath, JSON.stringify(task, null, 2), 'utf8');
 
     console.log(`[m-team-queue] ${agentId} 认领了任务 ${taskId}`);
@@ -128,7 +128,7 @@ export function getAgentActiveTask(agentId) {
     if (!fs.existsSync(taskPath)) continue;
 
     const task = JSON.parse(fs.readFileSync(taskPath, 'utf8'));
-    if (task.executor === agentId && (task.status === TaskStatus.CLAIMED || task.status === TaskStatus.RUNNING)) {
+    if (task.executor === agentId && task.status === TaskStatus.RUNNING) {
       return task;
     }
   }

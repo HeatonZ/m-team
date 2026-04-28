@@ -10,7 +10,6 @@
  * @property {string|null} executor
  * @property {string|null} lastExecutor
  * @property {number} createdAt
- * @property {number|null} claimedAt
  * @property {number|null} completedAt
  * @property {number|null} lastHeartbeatAt
  * @property {string} priority
@@ -22,7 +21,6 @@ import path from 'node:path';
 // 任务状态枚举
 export const TaskStatus = {
   PENDING: 'pending',
-  CLAIMED: 'claimed',
   RUNNING: 'running',
   COMPLETED: 'completed',
   FAILED: 'failed'
@@ -132,7 +130,6 @@ export function createTask({ description, goal, input = {}, publisher = 'user', 
     executor: null,
     lastExecutor: null,
     createdAt: Date.now(),
-    claimedAt: null,
     completedAt: null,
     lastHeartbeatAt: null
   };
@@ -141,7 +138,6 @@ export function createTask({ description, goal, input = {}, publisher = 'user', 
 export function getStatusLabel(status) {
   const labels = {
     pending: '⏳ 待认领',
-    claimed: '🔄 已认领',
     running: '⚙️ 执行中',
     completed: '✅ 完成',
     failed: '❌ 失败'

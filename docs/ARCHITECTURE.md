@@ -70,7 +70,7 @@
   "executor": null,
   "lastExecutor": "agent_2",
   "createdAt": 1745620000000,
-  "claimedAt": null,
+  
   "completedAt": null,
   "lastHeartbeatAt": null
 }
@@ -99,12 +99,12 @@
 **状态流转：**
 
 ```
-pending → claimed → running → completed
+pending → running → completed
                           ↘ failed
                           ↘ pending（需下一步，taskId 不变）
 ```
 
-**注意：** `claimed` ≠ 正在执行。认领后必须立即转 `running` 才是真正开始。
+**注意：** `running` = 正在执行中。
 
 ---
 
@@ -212,19 +212,15 @@ agent 执行中定期更新 `lastHeartbeatAt`：
 
 ```
 1. mteam_get_agent_active({ agentId })
-2. 有任务？
-   ├── status='claimed' → update_task({ status: 'running' })，开始执行
-   ├── status='running' → 检查 lastHeartbeatAt：
-   │   ├── 超过30分钟 → update_task({ status: 'pending' }) 释放，重新抢
-   │   └── 30分钟内 → 执行中，跳过
-   └── 无任务 → 第3步
-3. mteam_get_pending({ agentId })
-   └── 有任务？→ claim_task → update_task({ status: 'running' })
+2. 有 running 任务？
+   └── 有 → update_task({ lastHeartbeatAt: Date.now() }) 更新心跳，跳过
+3. 无 running 任务 → mteam_get_pending({ agentId })
+   └── 有待认领 → claim_task（直接进入 running）
 ```
 
 **约束：agent 不能同时做多个任务**
 
-- `getPendingTasks(agentId)` 查询时，若 agent 已有 claimed/running 任务，返回空列表
+- `getPendingTasks(agentId)` 查询时，若 agent 已有 running 任务，返回空列表
 - 查询进行中任务：`mteam_get_agent_active({ agentId })`
 
 ---
@@ -301,7 +297,7 @@ npm run test:run # 单次运行
 2. **去中心化 = 没有单点** — 任务池是共享的，节点自主抢
 3. **心跳驱动** — agent 不需要被 @，自己心跳查任务池
 4. **产出写任务文件夹** — 便于追溯和清理
-5. **状态必须流转** — 不要让任务卡在 claimed/running
+5. **状态必须流转** — 不要让任务卡在 running
 6. **context 无限追溯** — 每步 output 追加到 context，不丢历史
 
 ---

@@ -59,7 +59,7 @@ Publisher 不负责追踪任务执行，发布后即可结束。
 ### 状态流转
 
 ```
-pending → claimed → running → completed
+pending → running → completed
                           ↘ failed
                           ↘ pending（没完成，放回池子接力）
 ```
@@ -67,7 +67,6 @@ pending → claimed → running → completed
 | 状态 | 含义 |
 |------|------|
 | `pending` | 待认领 |
-| `claimed` | 已认领（必须立即转 running） |
 | `running` | 执行中 |
 | `completed` | 完成，达成目标 |
 | `pending`（接力） | 没完成，放回池子让下一个继续 |

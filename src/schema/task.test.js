@@ -148,7 +148,6 @@ describe('task schema', () => {
   describe('getStatusLabel', () => {
     it('每种状态返回对应标签', () => {
       expect(getStatusLabel('pending')).toBe('⏳ 待认领');
-      expect(getStatusLabel('claimed')).toBe('🔄 已认领');
       expect(getStatusLabel('running')).toBe('⚙️ 执行中');
       expect(getStatusLabel('completed')).toBe('✅ 完成');
       expect(getStatusLabel('failed')).toBe('❌ 失败');

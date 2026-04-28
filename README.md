@@ -96,7 +96,7 @@ m-team/
   "executor": null,
   "lastExecutor": "agent_2",
   "createdAt": 1745620000000,
-  "claimedAt": null,
+  
   "completedAt": null,
   "lastHeartbeatAt": null
 }
@@ -112,7 +112,7 @@ m-team/
 ## 状态流转
 
 ```
-pending → claimed → running → completed
+pending → running → completed
                           ↘ failed
                           ↘ pending（需下一步，taskId 不变）
 ```
