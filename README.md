@@ -82,6 +82,7 @@ m-team/
 {
   "taskId": "task_1745620000000_abc123",
   "description": "搜索收纳箱供应商",
+  "goal": "找到收纳箱类目下评分高的1688供应商",
   "input": { "keyword": "收纳箱" },
   "priority": "high",
   "publisher": "user",

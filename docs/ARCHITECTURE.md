@@ -116,19 +116,20 @@ workspaceRoot/                   ← 可配置（openclaw.json 中设置）
 
 | Tool | 调用者 | 说明 |
 |------|--------|------|
-| `mteam_publish_task` | 任意 | 发布新任务（支持 priority） |
+| `mteam_publish_task` | 管理者 | 发布新任务（goal 必填，不可更改） |
 | `mteam_claim_task` | 执行者 | 认领任务（原子操作，防并发竞态） |
 | `mteam_update_task` | 执行者 | 更新状态/心跳（status 非必填） |
 | `mteam_get_pending` | 执行者 | 获取待认领任务列表（agent有任务时返回空） |
 | `mteam_get_agent_active` | 执行者 | 获取 agent 当前进行中任务 |
 | `mteam_get_task` | 执行者 | 获取任务详情 |
-| `mteam_get_all_tasks` | 任意 | 获取所有任务 |
+| `mteam_get_all_tasks` | 执行者 | 获取所有任务 |
 
 ### 6.1 发布任务
 
 ```javascript
 mteam_publish_task({
   description: "搜索收纳箱1688供应商",
+  goal: "找到收纳箱类目下评分高的1688供应商",
   input: { keyword: "收纳箱", count: 10 },
   publisher: "user",
   priority: "high"

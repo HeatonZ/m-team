@@ -39,6 +39,7 @@
 ```
 mteam_publish_task({
   description: "搜索收纳箱1688供应商",
+  goal: "找到收纳箱类目下评分高的1688供应商",
   input: { keyword: "收纳箱", count: 10 },
   publisher: "user"
 })
