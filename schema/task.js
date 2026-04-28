@@ -87,7 +87,6 @@ const VALID_PRIORITIES = ['high', 'normal', 'low'];
  * @property {string} taskId - 任务ID，格式: task_{timestamp}_{random6}
  * @property {string} description - 任务描述
  * @property {Object} input - 任务输入参数
- * @property {string} requiredCapability - 所需能力: captain/maker/scholar/general
  * @property {string} initiator - 发起者: ceo/manager/agentId
  * @property {string} status - 状态: pending/claimed/running/completed/failed
  * @property {string|null} owner - 认领者agentId
@@ -114,9 +113,6 @@ function validateTask(task) {
   if (!task.description || typeof task.description !== 'string') {
     errors.push('description 必填且为字符串');
   }
-  if (!task.requiredCapability || !VALID_CAPABILITIES.includes(task.requiredCapability)) {
-    errors.push(`requiredCapability 必填，可选值: ${VALID_CAPABILITIES.join(', ')}`);
-  }
   if (!Object.values(TaskStatus).includes(task.status)) {
     errors.push(`status 无效，可选值: ${Object.values(TaskStatus).join(', ')}`);
   }
@@ -132,14 +128,13 @@ function validateTask(task) {
  * @param {object} params
  * @returns {Task}
  */
-function createTask({ description, input = {}, requiredCapability, initiator = 'ceo', priority = TaskPriority.NORMAL }) {
+function createTask({ description, input = {}, initiator = 'ceo', priority = TaskPriority.NORMAL }) {
   const taskId = `task_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
-  
+
   return {
     taskId,
     description: String(description),
     input: input || {},
-    requiredCapability,
     priority,
     initiator: initiator || 'ceo',
     status: TaskStatus.PENDING,
@@ -175,7 +170,6 @@ function formatTaskForHuman(task) {
   const lines = [
     `📋 ${task.description}`,
     `ID: ${task.taskId}`,
-    `能力: ${task.requiredCapability}`,
     `优先级: ${priorityLabel[task.priority] || '🟡 中'}`,
     `状态: ${getStatusLabel(task.status)}`
   ];

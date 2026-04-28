@@ -57,17 +57,15 @@ function register(api) {
       type: 'object',
       properties: {
         description: { type: 'string', description: '任务描述' },
-        requiredCapability: { type: 'string', enum: ['captain', 'maker', 'scholar', 'general'], description: '所需能力' },
         input: { type: 'object', description: '任务输入参数' },
         initiator: { type: 'string', description: '发起者' },
         priority: { type: 'string', enum: ['high', 'normal', 'low'], description: '优先级，默认 normal' }
       },
-      required: ['description', 'requiredCapability']
+      required: ['description']
     },
     handler: async (params) => {
       const taskId = queue.publishTask({
         description: params.description,
-        requiredCapability: params.requiredCapability,
         input: params.input || {},
         initiator: params.initiator || 'ceo',
         priority: params.priority
@@ -103,7 +101,7 @@ function register(api) {
         status: { type: 'string', enum: ['running', 'completed', 'failed', 'pending'], description: '状态（可选，不传则只更新心跳）' },
         summary: { type: 'string', description: '结果摘要' },
         description: { type: 'string', description: '新描述（用于"需下一步"场景）' },
-        result: { type: 'object', description: '完整结果' },
+        result: { type: 'object', description: '完整结果', properties: {} },
         lastHeartbeatAt: { type: 'number', description: '心跳时间戳（毫秒），running 时定期更新表示"还活着"' }
       },
       required: ['taskId']

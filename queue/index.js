@@ -20,10 +20,13 @@ const {
 let WORKSPACE_ROOT = '/mnt/d/code/m-team';
 
 /**
- * 设置 workspaceRoot
+ * 设置 workspaceRoot（queue 和 schema 必须同步）
  */
 function setWorkspaceRoot(root) {
   WORKSPACE_ROOT = root;
+  // 同步更新 schema 的路径，确保 publishTask/claimTask 等操作一致性
+  const schema = require('../schema/task.js');
+  schema.setWorkspaceRoot(path.join(root, 'tasks'));
 }
 
 /**
@@ -112,10 +115,6 @@ function claimTask(taskId, agentId) {
       return false;
     }
 
-    if (task.requiredCapability !== 'general' && task.requiredCapability !== agentId) {
-      return false;
-    }
-
     // 3. 更新状态
     task.status = TaskStatus.CLAIMED;
     task.owner = agentId;
@@ -148,11 +147,10 @@ function getPendingTasks(agentId = null) {
   for (const taskId of index.tasks) {
     const taskPath = path.join(getTaskWorkspace(taskId), 'task.json');
     if (!fs.existsSync(taskPath)) continue;
-    
+
     const task = JSON.parse(fs.readFileSync(taskPath, 'utf8'));
     if (task.status !== TaskStatus.PENDING) continue;
-    if (agentId && task.requiredCapability !== 'general' && task.requiredCapability !== agentId) continue;
-    
+
     pending.push(task);
   }
   
