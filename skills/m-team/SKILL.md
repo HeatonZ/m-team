@@ -1,45 +1,26 @@
 # M-Team 任务队列
 
-## 角色定位
-
-你是 M-Team 去中心化任务池的一员。根据你的角色执行对应操作。
-
----
-
-## 你的角色
-
-**孔明（publisher）** — 确认需求后发布任务到队列
-**执行者（captain/maker/scholar）** — 心跳时检查队列，认领并执行任务
+你是 M-Team 去中心化任务池协作插件的使用指南。
 
 ---
 
 ## 工具列表
 
-| 工具 | 角色 | 用途 |
-|------|------|------|
-| `mteam_publish_task` | 孔明 | 发布任务 |
-| `mteam_claim_task` | 执行者 | 认领任务 |
-| `mteam_update_task` | 执行者 | 更新状态 |
-| `mteam_get_pending` | 执行者 | 查看待认领任务 |
-| `mteam_get_agent_active` | 执行者 | 查看自己进行中的任务 |
-| `mteam_get_task` | 执行者 | 查看任务详情 |
-| `mteam_get_all_tasks` | 任意 | 查看所有任务 |
-
-## Skill 列表
-
-| Skill | 用途 |
-|-------|------|
-| `mteam-task-health` | 执行者心跳健康检查（OpenClaw 心跳 + 任务心跳两层校验） |
+| 工具 | 说明 |
+|------|------|
+| `mteam_publish_task` | 发布任务 |
+| `mteam_claim_task` | 认领任务 |
+| `mteam_update_task` | 更新状态/心跳 |
+| `mteam_get_pending` | 查看待认领任务 |
+| `mteam_get_agent_active` | 查看自己进行中的任务 |
+| `mteam_get_task` | 查看任务详情 |
+| `mteam_get_all_tasks` | 查看所有任务 |
 
 ---
 
-## 孔明流程
+## 发布任务（任意 agent）
 
-### 1. 确认需求
-
-跟 CEO 确认需求细节。
-
-### 2. 发布任务
+### 1. 发布
 
 ```
 mteam_publish_task({
@@ -49,7 +30,7 @@ mteam_publish_task({
 })
 ```
 
-### 3. 通知 CEO
+### 2. 通知相关方
 
 群里发：
 ```
@@ -60,107 +41,59 @@ mteam_publish_task({
 
 ---
 
-## 执行者 HEARTBEAT 配置
+## 认领任务
 
-执行者（captain/maker/scholar）心跳时执行两步检查：
+任何 agent 根据任务描述自行决定是否认领。
 
-### 第一步：任务池检查（已有内容）
+### 1. 查看待认领任务
 
-```markdown
-## 任务池检查
-- [ ] 使用 mteam_get_agent_active 检查自己是否有进行中任务
-- [ ] 有任务且 status='claimed' → 立即 mteam_update_task({ status: 'running' }) 真正开始执行
-- [ ] 有任务且 status='running' → 跳过（正在执行中）
-- [ ] 无任务 → mteam_get_pending 抢新任务
+```
+mteam_get_pending()
 ```
 
-### 第二步：任务健康检查（新增）
+### 2. 认领
 
-> 调用 `mteam-task-health` skill，判断任务是否真实在执行
-
-| verdict | 结论 | 操作 |
-|---------|------|------|
-| `healthy` | 正常 | 无 |
-| `task_stale` | 任务卡了 | 报告 manager |
-| `heartbeat_stale` | 心跳卡了 | 通知重启 |
-
-### maker 的 HEARTBEAT.md 增加：
-
-```markdown
-## 任务池检查
-- [ ] 使用 mteam_get_agent_active 检查自己是否有进行中任务
-- [ ] 有任务且 status='claimed' → 立即 mteam_update_task({ status: 'running' }) 真正开始执行
-- [ ] 有任务且 status='running' → 跳过（正在执行中）
-- [ ] 无任务 → mteam_get_pending 抢新任务
+```
+mteam_claim_task({
+  taskId: "{taskId}",
+  agentId: "{你的agentId}"
+})
 ```
 
-### scholar 的 HEARTBEAT.md 增加：
+### 3. 立即开始执行
 
-```markdown
-## 任务池检查
-- [ ] 使用 mteam_get_agent_active 检查自己是否有进行中任务
-- [ ] 有任务且 status='claimed' → 立即 mteam_update_task({ status: 'running' }) 真正开始执行
-- [ ] 有任务且 status='running' → 跳过（正在执行中）
-- [ ] 无任务 → mteam_get_pending 抢新任务
+认领后必须立即转 `running`：
+
 ```
-
-**注意：** `claimed` ≠ 正在执行。认领后必须立即转 `running` 才是真正开始。
+mteam_update_task({
+  taskId: "{taskId}",
+  status: "running"
+})
+```
 
 ---
 
-## 执行者流程
+## 状态流转
 
-### 状态说明
+```
+pending → claimed → running → completed
+                          ↘ failed
+                          ↘ pending（需下一步，taskId 不变）
+```
 
 | 状态 | 含义 |
 |------|------|
-| `pending` | 待认领，没人抢 |
-| `claimed` | 已认领，还没开始执行 |
-| `running` | 正在执行 |
+| `pending` | 待认领 |
+| `claimed` | 已认领（必须立即转 running） |
+| `running` | 执行中 |
 | `completed` | 已完成 |
 | `failed` | 失败 |
 
-**`claimed` 不等于正在执行！** 认领后必须立即转 `running` 并初始化心跳。
+---
 
-### 状态与心跳
+## 心跳机制
 
-| 状态 | 含义 | 心跳要求 |
-|------|------|---------|
-| `claimed` | 已认领，还没开始执行 | 立即转 `running` |
-| `running` | 正在执行 | 定期更新 `lastHeartbeatAt` |
-| `completed` | 已完成 | 无 |
-| `failed` | 失败 | 无 |
-
-**心跳阈值：** `lastHeartbeatAt` 超过 30 分钟未更新，任务视为疑似僵尸。
-
-### 1. 心跳时检查自己
-
-```
-mteam_get_agent_active({ agentId: "你的agentId" })
-```
-
-返回内容：
-```json
-{
-  "taskId": "task_xxx",
-  "status": "running",
-  "lastHeartbeatAt": 1745740800000,
-  "description": "...",
-  "input": {...}
-}
-```
-
-### 2. 判断逻辑
-
-- **有任务 + `status='claimed'`** → 立即 `update_task({ status: 'running' })`，开始执行
-- **有任务 + `status='running'`** → 检查 `lastHeartbeatAt`：
-  - 超过 30 分钟未更新 → `update_task({ status: 'pending' })` 释放任务，重新抢
-  - 30 分钟内 → 执行中，继续
-- **无任务** → 第 3 步抢新任务
-
-### 3. 执行中定期更新心跳
-
-正在执行时，每完成一个子步骤，调用：
+agent 执行中定期更新心跳：
 
 ```
 mteam_update_task({
@@ -169,32 +102,11 @@ mteam_update_task({
 })
 ```
 
-只传 `taskId` + `lastHeartbeatAt`，不传 `status`，表示"我还活着"。
+超过 30 分钟未更新，任务视为疑似僵尸。
 
-### 4. 抢新任务
+---
 
-```
-mteam_get_pending({ agentId: "你的agentId" })
-```
-
-有任务？→ `claim_task` → 认领后立即 `update_task({ status: 'running' })` → 执行
-
-### 4. 执行任务
-
-根据 `description` 和 `input` 执行。
-
-### 5. 写入产出
-
-产出写入任务文件夹：`/mnt/d/code/m-team/tasks/{taskId}/`
-
-```
-/mnt/d/code/m-team/tasks/{taskId}/
-├── task.json       # 任务详情（只读）
-├── result.json     # 执行结果
-└── {产出文件}     # 其他产出
-```
-
-### 6. 更新状态
+## 更新任务状态
 
 ```
 mteam_update_task({
@@ -204,24 +116,15 @@ mteam_update_task({
 })
 ```
 
-### 7. 群里回报
-
-```
-✅ 任务完成 [{taskId}]
-摘要: {summary}
-```
-
 ---
 
-## 错误处理
+## 产出文件
 
-- 失败：`mteam_update_task({ taskId, status: "failed", summary: "失败原因" })`
-- 不要让任务卡在 claimed/running
+产出写入任务文件夹：
 
----
+```
+{workspaceRoot}/tasks/{taskId}/
+├── task.json       # 任务详情
+└── {产出文件}      # 其他产出
+```
 
-## 重要原则
-
-1. **按角色办事** — 你是什么角色就做什么事
-2. **产出写任务文件夹** — 不散落
-3. **完成后更新状态** — 让系统知道任务已结束

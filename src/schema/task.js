@@ -28,23 +28,12 @@ export const TaskStatus = {
   FAILED: 'failed'
 };
 
-// 能力标签
-export const CapabilityAgent = {
-  captain: 'captain',
-  maker: 'maker',
-  scholar: 'scholar',
-  general: null
-};
-
 // 任务优先级枚举
 export const TaskPriority = {
   HIGH: 'high',
   NORMAL: 'normal',
   LOW: 'low'
 };
-
-// 有效能力标签列表
-export const VALID_CAPABILITIES = ['captain', 'maker', 'scholar', 'general'];
 
 // 有效优先级列表
 export const VALID_PRIORITIES = ['high', 'normal', 'low'];

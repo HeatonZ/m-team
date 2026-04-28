@@ -1,6 +1,6 @@
 # M-Team — 去中心化任务池协作
 
-OpenClaw 插件，实现多 Agent（孔明/captain/maker/scholar）在没有中心协调者的情况下，通过共享任务池自主协作。
+OpenClaw 插件，实现多 Agent 在没有中心协调者的情况下，通过共享任务池自主协作。
 
 ## 核心设计
 
@@ -66,15 +66,15 @@ m-team/
 
 ## Tool API
 
-| Tool | 调用者 | 说明 |
-|------|--------|------|
-| `mteam_publish_task` | 孔明 | 发布新任务 |
-| `mteam_claim_task` | 执行者 | 认领任务（原子操作，防并发） |
-| `mteam_update_task` | 执行者 | 更新状态/心跳 |
-| `mteam_get_pending` | 执行者 | 获取待认领任务列表 |
-| `mteam_get_agent_active` | 执行者 | 获取 agent 当前进行中任务 |
-| `mteam_get_task` | 任意 | 获取任务详情 |
-| `mteam_get_all_tasks` | 任意 | 获取所有任务 |
+| Tool | 说明 |
+|------|------|
+| `mteam_publish_task` | 发布新任务 |
+| `mteam_claim_task` | 认领任务（原子操作，防并发） |
+| `mteam_update_task` | 更新状态/心跳 |
+| `mteam_get_pending` | 获取待认领任务列表 |
+| `mteam_get_agent_active` | 获取 agent 当前进行中任务 |
+| `mteam_get_task` | 获取任务详情 |
+| `mteam_get_all_tasks` | 获取所有任务 |
 
 ## 任务格式
 
@@ -83,7 +83,6 @@ m-team/
   "taskId": "task_1745620000000_abc123",
   "description": "搜索收纳箱供应商",
   "input": { "keyword": "收纳箱" },
-  "requiredCapability": "captain",
   "priority": "high",
   "initiator": "ceo",
   "status": "pending",

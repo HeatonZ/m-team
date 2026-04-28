@@ -2,13 +2,13 @@
 
 > 判断执行者的任务是否真实在执行。结合 OpenClaw 平台心跳 + m-team 任务心跳，两层校验。
 
-**触发时机：** 执行者（captain/maker/scholar/fixer）每次 HEARTBEAT 时调用。
+**触发时机：** 任意 agent 每次 HEARTBEAT 时调用。
 
 ---
 
 ## 输入
 
-- `agentId`: string — 执行者 agentId（如 `"captain"`, `"maker"`, `"scholar"`, `"fixer"`）
+- `agentId`: string — agent 的 id（如 `"agent_1"`, `"researcher"`, `"writer"`）
 
 ---
 
@@ -58,7 +58,7 @@ mteam_get_agent_active({ agentId })
 {
   "agentHeartbeat": {
     "hasSession": true,
-    "sessionKey": "agent:captain:main:heartbeat",
+    "sessionKey": "agent:my-agent:main:heartbeat",
     "updatedAt": 1745740800000,
     "isFresh": true
   },

@@ -6,7 +6,7 @@
 
 ## 1. 设计目标
 
-多 agent（孔明/captain/maker/scholar）在没有中心协调者的情况下，通过共享任务池自主协作。
+多 agent 在没有中心协调者的情况下，通过共享任务池自主协作。
 
 核心思路：
 - **去中心化** — 没有单点发起者/协调者，节点自主抢任务
@@ -19,28 +19,23 @@
 
 ```
 ┌─────────┐
-│  CEO    │  发起需求
+│ Agent A │  发布任务
 └────┬────┘
-     │
-     ▼
-┌─────────┐
-│  孔明   │  确认需求 → mteam_publish_task() → 写入队列
-└────┬────┘
-     │ 文件系统
+     │ mteam_publish_task
      ▼
 ┌─────────────────────────────────┐
 │      任务池 (queue/tasks.json) │  共享文件
 └────┬────────────────────────────┘
-     │ 心跳轮询
+     │ mteam_claim_task
      ▼
 ┌─────────┐ ┌─────────┐ ┌─────────┐
-│ captain │ │  maker  │ │ scholar │  自主认领 (mteam_claim_task)
+│ Agent B │ │ Agent C │ │ Agent D │  自主认领
 └────┬────┘ └────┬────┘ └────┬────┘
      │            │           │
      ▼            ▼           ▼
 ┌─────────────────────────────────┐
 │   任务执行 + 产出写入 tasks/   │
-└────┬────────────────────────────┘
+└─────────────────────────────────┘
      │ mteam_update_task(status=completed)
      ▼
 ┌─────────────────────────────────┐
@@ -50,14 +45,12 @@
 
 ---
 
-## 3. 角色定义
+## 3. 通用设计原则
 
-| 角色 | Agent ID | 职责 | 能力标签 |
-|------|----------|------|---------|
-| 孔明 | konming | 接收 CEO 需求，确认后发布任务 | publisher |
-| captain | captain | 选品/货源/市场/竞品调研 | captain |
-| maker | maker | 制作内容/列表/文档 | maker |
-| scholar | scholar | 知识整理/分析/评分 | scholar |
+- **任意 agent 可发布任务** — `initiator` 只是记录，不做权限控制
+- **任意 agent 可认领任务** — 根据任务描述自行判断是否接单
+- **agent 不能同时做多个任务** — 有进行中任务时不能认领新任务
+- **心跳保活** — 执行中的任务定期更新 `lastHeartbeatAt`
 
 ---
 
@@ -68,9 +61,8 @@
   "taskId": "task_{timestamp}_{random6}",
   "description": "任务描述",
   "input": { /* 任务参数 */ },
-  "requiredCapability": "captain | maker | scholar | general",
   "priority": "high | normal | low",
-  "initiator": "ceo | konming | agentId",
+  "initiator": "ceo | agentId",
   "status": "pending | claimed | running | completed | failed",
   "owner": null | "agentId",
   "createdAt": 1745740800000,
@@ -119,11 +111,11 @@ workspaceRoot/                   ← 可配置（openclaw.json 中设置）
 
 ---
 
-## 6. Tool API
+## Tool API
 
 | Tool | 调用者 | 说明 |
 |------|--------|------|
-| `mteam_publish_task` | 孔明 | 发布新任务（支持 priority） |
+| `mteam_publish_task` | 任意 | 发布新任务（支持 priority） |
 | `mteam_claim_task` | 执行者 | 认领任务（原子操作，防并发竞态） |
 | `mteam_update_task` | 执行者 | 更新状态/心跳（status 非必填） |
 | `mteam_get_pending` | 执行者 | 获取待认领任务列表（agent有任务时返回空） |
@@ -136,7 +128,6 @@ workspaceRoot/                   ← 可配置（openclaw.json 中设置）
 ```javascript
 mteam_publish_task({
   description: "搜索收纳箱1688供应商",
-  requiredCapability: "captain",
   input: { keyword: "收纳箱", count: 10 },
   initiator: "ceo",
   priority: "high"
@@ -149,7 +140,7 @@ mteam_publish_task({
 ```javascript
 mteam_claim_task({
   taskId: "task_1745740800000_abc123",
-  agentId: "captain"
+  agentId: "my-agent-id"
 })
 // 返回: { claimed: true, taskId: "..." }
 // 原子操作：锁文件 + 状态校验，确保只有一个 agent 能抢到
@@ -192,9 +183,9 @@ agent 执行中定期更新 `lastHeartbeatAt`：
 
 ---
 
-## 7. 执行者心跳流程
+## 7. 心跳检查流程
 
-每个执行者（captain/maker/scholar）需在 HEARTBEAT.md 中配置任务池检查。
+每个 agent 在心跳时自动检查任务池，不需要额外配置。
 
 ### 心跳检查流程
 

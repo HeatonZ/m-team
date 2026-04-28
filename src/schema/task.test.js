@@ -7,7 +7,6 @@ import { describe, it, expect } from 'vitest';
 import {
   TaskStatus,
   TaskPriority,
-  VALID_CAPABILITIES,
   VALID_PRIORITIES,
   createTask,
   validateTask,
