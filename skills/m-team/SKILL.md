@@ -77,9 +77,10 @@ pending → running → completed
 
 Executor A 做了当前步骤但没达到核心目标：
 
-```
+```javascript
 mteam_update_task({
   taskId: "{taskId}",
+  agentId: "{agentId}",        // 追加 context 时必填
   status: "pending",
   contextStep: "搜索1688供应商",
   contextOutput: { summary: "找到10家供应商", files: ["data/suppliers.json"] },
@@ -116,6 +117,7 @@ agent 执行中定期更新心跳：
 ```
 mteam_update_task({
   taskId: "{taskId}",
+  agentId: "{agentId}",
   lastHeartbeatAt: Date.now()
 })
 ```

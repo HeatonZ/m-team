@@ -142,8 +142,9 @@ export function getAgentActiveTask(agentId) {
  * @param {Object|null} contextEntry - 追加到 context 的步骤，格式 { executor, step, output }
  * @param {string|null} description - 更新当前步骤描述
  * @param {number|null} lastHeartbeatAt
+ * @param {string|null} executorId - 执行者 ID（显式传入，不从 task 状态推断）
  */
-export function updateTask(taskId, status, contextEntry = null, description = null, lastHeartbeatAt = null) {
+export function updateTask(taskId, status, contextEntry = null, description = null, lastHeartbeatAt = null, executorId = null) {
   const taskPath = path.join(getTaskWorkspace(taskId), 'task.json');
   if (!fs.existsSync(taskPath)) return null;
 
@@ -164,7 +165,7 @@ export function updateTask(taskId, status, contextEntry = null, description = nu
   // 追加步骤到 context
   if (contextEntry) {
     task.context.push({
-      executor: contextEntry.executor,
+      executor: executorId || task.executor || 'unknown',
       step: contextEntry.step,
       output: contextEntry.output || {},
       completedAt: Date.now()

@@ -101,6 +101,7 @@ export default definePluginEntry({
       description: '更新任务状态或追加步骤到 context',
       parameters: Type.Object({
         taskId: Type.String({ description: '任务ID' }),
+        agentId: Type.Optional(Type.String({ description: '执行者 agentId（追加 context 时必填）' })),
         status: Type.Optional(Type.String({ description: '状态', enum: ['running', 'completed', 'failed', 'pending'] })),
         // 追加到 context 的步骤
         contextStep: Type.Optional(Type.String({ description: '当前步骤描述' })),
@@ -114,6 +115,7 @@ export default definePluginEntry({
       }),
       async execute(_toolCallId, rawParams) {
         const taskId = readStringParam(rawParams, 'taskId', { required: true });
+        const agentId = readStringParam(rawParams, 'agentId');
         const status = readStringParam(rawParams, 'status');
         const contextStep = readStringParam(rawParams, 'contextStep');
         const contextOutput = rawParams.contextOutput ?? null;
@@ -122,15 +124,10 @@ export default definePluginEntry({
 
         let contextEntry = null;
         if (contextStep) {
-          const currentTask = getTask(taskId);
-          contextEntry = {
-            executor: currentTask?.executor ?? 'unknown',
-            step: contextStep,
-            output: contextOutput || {}
-          };
+          contextEntry = { step: contextStep };
         }
 
-        const task = updateTask(taskId, status, contextEntry, description, lastHeartbeatAt);
+        const task = updateTask(taskId, status, contextEntry, description, lastHeartbeatAt, agentId);
         return jsonResult({ task });
       }
     });
