@@ -31,19 +31,19 @@ describe('task schema', () => {
       expect(task.description).toBe('测试任务');
       expect(task.status).toBe(TaskStatus.PENDING);
       expect(task.priority).toBe('normal');
-      expect(task.initiator).toBe('ceo');
-      expect(task.owner).toBeNull();
+      expect(task.publisher).toBe('user');
+      expect(task.executor).toBeNull();
       expect(task.input).toEqual({});
     });
 
-    it('支持自定义 initiator 和 priority', () => {
+    it('支持自定义 publisher 和 priority', () => {
       const task = createTask({
         description: '高优任务',
-        initiator: 'manager',
+        publisher: 'manager',
         priority: 'high',
         input: { url: 'https://example.com' }
       });
-      expect(task.initiator).toBe('manager');
+      expect(task.publisher).toBe('manager');
       expect(task.priority).toBe('high');
       expect(task.input).toEqual({ url: 'https://example.com' });
     });
@@ -184,14 +184,14 @@ describe('task schema', () => {
       expect(formatted).toContain('⏳ 待认领');
     });
 
-    it('有 owner 时包含执行者', () => {
+    it('有 executor 时包含执行者', () => {
       const task = createTask({ description: 'x' });
-      task.owner = 'agent_1';
+      task.executor = 'agent_1';
       const formatted = formatTaskForHuman(task);
       expect(formatted).toContain('执行者: agent_1');
     });
 
-    it('无 owner 时不包含执行者', () => {
+    it('无 executor 时不包含执行者', () => {
       const task = createTask({ description: 'x' });
       const formatted = formatTaskForHuman(task);
       expect(formatted).not.toContain('执行者:');

@@ -47,7 +47,7 @@
 
 ## 3. 通用设计原则
 
-- **任意 agent 可发布任务** — `initiator` 只是记录，不做权限控制
+- **任意 agent 可发布任务** — `publisher` 只是记录，不做权限控制
 - **任意 agent 可认领任务** — 根据任务描述自行判断是否接单
 - **agent 不能同时做多个任务** — 有进行中任务时不能认领新任务
 - **心跳保活** — 执行中的任务定期更新 `lastHeartbeatAt`
@@ -62,9 +62,10 @@
   "description": "任务描述",
   "input": { /* 任务参数 */ },
   "priority": "high | normal | low",
-  "initiator": "ceo | agentId",
+  "publisher": "user | agentId",
   "status": "pending | claimed | running | completed | failed",
-  "owner": null | "agentId",
+  "executor": null | "agentId",
+  "lastExecutor": null | "agentId",
   "createdAt": 1745740800000,
   "claimedAt": null | 1745740800100,
   "completedAt": null | 1745740800200,
@@ -129,7 +130,7 @@ workspaceRoot/                   ← 可配置（openclaw.json 中设置）
 mteam_publish_task({
   description: "搜索收纳箱1688供应商",
   input: { keyword: "收纳箱", count: 10 },
-  initiator: "ceo",
+  publisher: "user",
   priority: "high"
 })
 // 返回: { taskId: "task_1745740800000_abc123" }

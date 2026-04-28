@@ -59,17 +59,17 @@ export default definePluginEntry({
       parameters: Type.Object({
         description: Type.String({ description: '任务描述' }),
         input: Type.Optional(Type.Object({}, { description: '任务输入参数', additionalProperties: true })),
-        initiator: Type.Optional(Type.String({ description: '发起者，默认 "ceo"' })),
+        publisher: Type.Optional(Type.String({ description: '发布者，默认 "user"' })),
         priority: Type.Optional(Type.String({ description: '优先级 high/normal/low，默认 normal', enum: ['high', 'normal', 'low'] }))
       }),
       async execute(_toolCallId, rawParams) {
         const description = readStringParam(rawParams, 'description', { required: true });
-        const initiator = readStringParam(rawParams, 'initiator') ?? 'ceo';
+        const publisher = readStringParam(rawParams, 'publisher') ?? 'user';
         const priority = readStringParam(rawParams, 'priority');
         const taskId = publishTask({
           description,
           input: rawParams.input ?? {},
-          initiator,
+          publisher,
           priority
         });
         return jsonResult({ taskId });

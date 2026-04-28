@@ -4,6 +4,14 @@
 
 ---
 
+## 核心概念
+
+- **Publisher** — 帮助用户发布任务，不追踪执行，只负责理解需求并发布
+- **Executor** — 认领任务的 agent，只做当前步骤，没完成就放回池子
+- **接力** — Executor A 没完成当前步骤，更新任务放回池子，Executor B 继续
+
+---
+
 ## 工具列表
 
 | 工具 | 说明 |
@@ -18,67 +26,40 @@
 
 ---
 
-## 发布任务（任意 agent）
+## Publisher 流程
 
-### 1. 发布
+帮助用户分析需求，发布任务后不追踪。
+
+### 1. 分析用户需求
+
+理解用户的核心目标，拆解为可执行的任务描述。
+
+### 2. 发布任务
 
 ```
 mteam_publish_task({
   description: "搜索收纳箱1688供应商",
   input: { keyword: "收纳箱", count: 10 },
-  initiator: "ceo"
+  publisher: "user"
 })
 ```
 
-### 2. 通知相关方
+### 3. 不追踪
 
-群里发：
-```
-📋 任务已发布
-描述: {description}
-等待认领...
-```
+Publisher 不负责追踪任务执行，发布后即可结束。
 
 ---
 
-## 认领任务
+## Executor 流程
 
-任何 agent 根据任务描述自行决定是否认领。
+认领任务后只做当前步骤，没完成核心目标就放回池子。
 
-### 1. 查看待认领任务
-
-```
-mteam_get_pending()
-```
-
-### 2. 认领
-
-```
-mteam_claim_task({
-  taskId: "{taskId}",
-  agentId: "{你的agentId}"
-})
-```
-
-### 3. 立即开始执行
-
-认领后必须立即转 `running`：
-
-```
-mteam_update_task({
-  taskId: "{taskId}",
-  status: "running"
-})
-```
-
----
-
-## 状态流转
+### 状态流转
 
 ```
 pending → claimed → running → completed
                           ↘ failed
-                          ↘ pending（需下一步，taskId 不变）
+                          ↘ pending（没完成，放回池子接力）
 ```
 
 | 状态 | 含义 |
@@ -86,8 +67,27 @@ pending → claimed → running → completed
 | `pending` | 待认领 |
 | `claimed` | 已认领（必须立即转 running） |
 | `running` | 执行中 |
-| `completed` | 已完成 |
-| `failed` | 失败 |
+| `completed` | 完成，达成目标 |
+| `pending`（接力） | 没完成，放回池子让下一个继续 |
+
+---
+
+## 接力模式
+
+Executor A 做了当前步骤但没达到核心目标：
+
+```
+mteam_update_task({
+  taskId: "{taskId}",
+  status: "pending",
+  summary: "已完成第1步，第2步需要xxx",
+  result: { step1_done: true, next_needed: "xxx" }
+})
+```
+
+→ 任务回到 pending，`lastExecutor = "A"`，`executor = null`
+→ Executor B 认领，从 `lastExecutor` 可看到上一个是谁
+→ Executor B 做当前步骤，如果没完成也放回池子
 
 ---
 
@@ -106,18 +106,6 @@ mteam_update_task({
 
 ---
 
-## 更新任务状态
-
-```
-mteam_update_task({
-  taskId: "{taskId}",
-  status: "completed",
-  summary: "找到10个供应商"
-})
-```
-
----
-
 ## 产出文件
 
 产出写入任务文件夹：
@@ -127,4 +115,3 @@ mteam_update_task({
 ├── task.json       # 任务详情
 └── {产出文件}      # 其他产出
 ```
-

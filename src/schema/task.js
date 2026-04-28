@@ -4,9 +4,10 @@
  * @property {string} taskId
  * @property {string} description
  * @property {Object} input
- * @property {string} initiator
+ * @property {string} publisher
  * @property {string} status
- * @property {string|null} owner
+ * @property {string|null} executor
+ * @property {string|null} lastExecutor
  * @property {number} createdAt
  * @property {number|null} claimedAt
  * @property {number|null} completedAt
@@ -101,11 +102,11 @@ export function validateTask(task) {
  * @param {Object} params
  * @param {string} params.description
  * @param {Object} [params.input={}]
- * @param {string} [params.initiator='ceo']
+ * @param {string} [params.publisher='user']
  * @param {string} [params.priority='normal']
  * @returns {Task}
  */
-export function createTask({ description, input = {}, initiator = 'ceo', priority = 'normal' }) {
+export function createTask({ description, input = {}, publisher = 'user', priority = 'normal' }) {
   const taskId = `task_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
 
   return {
@@ -113,9 +114,10 @@ export function createTask({ description, input = {}, initiator = 'ceo', priorit
     description: String(description),
     input: input || {},
     priority,
-    initiator: initiator || 'ceo',
+    publisher: publisher || 'user',
     status: TaskStatus.PENDING,
-    owner: null,
+    executor: null,
+    lastExecutor: null,
     createdAt: Date.now(),
     claimedAt: null,
     completedAt: null,
@@ -144,7 +146,7 @@ export function formatTaskForHuman(task) {
     `优先级: ${priorityLabel[task.priority] || '🟡 中'}`,
     `状态: ${getStatusLabel(task.status)}`
   ];
-  if (task.owner) lines.push(`执行者: ${task.owner}`);
+  if (task.executor) lines.push(`执行者: ${task.executor}`);
   if (task.summary) lines.push(`摘要: ${task.summary}`);
 
   return lines.join('\n');

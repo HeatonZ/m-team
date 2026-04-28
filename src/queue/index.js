@@ -41,10 +41,10 @@ function init() {
   }
 }
 
-export function publishTask({ description, input = {}, initiator = 'ceo', priority }) {
+export function publishTask({ description, input = {}, publisher = 'user', priority }) {
   init();
 
-  const task = createTask({ description, input, initiator, priority });
+  const task = createTask({ description, input, publisher, priority });
   const taskDir = ensureTaskWorkspace(task.taskId);
 
   const taskPath = path.join(taskDir, 'task.json');
@@ -77,8 +77,13 @@ export function claimTask(taskId, agentId) {
 
     if (task.status !== TaskStatus.PENDING) return false;
 
+    // 接力：上一个执行者成为 lastExecutor
+    if (task.executor) {
+      task.lastExecutor = task.executor;
+    }
+
     task.status = TaskStatus.CLAIMED;
-    task.owner = agentId;
+    task.executor = agentId;
     task.claimedAt = Date.now();
     fs.writeFileSync(taskPath, JSON.stringify(task, null, 2), 'utf8');
 
@@ -123,7 +128,7 @@ export function getAgentActiveTask(agentId) {
     if (!fs.existsSync(taskPath)) continue;
 
     const task = JSON.parse(fs.readFileSync(taskPath, 'utf8'));
-    if (task.owner === agentId && (task.status === TaskStatus.CLAIMED || task.status === TaskStatus.RUNNING)) {
+    if (task.executor === agentId && (task.status === TaskStatus.CLAIMED || task.status === TaskStatus.RUNNING)) {
       return task;
     }
   }
@@ -135,6 +140,15 @@ export function updateTask(taskId, status, result = null, summary = null, descri
   if (!fs.existsSync(taskPath)) return null;
 
   const task = JSON.parse(fs.readFileSync(taskPath, 'utf8'));
+
+  // 接力：任务重新放回 pending 时，保留 lastExecutor
+  if (status === TaskStatus.PENDING) {
+    if (task.executor) {
+      task.lastExecutor = task.executor;
+      task.executor = null;
+    }
+  }
+
   if (status) task.status = status;
   if (result) task.result = result;
   if (summary) task.summary = summary;
@@ -172,5 +186,5 @@ export function getAllTasks() {
 }
 
 export function getTasksByOwner(agentId) {
-  return getAllTasks().filter(t => t.owner === agentId);
+  return getAllTasks().filter(t => t.executor === agentId);
 }
