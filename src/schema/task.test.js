@@ -140,6 +140,45 @@ describe('task schema', () => {
       const result = validateTask({});
       expect(result.errors.length).toBeGreaterThan(1);
     });
+
+    it('context[0].type 不是 input 返回无效', () => {
+      const task = createTask({ description: 'x', goal: 'goal' });
+      task.context[0].type = 'wrong';
+      const result = validateTask(task);
+      expect(result.valid).toBe(false);
+      expect(result.errors.some(e => e.includes('context[0].type'))).toBe(true);
+    });
+
+    it('context[0] 不是 input 但数组为空则不报错', () => {
+      // 空数组不触发 input 检查
+      const task = createTask({ description: 'x', goal: 'goal' });
+      task.context = [];
+      const result = validateTask(task);
+      expect(result.valid).toBe(true);
+    });
+
+    it('步骤 entry 缺少 executor 返回无效', () => {
+      const task = createTask({ description: 'x', goal: 'goal' });
+      task.context.push({ step: '做了一步' }); // 缺 executor
+      const result = validateTask(task);
+      expect(result.valid).toBe(false);
+      expect(result.errors.some(e => e.includes('context[1].executor'))).toBe(true);
+    });
+
+    it('步骤 entry 缺少 step 返回无效', () => {
+      const task = createTask({ description: 'x', goal: 'goal' });
+      task.context.push({ executor: 'agent_1' }); // 缺 step
+      const result = validateTask(task);
+      expect(result.valid).toBe(false);
+      expect(result.errors.some(e => e.includes('context[1].step'))).toBe(true);
+    });
+
+    it('有效步骤 entry 通过验证', () => {
+      const task = createTask({ description: 'x', goal: 'goal' });
+      task.context.push({ executor: 'agent_1', step: '搜索', output: { summary: 'ok' } });
+      const result = validateTask(task);
+      expect(result.valid).toBe(true);
+    });
   });
 
   // ============================================================
@@ -151,6 +190,7 @@ describe('task schema', () => {
       expect(getStatusLabel('running')).toBe('⚙️ 执行中');
       expect(getStatusLabel('completed')).toBe('✅ 完成');
       expect(getStatusLabel('failed')).toBe('❌ 失败');
+      expect(getStatusLabel('cancelled')).toBe('🚫 已取消');
     });
 
     it('未知状态原样返回', () => {

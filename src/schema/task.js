@@ -91,6 +91,25 @@ export function validateTask(task) {
   }
   if (!Array.isArray(task.context)) {
     errors.push('context 必填且为数组');
+  } else {
+    // context[0] 必须是 input
+    if (task.context.length > 0 && task.context[0]?.type !== 'input') {
+      errors.push('context[0].type 必须是 "input"');
+    }
+    // 后续 entries 必须有 executor + step
+    for (let i = 1; i < task.context.length; i++) {
+      const entry = task.context[i];
+      if (!entry || typeof entry !== 'object') {
+        errors.push(`context[${i}] 必须是对象`);
+        continue;
+      }
+      if (!entry.executor || typeof entry.executor !== 'string') {
+        errors.push(`context[${i}].executor 必填且为字符串`);
+      }
+      if (!entry.step || typeof entry.step !== 'string') {
+        errors.push(`context[${i}].step 必填且为字符串`);
+      }
+    }
   }
   if (!Object.values(TaskStatus).includes(task.status)) {
     errors.push(`status 无效，可选值: ${Object.values(TaskStatus).join(', ')}`);
