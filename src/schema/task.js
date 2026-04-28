@@ -3,6 +3,7 @@
  * @typedef {Object} Task
  * @property {string} taskId
  * @property {string} description
+ * @property {string} goal
  * @property {Object} input
  * @property {string} publisher
  * @property {string} status
@@ -88,6 +89,9 @@ export function validateTask(task) {
   if (!task.description || typeof task.description !== 'string') {
     errors.push('description 必填且为字符串');
   }
+  if (!task.goal || typeof task.goal !== 'string') {
+    errors.push('goal 必填且为字符串');
+  }
   if (!Object.values(TaskStatus).includes(task.status)) {
     errors.push(`status 无效，可选值: ${Object.values(TaskStatus).join(', ')}`);
   }
@@ -101,17 +105,19 @@ export function validateTask(task) {
 /**
  * @param {Object} params
  * @param {string} params.description
+ * @param {string} params.goal
  * @param {Object} [params.input={}]
  * @param {string} [params.publisher='user']
  * @param {string} [params.priority='normal']
  * @returns {Task}
  */
-export function createTask({ description, input = {}, publisher = 'user', priority = 'normal' }) {
+export function createTask({ description, goal, input = {}, publisher = 'user', priority = 'normal' }) {
   const taskId = `task_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
 
   return {
     taskId,
     description: String(description),
+    goal: String(goal),
     input: input || {},
     priority,
     publisher: publisher || 'user',
@@ -141,7 +147,8 @@ export function getStatusLabel(status) {
 export function formatTaskForHuman(task) {
   const priorityLabel = { high: '🔴 高', normal: '🟡 中', low: '🟢 低' };
   const lines = [
-    `📋 ${task.description}`,
+    `🎯 ${task.goal}`,
+    `📋 当前：${task.description}`,
     `ID: ${task.taskId}`,
     `优先级: ${priorityLabel[task.priority] || '🟡 中'}`,
     `状态: ${getStatusLabel(task.status)}`

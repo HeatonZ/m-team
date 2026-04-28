@@ -26,9 +26,10 @@ describe('task schema', () => {
   // ============================================================
   describe('createTask', () => {
     it('生成有效任务对象', () => {
-      const task = createTask({ description: '测试任务' });
+      const task = createTask({ description: '测试任务', goal: '测试goal' });
       expect(task.taskId).toMatch(/^task_\d+_[a-z0-9]+$/);
       expect(task.description).toBe('测试任务');
+      expect(task.goal).toBe('测试goal');
       expect(task.status).toBe(TaskStatus.PENDING);
       expect(task.priority).toBe('normal');
       expect(task.publisher).toBe('user');
@@ -39,6 +40,7 @@ describe('task schema', () => {
     it('支持自定义 publisher 和 priority', () => {
       const task = createTask({
         description: '高优任务',
+        goal: '核心目标A',
         publisher: 'manager',
         priority: 'high',
         input: { url: 'https://example.com' }
@@ -50,13 +52,13 @@ describe('task schema', () => {
 
     it('priority 接受大小写混合输入', () => {
       // 内部不做 normalize，直接存储原值
-      const task = createTask({ description: 'x', priority: 'HIGH' });
+      const task = createTask({ description: 'x', goal: 'goal', priority: 'HIGH' });
       expect(task.priority).toBe('HIGH');
     });
 
     it('createdAt 是时间戳', () => {
       const before = Date.now();
-      const task = createTask({ description: 'x' });
+      const task = createTask({ description: 'x', goal: 'goal' });
       const after = Date.now();
       expect(task.createdAt).toBeGreaterThanOrEqual(before);
       expect(task.createdAt).toBeLessThanOrEqual(after);
@@ -68,7 +70,7 @@ describe('task schema', () => {
   // ============================================================
   describe('validateTask', () => {
     it('有效任务通过验证', () => {
-      const task = createTask({ description: '有效任务' });
+      const task = createTask({ description: '有效任务', goal: 'goal' });
       const result = validateTask(task);
       expect(result.valid).toBe(true);
       expect(result.errors).toHaveLength(0);
@@ -97,11 +99,19 @@ describe('task schema', () => {
     });
 
     it('缺少 description 返回无效', () => {
-      const task = createTask({ description: 'x' });
+      const task = createTask({ description: 'x', goal: 'goal' });
       delete task.description;
       const result = validateTask(task);
       expect(result.valid).toBe(false);
       expect(result.errors.some(e => e.includes('description'))).toBe(true);
+    });
+
+    it('缺少 goal 返回无效', () => {
+      const task = createTask({ description: 'x', goal: 'goal' });
+      delete task.goal;
+      const result = validateTask(task);
+      expect(result.valid).toBe(false);
+      expect(result.errors.some(e => e.includes('goal'))).toBe(true);
     });
 
     it('无效 priority 返回无效', () => {
@@ -177,28 +187,28 @@ describe('task schema', () => {
   // ============================================================
   describe('formatTaskForHuman', () => {
     it('生成包含所有字段的字符串', () => {
-      const task = createTask({ description: '测试', priority: 'high' });
+      const task = createTask({ description: '测试', goal: '目标', priority: 'high' });
       const formatted = formatTaskForHuman(task);
-      expect(formatted).toContain('测试');
+      expect(formatted).toContain('目标');
       expect(formatted).toContain('🔴 高'); // high = 🔴 高
       expect(formatted).toContain('⏳ 待认领');
     });
 
     it('有 executor 时包含执行者', () => {
-      const task = createTask({ description: 'x' });
+      const task = createTask({ description: 'x', goal: 'goal' });
       task.executor = 'agent_1';
       const formatted = formatTaskForHuman(task);
       expect(formatted).toContain('执行者: agent_1');
     });
 
     it('无 executor 时不包含执行者', () => {
-      const task = createTask({ description: 'x' });
+      const task = createTask({ description: 'x', goal: 'goal' });
       const formatted = formatTaskForHuman(task);
       expect(formatted).not.toContain('执行者:');
     });
 
     it('有 summary 时包含摘要', () => {
-      const task = createTask({ description: 'x' });
+      const task = createTask({ description: 'x', goal: 'goal' });
       task.summary = 'done';
       const formatted = formatTaskForHuman(task);
       expect(formatted).toContain('摘要: done');

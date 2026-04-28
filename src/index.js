@@ -57,17 +57,20 @@ export default definePluginEntry({
       name: 'mteam_publish_task',
       description: '发布任务到 M-Team 任务池',
       parameters: Type.Object({
-        description: Type.String({ description: '任务描述' }),
+        description: Type.String({ description: '当前步骤的描述' }),
+        goal: Type.String({ description: '核心目标，不可更改' }),
         input: Type.Optional(Type.Object({}, { description: '任务输入参数', additionalProperties: true })),
         publisher: Type.Optional(Type.String({ description: '发布者，默认 "user"' })),
         priority: Type.Optional(Type.String({ description: '优先级 high/normal/low，默认 normal', enum: ['high', 'normal', 'low'] }))
       }),
       async execute(_toolCallId, rawParams) {
         const description = readStringParam(rawParams, 'description', { required: true });
+        const goal = readStringParam(rawParams, 'goal', { required: true });
         const publisher = readStringParam(rawParams, 'publisher') ?? 'user';
         const priority = readStringParam(rawParams, 'priority');
         const taskId = publishTask({
           description,
+          goal,
           input: rawParams.input ?? {},
           publisher,
           priority
