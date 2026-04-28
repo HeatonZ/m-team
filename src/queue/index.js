@@ -110,7 +110,7 @@ export function getPendingTasks(agentId = null) {
   if (agentId && getAgentActiveTask(agentId)) return [];
 
   const rows = getTaskRowsByStatus(TaskStatus.PENDING);
-  return rows;
+  return rows.slice(0, 3);
 }
 
 export function getAgentActiveTask(agentId) {
