@@ -5,7 +5,8 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { definePluginEntry, emptyPluginConfigSchema } from 'openclaw/plugin-sdk/plugin-entry';
+import { definePluginEntry, emptyPluginConfigSchema, jsonResult, readStringParam, readNumberParam } from 'openclaw/plugin-sdk/core';
+import { Type } from '@sinclair/typebox';
 import {
   setWorkspaceRoot,
   publishTask,
@@ -51,122 +52,120 @@ export default definePluginEntry({
 
     setWorkspaceRoot(config.workspaceRoot);
 
+    // === mteam_publish_task ===
     api.registerTool({
       name: 'mteam_publish_task',
-      description: '发布任务到队列',
-      input: {
-        type: 'object',
-        properties: {
-          description: { type: 'string', description: '任务描述' },
-          input: { type: 'object', description: '任务输入参数' },
-          initiator: { type: 'string', description: '发起者' },
-          priority: { type: 'string', enum: ['high', 'normal', 'low'], description: '优先级，默认 normal' }
-        },
-        required: ['description']
-      },
-      handler(params) {
-        return { taskId: publishTask({
-          description: params.description,
-          input: params.input || {},
-          initiator: params.initiator || 'ceo',
-          priority: params.priority
-        })};
+      description: '发布任务到 M-Team 任务池',
+      parameters: Type.Object({
+        description: Type.String({ description: '任务描述' }),
+        input: Type.Optional(Type.Object({}, { description: '任务输入参数', additionalProperties: true })),
+        initiator: Type.Optional(Type.String({ description: '发起者，默认 "ceo"' })),
+        priority: Type.Optional(Type.String({ description: '优先级 high/normal/low，默认 normal', enum: ['high', 'normal', 'low'] }))
+      }),
+      async execute(_toolCallId, rawParams) {
+        const description = readStringParam(rawParams, 'description', { required: true });
+        const initiator = readStringParam(rawParams, 'initiator') ?? 'ceo';
+        const priority = readStringParam(rawParams, 'priority');
+        const taskId = publishTask({
+          description,
+          input: rawParams.input ?? {},
+          initiator,
+          priority
+        });
+        return jsonResult({ taskId });
       }
     });
 
+    // === mteam_claim_task ===
     api.registerTool({
       name: 'mteam_claim_task',
-      description: '认领任务',
-      input: {
-        type: 'object',
-        properties: {
-          taskId: { type: 'string', description: '任务ID' },
-          agentId: { type: 'string', description: '认领者agentId' }
-        },
-        required: ['taskId', 'agentId']
-      },
-      handler(params) {
-        return { claimed: claimTask(params.taskId, params.agentId), taskId: params.taskId };
+      description: '认领一个待处理任务',
+      parameters: Type.Object({
+        taskId: Type.String({ description: '任务ID' }),
+        agentId: Type.String({ description: '认领者 agentId' })
+      }),
+      async execute(_toolCallId, rawParams) {
+        const taskId = readStringParam(rawParams, 'taskId', { required: true });
+        const agentId = readStringParam(rawParams, 'agentId', { required: true });
+        const claimed = claimTask(taskId, agentId);
+        return jsonResult({ claimed, taskId });
       }
     });
 
+    // === mteam_update_task ===
     api.registerTool({
       name: 'mteam_update_task',
       description: '更新任务状态或心跳',
-      input: {
-        type: 'object',
-        properties: {
-          taskId: { type: 'string', description: '任务ID' },
-          status: { type: 'string', enum: ['running', 'completed', 'failed', 'pending'], description: '状态（可选，不传则只更新心跳）' },
-          summary: { type: 'string', description: '结果摘要' },
-          description: { type: 'string', description: '新描述（用于"需下一步"场景）' },
-          result: { type: 'object', description: '完整结果', properties: {} },
-          lastHeartbeatAt: { type: 'number', description: '心跳时间戳（毫秒），running 时定期更新表示"还活着"' }
-        },
-        required: ['taskId']
-      },
-      handler(params) {
-        return updateTask(
-          params.taskId,
-          params.status,
-          params.result,
-          params.summary,
-          params.description,
-          params.lastHeartbeatAt
-        );
+      parameters: Type.Object({
+        taskId: Type.String({ description: '任务ID' }),
+        status: Type.Optional(Type.String({ description: '状态', enum: ['running', 'completed', 'failed', 'pending'] })),
+        summary: Type.Optional(Type.String({ description: '结果摘要' })),
+        description: Type.Optional(Type.String({ description: '新描述（用于"需下一步"场景）' })),
+        result: Type.Optional(Type.Object({}, { description: '完整结果', additionalProperties: true })),
+        lastHeartbeatAt: Type.Optional(Type.Number({ description: '心跳时间戳（毫秒）' }))
+      }),
+      async execute(_toolCallId, rawParams) {
+        const taskId = readStringParam(rawParams, 'taskId', { required: true });
+        const status = readStringParam(rawParams, 'status');
+        const summary = readStringParam(rawParams, 'summary');
+        const description = readStringParam(rawParams, 'description');
+        const lastHeartbeatAt = readNumberParam(rawParams, 'lastHeartbeatAt');
+        const result = rawParams.result ?? null;
+        const task = updateTask(taskId, status, result, summary, description, lastHeartbeatAt);
+        return jsonResult({ task });
       }
     });
 
+    // === mteam_get_pending ===
     api.registerTool({
       name: 'mteam_get_pending',
-      description: '获取待认领任务列表（agent有进行中任务时返回空）',
-      input: {
-        type: 'object',
-        properties: {
-          agentId: { type: 'string', description: '过滤：agentId' }
-        }
-      },
-      handler(params) {
-        return { pending: getPendingTasks(params.agentId) };
+      description: '获取待认领任务列表（agent 有进行中任务时返回空）',
+      parameters: Type.Object({
+        agentId: Type.Optional(Type.String({ description: '过滤：agentId' }))
+      }),
+      async execute(_toolCallId, rawParams) {
+        const agentId = readStringParam(rawParams, 'agentId');
+        const pending = getPendingTasks(agentId ?? null);
+        return jsonResult({ pending });
       }
     });
 
+    // === mteam_get_agent_active ===
     api.registerTool({
       name: 'mteam_get_agent_active',
       description: '获取 agent 当前进行中的任务（一个 agent 不能同时做多个任务）',
-      input: {
-        type: 'object',
-        properties: {
-          agentId: { type: 'string', description: 'agentId' }
-        },
-        required: ['agentId']
-      },
-      handler(params) {
-        return { activeTask: getAgentActiveTask(params.agentId) };
+      parameters: Type.Object({
+        agentId: Type.String({ description: 'agentId' })
+      }),
+      async execute(_toolCallId, rawParams) {
+        const agentId = readStringParam(rawParams, 'agentId', { required: true });
+        const activeTask = getAgentActiveTask(agentId);
+        return jsonResult({ activeTask });
       }
     });
 
+    // === mteam_get_task ===
     api.registerTool({
       name: 'mteam_get_task',
       description: '获取任务详情',
-      input: {
-        type: 'object',
-        properties: {
-          taskId: { type: 'string', description: '任务ID' }
-        },
-        required: ['taskId']
-      },
-      handler(params) {
-        return getTask(params.taskId);
+      parameters: Type.Object({
+        taskId: Type.String({ description: '任务ID' })
+      }),
+      async execute(_toolCallId, rawParams) {
+        const taskId = readStringParam(rawParams, 'taskId', { required: true });
+        const task = getTask(taskId);
+        return jsonResult({ task });
       }
     });
 
+    // === mteam_get_all_tasks ===
     api.registerTool({
       name: 'mteam_get_all_tasks',
       description: '获取所有任务',
-      input: { type: 'object', properties: {} },
-      handler() {
-        return { tasks: getAllTasks() };
+      parameters: Type.Object({}),
+      async execute(_toolCallId, rawParams) {
+        const tasks = getAllTasks();
+        return jsonResult({ tasks });
       }
     });
 

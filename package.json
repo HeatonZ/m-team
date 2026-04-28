@@ -32,6 +32,7 @@
     "prepublishOnly": "npm run build"
   },
   "devDependencies": {
+    "@sinclair/typebox": "^0.34.0",
     "esbuild": "^0.24.0"
   }
 }
