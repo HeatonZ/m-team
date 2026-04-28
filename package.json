@@ -1,16 +1,37 @@
 {
-  "name": "m-team-chain",
+  "name": "m-team",
   "version": "0.1.0",
-  "description": "OpenClaw chain collaboration plugin - chain executor for captain/manager/maker",
-  "main": "index.js",
+  "description": "去中心化任务池协作插件 — 多Agent任务分发与执行",
+  "type": "module",
+  "main": "dist/index.js",
   "author": "郑尚丰",
   "license": "MIT",
-  "keywords": ["openclaw", "multi-agent", "chain", "collaboration"],
+  "keywords": [
+    "openclaw",
+    "multi-agent",
+    "task-queue",
+    "collaboration"
+  ],
   "openclaw": {
-    "pluginApi": "1.0.0",
-    "channels": ["feishu"]
+    "extensions": [
+      "./dist/index.js"
+    ],
+    "skills": [
+      "./skills/m-team",
+      "./skills/mteam-task-health"
+    ],
+    "compat": {
+      "pluginApi": ">=2026.4.22"
+    },
+    "build": {
+      "openclawVersion": "2026.4.22"
+    }
   },
   "scripts": {
-    "build": "echo no build needed"
+    "build": "esbuild src/index.js --bundle --platform=node --outdir=dist --format=esm --external:node:* --external:openclaw --external:openclaw/plugin-sdk",
+    "prepublishOnly": "npm run build"
+  },
+  "devDependencies": {
+    "esbuild": "^0.24.0"
   }
 }
