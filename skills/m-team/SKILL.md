@@ -6,23 +6,24 @@
 
 ## 核心概念
 
-- **Publisher** — 帮助用户发布任务，不追踪执行，只负责理解需求并发布
-- **Executor** — 认领任务的 agent，只做当前步骤，没完成就放回池子
+- **Publisher（管理者）** — 帮助用户发布任务，不追踪执行，只负责理解需求并发布
+- **Executor（执行者）** — 认领任务的 agent，只做当前步骤，没完成就放回池子
 - **接力** — Executor A 没完成当前步骤，更新任务放回池子，Executor B 继续
+- **context** — 完整步骤历史，下一个 executor 能看到之前做了什么
 
 ---
 
 ## 工具列表
 
-| 工具 | 说明 |
-|------|------|
-| `mteam_publish_task` | 发布任务 |
-| `mteam_claim_task` | 认领任务 |
-| `mteam_update_task` | 更新状态/心跳 |
-| `mteam_get_pending` | 查看待认领任务 |
-| `mteam_get_agent_active` | 查看自己进行中的任务 |
-| `mteam_get_task` | 查看任务详情 |
-| `mteam_get_all_tasks` | 查看所有任务 |
+| 工具 | 调用者 | 说明 |
+|------|--------|------|
+| `mteam_publish_task` | 管理者 | 发布任务（goal 必填，不可更改） |
+| `mteam_claim_task` | 执行者 | 认领任务 |
+| `mteam_update_task` | 执行者 | 更新状态/追加 context 步骤 |
+| `mteam_get_pending` | 执行者 | 查看待认领任务 |
+| `mteam_get_agent_active` | 执行者 | 查看自己进行中的任务 |
+| `mteam_get_task` | 执行者 | 查看任务详情 |
+| `mteam_get_all_tasks` | 执行者 | 查看所有任务 |
 
 ---
 
@@ -32,7 +33,7 @@
 
 ### 1. 分析用户需求
 
-理解用户的核心目标，拆解为可执行的任务描述。
+理解用户的核心目标（goal），拆解为可执行的第一步描述（description）。
 
 ### 2. 发布任务
 
@@ -81,14 +82,31 @@ Executor A 做了当前步骤但没达到核心目标：
 mteam_update_task({
   taskId: "{taskId}",
   status: "pending",
-  summary: "已完成第1步，第2步需要xxx",
-  result: { step1_done: true, next_needed: "xxx" }
+  contextStep: "搜索1688供应商",
+  contextOutput: { summary: "找到10家供应商", files: ["data/suppliers.json"] },
+  description: "联系供应商确认价格"
 })
 ```
 
-→ 任务回到 pending，`lastExecutor = "A"`，`executor = null`
-→ Executor B 认领，从 `lastExecutor` 可看到上一个是谁
-→ Executor B 做当前步骤，如果没完成也放回池子
+→ 任务回到 pending，`lastExecutor = "A"`，executor = null
+→ 新 executor 认领后，从 `context` 看到完整历史（input + A 的 output）
+→ 新 executor 做下一步，如果没完成也放回池子
+
+---
+
+## context 追溯
+
+`context` 数组包含完整步骤历史：
+
+```json
+"context": [
+  { "type": "input", "data": { "keyword": "收纳箱" }, "createdAt": 1745620000000 },
+  { "executor": "agent_1", "step": "搜索1688供应商", "output": { "summary": "...", "files": [...] }, "completedAt": 1745621000000 },
+  { "executor": "agent_2", "step": "联系供应商", "output": { "summary": "..." }, "completedAt": 1745622000000 }
+]
+```
+
+接力时 executor 读取 `context` 了解完整链路，不丢历史。
 
 ---
 
@@ -109,10 +127,12 @@ mteam_update_task({
 
 ## 产出文件
 
-产出写入任务文件夹：
+产出写入任务文件夹，只存相对路径到 context 的 `output.files`：
 
 ```
 {workspaceRoot}/tasks/{taskId}/
 ├── task.json       # 任务详情
-└── {产出文件}      # 其他产出
+└── data/          # 产出文件（由 executor 写入）
+    ├── suppliers.json
+    └── contact_log.md
 ```

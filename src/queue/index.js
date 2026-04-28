@@ -135,7 +135,15 @@ export function getAgentActiveTask(agentId) {
   return null;
 }
 
-export function updateTask(taskId, status, result = null, summary = null, description = null, lastHeartbeatAt = null) {
+/**
+ * 更新任务状态，或追加 context 步骤
+ * @param {string} taskId
+ * @param {string|null} status
+ * @param {Object|null} contextEntry - 追加到 context 的步骤，格式 { executor, step, output }
+ * @param {string|null} description - 更新当前步骤描述
+ * @param {number|null} lastHeartbeatAt
+ */
+export function updateTask(taskId, status, contextEntry = null, description = null, lastHeartbeatAt = null) {
   const taskPath = path.join(getTaskWorkspace(taskId), 'task.json');
   if (!fs.existsSync(taskPath)) return null;
 
@@ -150,10 +158,19 @@ export function updateTask(taskId, status, result = null, summary = null, descri
   }
 
   if (status) task.status = status;
-  if (result) task.result = result;
-  if (summary) task.summary = summary;
   if (description) task.description = description;
   if (lastHeartbeatAt) task.lastHeartbeatAt = lastHeartbeatAt;
+
+  // 追加步骤到 context
+  if (contextEntry) {
+    task.context.push({
+      executor: contextEntry.executor,
+      step: contextEntry.step,
+      output: contextEntry.output || {},
+      completedAt: Date.now()
+    });
+  }
+
   if (status === TaskStatus.COMPLETED || status === TaskStatus.FAILED) {
     task.completedAt = Date.now();
   }
@@ -182,9 +199,9 @@ export function getAllTasks() {
     if (task) tasks.push(task);
   }
 
-  return tasks.sort((a, b) => b.createdAt - a.createdAt);
+  return tasks.sort((a, b) => b.createdAt - b.createdAt);
 }
 
-export function getTasksByOwner(agentId) {
+export function getTasksByExecutor(agentId) {
   return getAllTasks().filter(t => t.executor === agentId);
 }

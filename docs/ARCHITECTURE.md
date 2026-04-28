@@ -1,6 +1,6 @@
 # M-Team 架构文档
 
-> 版本：1.1.0 | 更新：2026-04-28
+> 版本：1.2.0 | 更新：2026-04-28
 
 ---
 
@@ -12,6 +12,8 @@
 - **去中心化** — 没有单点发起者/协调者，节点自主抢任务
 - **心跳驱动** — agent 不需要被 @，自己心跳查任务池
 - **共享任务池** — 任务池是文件系统中的队列，节点自主读写
+- **接力执行** — executor 只做当前步骤，没完成就放回池子让下一个接上
+- **context 追溯** — 完整步骤历史，下一个 executor 能看到之前做了什么
 
 ---
 
@@ -19,7 +21,7 @@
 
 ```
 ┌─────────┐
-│ Agent A │  发布任务
+│ Manager │  发布任务
 └────┬────┘
      │ mteam_publish_task
      ▼
@@ -32,25 +34,21 @@
 │ Agent B │ │ Agent C │ │ Agent D │  自主认领
 └────┬────┘ └────┬────┘ └────┬────┘
      │            │           │
-     ▼            ▼           ▼
-┌─────────────────────────────────┐
-│   任务执行 + 产出写入 tasks/   │
-└─────────────────────────────────┘
-     │ mteam_update_task(status=completed)
-     ▼
-┌─────────────────────────────────┐
-│   任务池状态更新                │
-└─────────────────────────────────┘
+     │ mteam_update_task      │
+     │ (context 追加 steps)  │
+     │           │           │
+     │◄──────────┴────────────┘  接力：放回 pending
 ```
 
 ---
 
 ## 3. 通用设计原则
 
-- **任意 agent 可发布任务** — `publisher` 只是记录，不做权限控制
-- **任意 agent 可认领任务** — 根据任务描述自行判断是否接单
+- **管理者发布任务** — `publisher` 只是记录发布者身份，不做权限控制
+- **执行者自主认领** — 根据 `goal` + `context` 自行判断是否接单
 - **agent 不能同时做多个任务** — 有进行中任务时不能认领新任务
 - **心跳保活** — 执行中的任务定期更新 `lastHeartbeatAt`
+- **context 无限追溯** — 每步 output 追加到 context 数组，供后续 executor 参考
 
 ---
 
@@ -58,22 +56,37 @@
 
 ```json
 {
-  "taskId": "task_{timestamp}_{random6}",
-  "description": "任务描述",
-  "input": { /* 任务参数 */ },
-  "priority": "high | normal | low",
-  "publisher": "user | agentId",
-  "status": "pending | claimed | running | completed | failed",
-  "executor": null | "agentId",
-  "lastExecutor": null | "agentId",
-  "createdAt": 1745740800000,
-  "claimedAt": null | 1745740800100,
-  "completedAt": null | 1745740800200,
-  "lastHeartbeatAt": null | 1745740800500,
-  "summary": null | "结果摘要（≤200字）",
-  "result": null | { /* 完整结果 */ }
+  "taskId": "task_1745620000000_abc123",
+  "description": "联系供应商确认价格",
+  "goal": "找到收纳箱类目下评分高的1688供应商",
+  "context": [
+    { "type": "input", "data": { "keyword": "收纳箱", "count": 10 }, "createdAt": 1745620000000 },
+    { "executor": "agent_1", "step": "搜索1688供应商", "output": { "summary": "找到10家供应商", "files": ["data/suppliers_001.json"] }, "completedAt": 1745621000000 },
+    { "executor": "agent_2", "step": "联系供应商确认价格", "output": { "summary": "联系了5家，3家回复" }, "completedAt": 1745622000000 }
+  ],
+  "priority": "high",
+  "publisher": "user",
+  "status": "pending",
+  "executor": null,
+  "lastExecutor": "agent_2",
+  "createdAt": 1745620000000,
+  "claimedAt": null,
+  "completedAt": null,
+  "lastHeartbeatAt": null
 }
 ```
+
+### context 格式说明
+
+| 字段 | 说明 |
+|------|------|
+| `context[0].type` | 固定为 `"input"`，创建后不可更改 |
+| `context[0].data` | 原始输入，任意结构 |
+| `context[].executor` | 执行该步骤的 agentId |
+| `context[].step` | 步骤描述 |
+| `context[].output.summary` | 步骤摘要，建议简洁 |
+| `context[].output.files` | 任务文件夹内的相对路径，原始数据放文件里 |
+| `context[].completedAt` | 步骤完成时间戳 |
 
 **优先级：**
 
@@ -87,8 +100,8 @@
 
 ```
 pending → claimed → running → completed
-                         ↘ failed
-                         ↘ pending（需下一步，taskId 不变）
+                          ↘ failed
+                          ↘ pending（需下一步，taskId 不变）
 ```
 
 **注意：** `claimed` ≠ 正在执行。认领后必须立即转 `running` 才是真正开始。
@@ -101,7 +114,8 @@ pending → claimed → running → completed
 workspaceRoot/                   ← 可配置（openclaw.json 中设置）
 ├── tasks/
 │   └── {taskId}/
-│       └── task.json             ← 任务详情
+│       └── task.json             ← 任务详情（唯一真实数据源）
+│       └── {产出文件}            ← executor 写入的任务文件夹
 └── queue/
     └── tasks.json               ← 任务ID索引列表
 ```
@@ -112,13 +126,13 @@ workspaceRoot/                   ← 可配置（openclaw.json 中设置）
 
 ---
 
-## Tool API
+## 6. Tool API
 
 | Tool | 调用者 | 说明 |
 |------|--------|------|
 | `mteam_publish_task` | 管理者 | 发布新任务（goal 必填，不可更改） |
 | `mteam_claim_task` | 执行者 | 认领任务（原子操作，防并发竞态） |
-| `mteam_update_task` | 执行者 | 更新状态/心跳（status 非必填） |
+| `mteam_update_task` | 执行者 | 更新状态/追加 context 步骤 |
 | `mteam_get_pending` | 执行者 | 获取待认领任务列表（agent有任务时返回空） |
 | `mteam_get_agent_active` | 执行者 | 获取 agent 当前进行中任务 |
 | `mteam_get_task` | 执行者 | 获取任务详情 |
@@ -148,20 +162,27 @@ mteam_claim_task({
 // 原子操作：锁文件 + 状态校验，确保只有一个 agent 能抢到
 ```
 
-### 6.3 更新状态
+### 6.3 更新状态 / 追加步骤
 
 ```javascript
+// 完成任务
 mteam_update_task({
   taskId: "task_1745740800000_abc123",
   status: "completed",
-  summary: "找到10个供应商",
-  result: { suppliers: [...] }
+  contextStep: "联系供应商确认价格",
+  contextOutput: { summary: "联系了5家，3家回复", files: ["data/contact_log.md"] }
 })
-```
 
-**状态非必填，可只更新心跳：**
+// 接力：需要下一步，放回池子
+mteam_update_task({
+  taskId: "task_xxx",
+  status: "pending",
+  contextStep: "整理报价单",
+  contextOutput: { summary: "整理了报价对比", files: ["data/quotes.xlsx"] },
+  description: "向客户发送最终报价"
+})
 
-```javascript
+// 只更新心跳
 mteam_update_task({
   taskId: "task_xxx",
   lastHeartbeatAt: Date.now()
@@ -189,8 +210,6 @@ agent 执行中定期更新 `lastHeartbeatAt`：
 
 每个 agent 在心跳时自动检查任务池，不需要额外配置。
 
-### 心跳检查流程
-
 ```
 1. mteam_get_agent_active({ agentId })
 2. 有任务？
@@ -203,7 +222,7 @@ agent 执行中定期更新 `lastHeartbeatAt`：
    └── 有任务？→ claim_task → update_task({ status: 'running' })
 ```
 
-### 约束：agent 不能同时做多个任务
+**约束：agent 不能同时做多个任务**
 
 - `getPendingTasks(agentId)` 查询时，若 agent 已有 claimed/running 任务，返回空列表
 - 查询进行中任务：`mteam_get_agent_active({ agentId })`
@@ -220,12 +239,12 @@ src/
 │                      # 使用 Typebox 参数定义 + SDK helpers
 ├── schema/
 │   ├── task.js        # 任务格式定义、验证、格式化（纯函数，可单元测试）
-│   └── task.test.js   # Vitest 单元测试（25 个用例，全部通过）
+│   └── task.test.js   # Vitest 单元测试（26 个用例，全部通过）
 └── queue/
     └── index.js       # 任务池核心操作（publishTask/claimTask/updateTask 等）
 ```
 
-### 9.2 构建
+### 8.2 构建
 
 ```bash
 npm run build    # esbuild bundle 到 dist/index.js
@@ -236,7 +255,7 @@ esbuild 配置：
 - `external:node:*` / `openclaw` / `openclaw/plugin-sdk`
 - bundle 大小约 122KB（含 @sinclair/typebox runtime）
 
-### 9.3 测试
+### 8.3 测试
 
 ```bash
 npm run test     # watch 模式
@@ -245,7 +264,7 @@ npm run test:run # 单次运行
 
 当前测试覆盖：src/schema/task.js 的所有纯函数。
 
-### 9.4 安装路径
+### 8.4 安装路径
 
 - **WSL 构建路径**：`~/code/m-team/`（权限干净，755）
 - **OpenClaw 安装路径**：`~/.openclaw/extensions/m-team/`（由 `openclaw plugins install` 管理）
@@ -283,6 +302,7 @@ npm run test:run # 单次运行
 3. **心跳驱动** — agent 不需要被 @，自己心跳查任务池
 4. **产出写任务文件夹** — 便于追溯和清理
 5. **状态必须流转** — 不要让任务卡在 claimed/running
+6. **context 无限追溯** — 每步 output 追加到 context，不丢历史
 
 ---
 

@@ -57,9 +57,9 @@ export default definePluginEntry({
       name: 'mteam_publish_task',
       description: '发布任务到 M-Team 任务池',
       parameters: Type.Object({
-        description: Type.String({ description: '当前步骤的描述' }),
+        description: Type.String({ description: '第一步的描述' }),
         goal: Type.String({ description: '核心目标，不可更改' }),
-        input: Type.Optional(Type.Object({}, { description: '任务输入参数', additionalProperties: true })),
+        input: Type.Optional(Type.Object({}, { description: '初始输入数据', additionalProperties: true })),
         publisher: Type.Optional(Type.String({ description: '发布者，默认 "user"' })),
         priority: Type.Optional(Type.String({ description: '优先级 high/normal/low，默认 normal', enum: ['high', 'normal', 'low'] }))
       }),
@@ -98,23 +98,39 @@ export default definePluginEntry({
     // === mteam_update_task ===
     api.registerTool({
       name: 'mteam_update_task',
-      description: '更新任务状态或心跳',
+      description: '更新任务状态或追加步骤到 context',
       parameters: Type.Object({
         taskId: Type.String({ description: '任务ID' }),
         status: Type.Optional(Type.String({ description: '状态', enum: ['running', 'completed', 'failed', 'pending'] })),
-        summary: Type.Optional(Type.String({ description: '结果摘要' })),
-        description: Type.Optional(Type.String({ description: '新描述（用于"需下一步"场景）' })),
-        result: Type.Optional(Type.Object({}, { description: '完整结果', additionalProperties: true })),
+        // 追加到 context 的步骤
+        contextStep: Type.Optional(Type.String({ description: '当前步骤描述' })),
+        contextOutput: Type.Optional(Type.Object({
+          summary: Type.Optional(Type.String({ description: '步骤摘要' })),
+          files: Type.Optional(Type.Array(Type.String(), { description: '任务文件夹内的相对路径' }))
+        }, { description: '步骤输出' })),
+        // 更新当前步骤描述（下一个 executor 看到的内容）
+        description: Type.Optional(Type.String({ description: '更新当前步骤描述（下一步做什么）' })),
         lastHeartbeatAt: Type.Optional(Type.Number({ description: '心跳时间戳（毫秒）' }))
       }),
       async execute(_toolCallId, rawParams) {
         const taskId = readStringParam(rawParams, 'taskId', { required: true });
         const status = readStringParam(rawParams, 'status');
-        const summary = readStringParam(rawParams, 'summary');
+        const contextStep = readStringParam(rawParams, 'contextStep');
+        const contextOutput = rawParams.contextOutput ?? null;
         const description = readStringParam(rawParams, 'description');
         const lastHeartbeatAt = readNumberParam(rawParams, 'lastHeartbeatAt');
-        const result = rawParams.result ?? null;
-        const task = updateTask(taskId, status, result, summary, description, lastHeartbeatAt);
+
+        let contextEntry = null;
+        if (contextStep) {
+          const currentTask = getTask(taskId);
+          contextEntry = {
+            executor: currentTask?.executor ?? 'unknown',
+            step: contextStep,
+            output: contextOutput || {}
+          };
+        }
+
+        const task = updateTask(taskId, status, contextEntry, description, lastHeartbeatAt);
         return jsonResult({ task });
       }
     });

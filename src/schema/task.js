@@ -4,7 +4,7 @@
  * @property {string} taskId
  * @property {string} description
  * @property {string} goal
- * @property {Object} input
+ * @property {Array} context
  * @property {string} publisher
  * @property {string} status
  * @property {string|null} executor
@@ -13,8 +13,6 @@
  * @property {number|null} claimedAt
  * @property {number|null} completedAt
  * @property {number|null} lastHeartbeatAt
- * @property {string|null} summary
- * @property {Object|null} result
  * @property {string} priority
  */
 
@@ -41,7 +39,7 @@ export const TaskPriority = {
 export const VALID_PRIORITIES = ['high', 'normal', 'low'];
 
 // ============================================================
-// 路径配置（可配置）
+// 路径配置
 // ============================================================
 
 /** @type {string} */
@@ -92,6 +90,9 @@ export function validateTask(task) {
   if (!task.goal || typeof task.goal !== 'string') {
     errors.push('goal 必填且为字符串');
   }
+  if (!Array.isArray(task.context)) {
+    errors.push('context 必填且为数组');
+  }
   if (!Object.values(TaskStatus).includes(task.status)) {
     errors.push(`status 无效，可选值: ${Object.values(TaskStatus).join(', ')}`);
   }
@@ -118,7 +119,13 @@ export function createTask({ description, goal, input = {}, publisher = 'user', 
     taskId,
     description: String(description),
     goal: String(goal),
-    input: input || {},
+    context: [
+      {
+        type: 'input',
+        data: input || {},
+        createdAt: Date.now()
+      }
+    ],
     priority,
     publisher: publisher || 'user',
     status: TaskStatus.PENDING,
@@ -127,9 +134,7 @@ export function createTask({ description, goal, input = {}, publisher = 'user', 
     createdAt: Date.now(),
     claimedAt: null,
     completedAt: null,
-    lastHeartbeatAt: null,
-    summary: null,
-    result: null
+    lastHeartbeatAt: null
   };
 }
 
@@ -151,24 +156,23 @@ export function formatTaskForHuman(task) {
     `📋 当前：${task.description}`,
     `ID: ${task.taskId}`,
     `优先级: ${priorityLabel[task.priority] || '🟡 中'}`,
-    `状态: ${getStatusLabel(task.status)}`
+    `状态: ${getStatusLabel(task.status)}`,
+    `步骤历史: ${task.context.length} 步`
   ];
   if (task.executor) lines.push(`执行者: ${task.executor}`);
-  if (task.summary) lines.push(`摘要: ${task.summary}`);
+  if (task.lastExecutor) lines.push(`上一步: ${task.lastExecutor}`);
 
   return lines.join('\n');
 }
 
 export function getTaskSummary(task) {
-  if (task.summary) return task.summary;
-  if (!task.result) return '（无结果）';
+  if (!task.context || task.context.length === 0) return '（无上下文）';
 
-  if (typeof task.result === 'object') {
-    const keys = Object.keys(task.result);
-    if (keys.length <= 3) {
-      return keys.map(k => `${k}: ${JSON.stringify(task.result[k])}`).join(', ');
-    }
-    return `结果包含 ${keys.length} 个字段: ${keys.slice(0, 3).join(', ')}...`;
-  }
-  return String(task.result).substring(0, 200);
+  const lastEntry = task.context[task.context.length - 1];
+  if (lastEntry.type === 'input') return '（初始输入，暂无执行结果）';
+
+  const summary = lastEntry.output?.summary;
+  if (summary) return summary;
+  if (lastEntry.output?.files?.length) return `[文件] ${lastEntry.output.files.join(', ')}`;
+  return '（无摘要）';
 }

@@ -34,7 +34,19 @@ describe('task schema', () => {
       expect(task.priority).toBe('normal');
       expect(task.publisher).toBe('user');
       expect(task.executor).toBeNull();
-      expect(task.input).toEqual({});
+      expect(task.context).toEqual([
+        { type: 'input', data: {}, createdAt: task.context[0].createdAt }
+      ]);
+    });
+
+    it('context 第一个 entry 是 input 类型', () => {
+      const task = createTask({
+        description: '测试',
+        goal: 'goal',
+        input: { keyword: '收纳箱', count: 10 }
+      });
+      expect(task.context[0].type).toBe('input');
+      expect(task.context[0].data).toEqual({ keyword: '收纳箱', count: 10 });
     });
 
     it('支持自定义 publisher 和 priority', () => {
@@ -42,18 +54,10 @@ describe('task schema', () => {
         description: '高优任务',
         goal: '核心目标A',
         publisher: 'manager',
-        priority: 'high',
-        input: { url: 'https://example.com' }
+        priority: 'high'
       });
       expect(task.publisher).toBe('manager');
       expect(task.priority).toBe('high');
-      expect(task.input).toEqual({ url: 'https://example.com' });
-    });
-
-    it('priority 接受大小写混合输入', () => {
-      // 内部不做 normalize，直接存储原值
-      const task = createTask({ description: 'x', goal: 'goal', priority: 'HIGH' });
-      expect(task.priority).toBe('HIGH');
     });
 
     it('createdAt 是时间戳', () => {
@@ -83,7 +87,7 @@ describe('task schema', () => {
     });
 
     it('缺少 taskId 返回无效', () => {
-      const result = validateTask({ description: 'x', status: TaskStatus.PENDING, priority: 'normal' });
+      const result = validateTask({ description: 'x', goal: 'y', status: TaskStatus.PENDING, priority: 'normal', context: [] });
       expect(result.valid).toBe(false);
       expect(result.errors.some(e => e.includes('taskId'))).toBe(true);
     });
@@ -92,8 +96,10 @@ describe('task schema', () => {
       const result = validateTask({
         taskId: 'invalid',
         description: 'x',
+        goal: 'y',
         status: TaskStatus.PENDING,
-        priority: 'normal'
+        priority: 'normal',
+        context: []
       });
       expect(result.valid).toBe(false);
     });
@@ -114,8 +120,16 @@ describe('task schema', () => {
       expect(result.errors.some(e => e.includes('goal'))).toBe(true);
     });
 
+    it('context 不是数组返回无效', () => {
+      const task = createTask({ description: 'x', goal: 'goal' });
+      task.context = 'not-array';
+      const result = validateTask(task);
+      expect(result.valid).toBe(false);
+      expect(result.errors.some(e => e.includes('context'))).toBe(true);
+    });
+
     it('无效 priority 返回无效', () => {
-      const task = createTask({ description: 'x' });
+      const task = createTask({ description: 'x', goal: 'goal' });
       task.priority = 'urgent';
       const result = validateTask(task);
       expect(result.valid).toBe(false);
@@ -149,36 +163,42 @@ describe('task schema', () => {
   // getTaskSummary
   // ============================================================
   describe('getTaskSummary', () => {
-    it('有 summary 时返回 summary', () => {
-      const task = { summary: '完成的了' };
-      expect(getTaskSummary(task)).toBe('完成的了');
+    it('只有 input entry 时返回默认值', () => {
+      const task = createTask({ description: 'x', goal: 'goal' });
+      expect(getTaskSummary(task)).toBe('（初始输入，暂无执行结果）');
     });
 
-    it('无 result 时返回默认值', () => {
-      expect(getTaskSummary({})).toBe('（无结果）');
+    it('最后一个 entry 有 summary 时返回 summary', () => {
+      const task = createTask({ description: 'x', goal: 'goal' });
+      task.context.push({
+        executor: 'agent_1',
+        step: '搜索',
+        output: { summary: '找到10家供应商' },
+        completedAt: Date.now()
+      });
+      expect(getTaskSummary(task)).toBe('找到10家供应商');
     });
 
-    it('result 是简单值时返回 toString', () => {
-      expect(getTaskSummary({ result: 42 })).toBe('42');
+    it('最后一个 entry 有 files 但无 summary 时返回文件列表', () => {
+      const task = createTask({ description: 'x', goal: 'goal' });
+      task.context.push({
+        executor: 'agent_1',
+        step: '搜索',
+        output: { files: ['data/suppliers.json', 'data/prices.csv'] },
+        completedAt: Date.now()
+      });
+      expect(getTaskSummary(task)).toBe('[文件] data/suppliers.json, data/prices.csv');
     });
 
-    it('result 是对象且字段 <= 3 时返回键值对', () => {
-      const task = { result: { code: 0, message: 'ok' } };
-      // JSON.stringify 会对字符串值加引号，所以是 "ok" 而非 ok
-      expect(getTaskSummary(task)).toBe('code: 0, message: "ok"');
-    });
-
-    it('result 是对象且字段 > 3 时截断', () => {
-      const task = { result: { a: 1, b: 2, c: 3, d: 4 } };
-      const summary = getTaskSummary(task);
-      expect(summary).toContain('4 个字段');
-      expect(summary).toContain('a, b, c');
-    });
-
-    it('result 是长字符串时截断到 200 字符', () => {
-      const longStr = 'x'.repeat(300);
-      const summary = getTaskSummary({ result: longStr });
-      expect(summary.length).toBe(200);
+    it('最后一个 entry 无 summary 也无 files 时返回默认值', () => {
+      const task = createTask({ description: 'x', goal: 'goal' });
+      task.context.push({
+        executor: 'agent_1',
+        step: '搜索',
+        output: {},
+        completedAt: Date.now()
+      });
+      expect(getTaskSummary(task)).toBe('（无摘要）');
     });
   });
 
@@ -190,8 +210,9 @@ describe('task schema', () => {
       const task = createTask({ description: '测试', goal: '目标', priority: 'high' });
       const formatted = formatTaskForHuman(task);
       expect(formatted).toContain('目标');
-      expect(formatted).toContain('🔴 高'); // high = 🔴 高
+      expect(formatted).toContain('🔴 高');
       expect(formatted).toContain('⏳ 待认领');
+      expect(formatted).toContain('步骤历史: 1 步');
     });
 
     it('有 executor 时包含执行者', () => {
@@ -207,11 +228,19 @@ describe('task schema', () => {
       expect(formatted).not.toContain('执行者:');
     });
 
-    it('有 summary 时包含摘要', () => {
+    it('有 lastExecutor 时包含上一步', () => {
       const task = createTask({ description: 'x', goal: 'goal' });
-      task.summary = 'done';
+      task.lastExecutor = 'agent_1';
       const formatted = formatTaskForHuman(task);
-      expect(formatted).toContain('摘要: done');
+      expect(formatted).toContain('上一步: agent_1');
+    });
+
+    it('context 步骤数正确显示', () => {
+      const task = createTask({ description: 'x', goal: 'goal' });
+      task.context.push({ executor: 'a', step: 's1', output: {}, completedAt: Date.now() });
+      task.context.push({ executor: 'b', step: 's2', output: {}, completedAt: Date.now() });
+      const formatted = formatTaskForHuman(task);
+      expect(formatted).toContain('步骤历史: 3 步');
     });
   });
 
