@@ -82,31 +82,25 @@ export function claimTask(taskId, agentId) {
 
   return db.transaction(() => {
     const task = getTaskRow(taskId);
-    if (!task) return false;
-    if (task.status !== TaskStatus.PENDING) return false;
+    if (!task) return { success: false, taskId, reason: 'TASK_NOT_FOUND' };
+    if (task.status !== TaskStatus.PENDING) return { success: false, taskId, reason: 'NOT_PENDING' };
 
     // relay：上一个 executor 成为 lastExecutor
-    // claim 后设置 lastExecutor，只在有当前 executor 时才更新（不覆盖 relay 遗留的 lastExecutor）
     const newLastExecutor = task.executor !== null ? task.executor : task.lastExecutor;
-
-    const patch = {
-      status: TaskStatus.RUNNING,
-      executor: agentId,
-      lastExecutor: newLastExecutor,
-      lastHeartbeatAt: Date.now()
-    };
 
     const updated = db.prepare(
       'UPDATE tasks SET status = ?, executor = ?, last_executor = ?, last_heartbeat_at = ? WHERE task_id = ? AND status = ?'
-    ).run(patch.status, patch.executor, patch.lastExecutor, patch.lastHeartbeatAt, taskId, TaskStatus.PENDING);
+    ).run(TaskStatus.RUNNING, agentId, newLastExecutor, Date.now(), taskId, TaskStatus.PENDING);
 
-    if (updated.changes === 0) return false; // 已被他人抢走
+    if (updated.changes === 0) {
+      return { success: false, taskId, reason: 'ALREADY_CLAIMED' };
+    }
 
     const updatedTask = getTaskRow(taskId);
     syncTaskJson(updatedTask);
 
     console.log(`[m-team-queue] ${agentId} 认领了任务 ${taskId}`);
-    return true;
+    return { success: true, taskId, task: updatedTask };
   })();
 }
 

@@ -92,8 +92,8 @@ export default definePluginEntry({
       async execute(_toolCallId, rawParams) {
         const taskId = readStringParam(rawParams, 'taskId', { required: true });
         const agentId = readStringParam(rawParams, 'agentId', { required: true });
-        const claimed = claimTask(taskId, agentId);
-        return jsonResult({ claimed, taskId });
+        const result = claimTask(taskId, agentId);
+        return jsonResult(result);
       }
     });
 
