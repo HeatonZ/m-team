@@ -116,17 +116,15 @@ mteam_update_task({
 
 ## 心跳机制
 
-agent 执行中定期更新心跳：
+详细流程见 [HEARTBEAT.md](references/HEARTBEAT.md)。
 
-```
-mteam_update_task({
-  taskId: "{taskId}",
-  agentId: "{agentId}",
-  lastHeartbeatAt: Date.now()
-})
-```
+**Executor 必读：**
 
-超过 30 分钟未更新，任务视为疑似僵尸。
+1. 任务开始后，先用 `mteam_get_agent_active()` 拿到当前 taskId
+2. 执行过程中每 5 分钟调用 `mteam_update_task({ taskId, lastHeartbeatAt: Date.now() })`
+3. 超过 30 分钟未更新 → 任务视为疑似僵尸；超过 60 分钟 → 已卡死，需介入
+
+**心跳只是保活，不等于进度。** 真正的进度是 contextStep 有追加。
 
 ---
 
