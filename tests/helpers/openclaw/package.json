@@ -1,0 +1,8 @@
+{
+  "name": "openclaw",
+  "version": "0.0.0-test",
+  "exports": {
+    ".": "./mock.js",
+    "./plugin-sdk/core": "./plugin-sdk/core.js"
+  }
+}
