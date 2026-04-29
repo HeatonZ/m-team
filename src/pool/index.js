@@ -19,7 +19,6 @@ export { formatTaskNotifications, formatRelinquishNotifications } from '../notif
 import { openDb, getDb, getTaskRow, getAllTaskRows, getTaskRowsByStatus, getTaskRowByExecutor } from './db.js';
 import { TaskStatus } from '../schema/task.js';
 import { setWorkspaceRoot, DB_PATH } from './operations.js';
-import './operations.js'; // 确保 operations.js init
 
 function init() {
   // DB_PATH 由 operations.js 在 setWorkspaceRoot 时设置
@@ -53,5 +52,9 @@ export function getAllTasks() {
 
 export function getTasksByExecutor(agentId) {
   init();
-  return getAllTaskRows().filter(t => t.executor === agentId);
+  return getAllTaskRows().filter(t => {
+    if (t.executor === agentId || t.lastExecutor === agentId) return true;
+    // 已完成任务 executor 已清零，从 context 记录里找执行人
+    return t.context.some(entry => entry.executor === agentId);
+  });
 }

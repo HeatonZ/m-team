@@ -50,6 +50,8 @@ function syncTaskJson(task) {
 }
 
 function init() {
+  // 仅当工作空间根目录已设置时才初始化（测试环境由 setup.js 调用 setWorkspaceRoot）
+  if (!DB_PATH) return;
   fs.mkdirSync(getTasksDir(), { recursive: true });
   fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
   openDb(DB_PATH);
@@ -91,6 +93,10 @@ export function claimTask(taskId, agentId) {
     const task = getTaskRow(taskId);
     if (!task) return { success: false, taskId, reason: 'TASK_NOT_FOUND' };
     if (task.status !== TaskStatus.PENDING) return { success: false, taskId, reason: 'NOT_PENDING' };
+
+    // 防重认领：agent 已持有活跃任务时不能再认领新任务
+    const existingActive = db.prepare('SELECT task_id FROM tasks WHERE executor = ? AND status = ?').get(agentId, TaskStatus.RUNNING);
+    if (existingActive) return { success: false, taskId, reason: 'ALREADY_HAS_ACTIVE_TASK' };
 
     // relay：上一个 executor 成为 lastExecutor
     const newLastExecutor = task.executor !== null ? task.executor : task.lastExecutor;
@@ -347,7 +353,7 @@ export function completeTask(taskId, contextEntry = null, fallbackEntry = null) 
       return { success: false, reason: `TASK_NOT_RUNNING_${task.status}` };
     }
 
-    const patch = { status: TaskStatus.COMPLETED, completedAt: Date.now() };
+    const patch = { status: TaskStatus.COMPLETED, completedAt: Date.now(), executor: null };
 
     // 优先用 executor 主动传来的 contextEntry，没有才用 hook 兜底的 fallbackEntry
     const entryToAdd = contextEntry ?? fallbackEntry;
@@ -392,7 +398,7 @@ export function failTask(taskId, errorMsg = null, contextEntry = null, fallbackE
       return { success: false, reason: `TASK_NOT_RUNNING_${task.status}` };
     }
 
-    const patch = { status: TaskStatus.FAILED, completedAt: Date.now() };
+    const patch = { status: TaskStatus.FAILED, completedAt: Date.now(), executor: null };
 
     const entryToAdd = contextEntry ?? fallbackEntry;
     if (entryToAdd) {

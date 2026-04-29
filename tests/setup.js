@@ -1,33 +1,32 @@
 /**
  * 测试环境初始化
- * 每个测试文件开头顶部: import './setup.js';
+ * 由 vitest.config.js 的 setupFiles 加载，全局只执行一次
  */
-
-import { openDb, closeDb } from '../src/pool/db.js';
+import { openDb, closeDb, getDb } from '../src/pool/db.js';
+import { setWorkspaceRoot, completeTask, claimTask, getDb as opsGetDb } from '../src/pool/operations.js';
+import { TaskStatus } from '../src/schema/task.js';
 import path from 'node:path';
-import fs from 'node:fs';
+import { beforeEach, afterEach } from 'vitest';
 
-// 测试用临时数据库
-const TEST_DB = '/tmp/m-team-test.db';
-const TEST_WORKSPACE = '/tmp/m-team-test-workspace';
+// 全局测试工作空间
+export const TEST_WORKSPACE = '/tmp/m-team-test-' + process.pid;
 
-export function setup() {
-  // 清理旧数据
-  if (fs.existsSync(TEST_DB)) fs.unlinkSync(TEST_DB);
-  if (fs.existsSync(TEST_WORKSPACE)) {
-    fs.rmSync(TEST_WORKSPACE, { recursive: true, force: true });
-  }
-  fs.mkdirSync(TEST_WORKSPACE, { recursive: true });
+beforeEach(() => {
+  setWorkspaceRoot(TEST_WORKSPACE);
+});
 
-  openDb(TEST_DB);
-}
-
-export function teardown() {
-  closeDb();
-  if (fs.existsSync(TEST_DB)) fs.unlinkSync(TEST_DB);
-  if (fs.existsSync(TEST_WORKSPACE)) {
-    fs.rmSync(TEST_WORKSPACE, { recursive: true, force: true });
-  }
-}
-
-export { TEST_DB, TEST_WORKSPACE };
+afterEach(() => {
+  // 清理遗留的 RUNNING 任务，防止污染下一个测试
+  try {
+    const db = getDb();
+    if (db) {
+      const activeRows = db.prepare('SELECT task_id, executor FROM tasks WHERE status = ?').all(TaskStatus.RUNNING);
+      for (const row of activeRows) {
+        try {
+          completeTask(row.task_id, { step: 'test-teardown', output: {} });
+        } catch {}
+      }
+      db.exec('DELETE FROM tasks');
+    }
+  } catch {}
+});
