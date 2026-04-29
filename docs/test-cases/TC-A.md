@@ -13,15 +13,16 @@
 3. 查询该任务，验证：任务存在、状态为待认领、执行人字段为空、上一步执行人字段为空、上下文长度为 1（只有初始输入）、上下文中第一项类型为 input、优先级为高、发布者为 boss、完成时间为空
 4. Agent "agent_alice" 认领该任务，认领成功，任务状态变为执行中，执行人变为 agent_alice
 5. 查询任务，验证状态为执行中，执行人为 agent_alice
-6. Agent 追加上下文步骤"数据清洗"，输出包含清洗行数 5000
-7. 验证上下文长度变为 2，第二项步骤名为"数据清洗"，执行人为 agent_alice，输出中包含行数 5000，任务状态保持执行中
-8. Agent 再追加步骤"生成图表"，输出包含文件列表
-9. 验证上下文长度变为 3
-10. Agent 调用完成接口，传入最终步骤"最终提交"，输出摘要"月报已完成"
-11. 验证完成成功，任务状态变为已完成，完成时间被记录，执行人字段被清空，上下文长度变为 4
-12. 再次查询任务，验证状态为已完成、完成时间不为空、执行人字段为空
-13. 查询 agent_alice 的活跃任务，返回空（因为任务已完成）
-14. 查询 agent_alice 的待认领任务，返回空（因为有完成记录，不应再分配新任务）
+6. Agent 完成"数据清洗"，调用 `mteam_relay_task(task_id, agentId="agent_alice", contextStep="数据清洗", contextOutput={ summary: "清洗5000行", files: ["清洗结果.json"] })`，任务状态变为待认领，执行人清空
+7. 验证上下文长度变为 2，第二项步骤名为"数据清洗"，output 指向输出文件，执行人字段为空，状态为待认领
+8. Agent "agent_bob" 认领该任务，认领成功，任务状态变为执行中，执行人变为 agent_bob
+9. Agent 完成"生成图表"，调用 `mteam_relay_task(task_id, agentId="agent_bob", contextStep="生成图表", contextOutput={ summary: "生成3张图表", files: ["图表1.png", "图表2.png", "图表3.png"] })`，任务状态变为待认领，执行人清空
+10. 验证上下文长度变为 3，第二项步骤名为"数据清洗"、第三项步骤名为"生成图表"，执行人字段为空，状态为待认领
+11. Agent "agent_alice" 再次认领该任务，调用 `mteam_complete_task(task_id, contextStep="最终提交", contextOutput={ summary: "月报已完成" })`，任务状态变为 completed，完成时间被记录，执行人清空
+12. 验证完成成功，任务状态变为 completed，完成时间被记录，执行人字段被清空，上下文长度变为 4
+13. 再次查询任务，验证状态为 completed、完成时间不为空、执行人字段为空
+14. 查询 agent_alice 的活跃任务，返回空（因为任务已完成）
+15. 查询 agent_alice 的待认领任务，返回空（因为有完成记录，不应再分配新任务）
 
 ---
 
@@ -44,17 +45,17 @@
 **测试步骤：**
 
 1. Publisher 发布任务，Agent 认领成功
-2. Agent 调用 `mteam_complete_task`，传入 `contextStep="任务完成"`，输出摘要`{ summary: "完成" }`
+2. Agent 调用 `mteam_complete_task(task_id, contextStep="任务完成", contextOutput={ summary: "完成" })`
 3. 验证完成成功，任务状态变为 `completed`，完成时间被记录
 4. 验证上下文长度变为 2（初始 input + 最终步骤），最终步骤的 step 和 output 正确
 
-## TC-A4：Hook 兜底完成（Executor 未主动完成）
+## TC-A4：relay_task 交接流转
 
-**场景描述：** Executor 异常中断或未主动调用 `mteam_complete_task`，`subagent_ended` hook 触发时以 `outcome` 信息作为兜底步骤完成记录。
+**场景描述：** Agent 认领后执行完毕，调用 `relay_task` 将任务交回任务池，下一个 agent 继续执行。
 
 **测试步骤：**
 
 1. Publisher 发布任务，Agent 认领成功
-2. Executor 异常结束（不调用任何工具），`subagent_ended` hook 被触发，`outcome='error'`，`error='connection lost'`
-3. 验证任务状态变为 `failed`（而非 `completed`），失败原因被记录
-4. 验证上下文长度变为 2（初始 input + 兜底步骤），兜底步骤的 step 为 `'error'`，output 包含 `{ error: 'connection lost' }`
+2. Agent 执行完当前步骤，调用 `mteam_relay_task(task_id, agentId, contextStep, contextOutput)`，传入当前步骤名和输出文件路径
+3. 验证 relay 成功，任务状态变为待认领，执行人清空，上下文追加当前步骤（长度 +1）
+4. 下一个 agent 认领同一任务，继续执行
