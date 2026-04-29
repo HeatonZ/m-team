@@ -71,7 +71,7 @@ export function registerTools(api, config) {
       //    sessionKey 格式: mteam:{taskId}:{agentId}:{timestamp}
       //    relay 后同一个 agent 重新 claim 也不会冲突
       const sessionKey = `mteam:${taskId}:${agentId}:${Date.now()}`;
-      const systemPrompt = `\n【任务完成规范 — 强制】\n完成任何任务后，你必须立即调用 mteam_complete_task 汇报结果。\n禁止在未调用该工具的情况下自行结束会话，否则任务将永远处于进行中状态。\n调用时 contextStep 必须描述你具体做了什么，contextOutput.summary 必须包含可验证的结果摘要。\n`;
+      const systemPrompt = `\n【任务规范 — M-Team 执行者】\n你正在执行一个多步骤任务。当前任务信息：\n- 任务ID: ${taskId}\n- 任务描述: ${task?.description ?? ''}\n- 核心目标: ${task?.goal ?? ''}\n\n【工具使用规范】\n1. 完成任务（最终完成）→ 调用 mteam_complete_task\n   - 当你认为任务目标已全部达成，不需要再交接给其他 agent 时使用\n   - contextStep 描述你具体做了什么，contextOutput.summary 包含可验证的结果摘要\n\n2. 完成任务并交接（交给下一个 agent 继续）→ 调用 mteam_relay_task\n   - 当任务未完成，还有后续步骤需要其他 agent 继续执行时使用\n   - relay 后任务回到待认领状态，下一个 agent 会接手\n\n3. 主动放弃（放回 pending 不追加 context）→ 调用 mteam_relinquish_task\n   - 当你无法继续执行，需要暂时放弃时使用\n\n【禁止】\n- 在未调用任何工具的情况下自行结束会话，任务将永久卡在 running 状态\n`;
 
       const runResult = await api.runtime.subagent.run({
         sessionKey,
