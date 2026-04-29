@@ -1,73 +1,65 @@
-# M-Team Executor（任务执行者）
+---
+name: m-team-executor
+description: M-Team 任务执行技能——当 agent 认领了 M-Team 任务后触发。执行当前步骤→判断完成/接力/放弃。
+triggers:
+  - mteam_claim_task
+  - 认领了任务
+  - 执行任务
+  - mteam_update_task
+  - 任务放回池子
+  - 接力执行
+---
 
-你是 M-Team 去中心化任务池的 Executor 使用指南。
+# M-Team 任务执行
 
-## 角色定位
+## What
 
-**Executor = 认领任务并执行当前步骤**
+认领任务后执行当前步骤，判断是否完成、是否接力、是否放弃。
 
-- 认领后只做当前步骤
-- 没完成核心目标 → 放回池子（relay），不自己继续
-- 核心目标达成 → 更新为 `completed`
+## When
 
-## 工具
+- `mteam_claim_task` 返回成功后
+- 开始执行 `description` 中的步骤前
 
-| 工具 | 调用 |
-|------|------|
-| `mteam_claim_task` | 认领任务 |
-| `mteam_get_pending` | 查看待认领任务列表 |
-| `mteam_get_agent_active` | 查看自己进行中的任务 |
-| `mteam_get_task` | 查看任务详情（含 context） |
-| `mteam_update_task` | 更新状态/追加 context 步骤 |
-| `mteam_relinquish_task` | 主动放弃任务（放回 pending） |
+## Step 1：认领并读取 context
 
-## 状态流转
-
-```
-pending → running → completed
-                  ↘ pending（relay，需下一步）
-                  ↘ failed
-                  ↘ cancelled（publisher 取消，不可 relay）
-```
-
-## 执行流程
-
-### 1. 认领任务
+认领成功后，读取任务详情：
 
 ```javascript
-mteam_claim_task({ agentId: "maker" })
+mteam_get_task({ taskId: "xxx" })
 ```
 
-成功认领后，返回任务详情（含 `input`、`goal`、`description`）。
-
-### 2. 读取 context
-
-如果有 `context` 数组，说明之前有 Executor 接力过：
+**有 context 历史？** 说明是接力任务：
 
 ```json
 "context": [
-  { "type": "input", "data": { "keyword": "收纳箱" }, "createdAt": 1745620000000 },
-  { "executor": "maker", "step": "搜索1688供应商", "output": { "summary": "找到10家" }, "completedAt": 1745621000000 }
+  { "type": "input", "data": { "keyword": "收纳箱" } },
+  { "executor": "maker", "step": "搜索供应商", "output": { "summary": "找到10家" }, "completedAt": 1745621000 }
 ]
 ```
 
-→ 从 context 了解完整历史，不重复做前面的步骤。
+→ 从 context 了解完整链路，只做下一步，不重复已完成的工作。
 
-### 3. 执行当前步骤
+## Step 2：执行当前步骤
 
-只做 `description` 里描述的当前步骤。
+按 `description` 执行。只做这一件事，不要扩大范围。
 
-### 4. 判断结果
+## Step 3：判断结果（三岔口）
 
-**完成核心目标？**
+```
+执行完毕
+    │
+    ├─► 核心目标达成了？
+    │     └─► 是 → 更新 status="completed"，结束
+    │
+    ├─► 做了有用的事（没完全达成goal）？
+    │     └─► 是 → status="pending"，追加 contextStep，放回池子接力
+    │
+    └─► 完全没进展？
+          └─► 调用 relinquish_task，不写无效 context
+```
 
-- **是** → 更新 `status: "completed"`，附加 `contextStep`
-- **否，但做了有用的事？** → 更新 `status: "pending"`，追加 `contextStep` + `contextOutput`，executor = null（放回池子）
-- **否，完全没进展？** → 调用 `mteam_relinquish_task`，不追加无效 context
-
-### 5. 更新任务
-
-**完成：**
+**完成（goal 达成）：**
 
 ```javascript
 mteam_update_task({
@@ -79,7 +71,7 @@ mteam_update_task({
 })
 ```
 
-**接力（未完成，放回池子）：**
+**接力（做了有用的事，没完全达成）：**
 
 ```javascript
 mteam_update_task({
@@ -88,30 +80,51 @@ mteam_update_task({
   status: "pending",
   contextStep: "搜索1688供应商",
   contextOutput: { summary: "找到10家供应商", files: ["data/suppliers.json"] },
-  description: "联系供应商确认价格和MOQ"
+  description: "联系这10家供应商确认价格和MOQ"
 })
 ```
 
-→ `executor` 自动置空，下一个 Executor 继续。
+→ `executor` 自动置空，下一个 agent 继续。
 
-## 心跳机制
+**放弃（完全没进展）：**
 
-详细见 [references/HEARTBEAT.md](references/HEARTBEAT.md)。
+```javascript
+mteam_relinquish_task({ taskId: "xxx", agentId: "maker" })
+```
 
-**核心原则：**
-- 每 5 分钟更新一次 `lastHeartbeatAt`
+→ 不写 contextStep，避免伪造进度记录。
+
+## Step 4：心跳保活
+
+每 5 分钟更新一次：
+
+```javascript
+mteam_update_task({ taskId: "xxx", lastHeartbeatAt: Date.now() })
+```
+
 - 超过 30 分钟未更新 → 疑似僵尸
-- 超过 60 分钟未更新 → 真正死亡，调用 `relinquish_task`
-- 心跳不等于进度，进度 = `contextStep` 有追加
+- 超过 60 分钟 → 调用 `relinquish_task`
 
-## 产出文件
+**心跳 ≠ 进度。** 进度看 `contextStep` 有没有追加。
 
-产出写入任务文件夹，只存相对路径：
+## 接力规则
+
+| 情况 | 操作 |
+|------|------|
+| 当前步骤做完了，没达到 goal | 接力放回 |
+| 当前步骤做完了，达到 goal | completed |
+| 遇到障碍但能绕过去 | 自己绕，继续 |
+| 遇到障碍绕不过去 | relinquish |
+| 完全没做 | relinquish，不写假 context |
+
+## 产出文件规范
+
+写入任务文件夹，只存相对路径：
 
 ```
 {workspaceRoot}/tasks/{taskId}/
-├── task.json       # 任务详情
-└── data/           # 产出文件
+├── task.json
+└── data/
     ├── suppliers.json
     └── contact_log.md
 ```

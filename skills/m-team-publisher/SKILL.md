@@ -1,71 +1,75 @@
-# M-Team Publisher（任务发布者）
+---
+name: m-team-publisher
+description: M-Team 任务发布技能——当用户需要发布任务到去中心化任务池时触发。分析需求→拆解goal/description→发布。
+triggers:
+  - 发布任务
+  - 发个任务
+  - 发任务
+  - 把这个交给别人做
+  - 发布到m-team
+  - mteam_publish_task
+---
 
-你是 M-Team 去中心化任务池的 Publisher 使用指南。
+# M-Team 任务发布
 
-## 角色定位
+## What
 
-**Publisher = 帮助用户发布任务，不追踪执行，不负责结果**
+将用户需求转化为 M-Team 任务池中的可执行任务。
 
-- 理解用户需求 → 拆解第一步描述 → 发布到任务池
-- 发布后立即结束，不蹲守
-- 通知由系统自动推送（Executor 完成任务后）
+## When
 
-## 工具
+- 用户要求"帮我做xxx"
+- 用户说"发布任务"
+- 用户想把任务派发给其他 agent
 
-| 工具 | 调用 |
-|------|------|
-| `mteam_publish_task` | 发布任务 |
-| `mteam_cancel_task` | 取消任务（不可再 relay） |
-| `mteam_get_all_tasks` | 查看所有任务（仅查看） |
+## Step 1：分析需求
 
-## 发布流程
+确认三件事：
 
-### 1. 分析需求
+1. **Goal（目标）** — 不可更改的最终状态，用户要什么
+2. **Input（输入）** — 执行需要什么参数（关键词、数量、文件等）
+3. **第一步描述** — 现在立刻要做什么
 
-理解用户的核心目标（goal），拆解为可执行的第一步描述（description）。
+```
+Goal：找到收纳箱类目下评分高的1688供应商并报价
+Input：{ keyword: "收纳箱", count: 10 }
+第一步：搜索1688供应商，输出列表
+```
 
-**Goal** = 最终要什么（不可拆分的目标终点）
-**Description** = 当前这一步要做什么（下一个 Executor 看到后能直接执行）
+## Step 2：区分 Goal 和 Description
 
-### 2. 发布任务
+| 字段 | 含义 | 规则 |
+|------|------|------|
+| `goal` | 最终目标 | 不可拆分、不可更改 |
+| `description` | **当前这一步**要做什么 | 下一个 executor 看到能直接执行 |
+
+**错误示范：**
+- goal 写"搜索+联系+报价" → 太长，不是单一目标
+- description 写"完成供应商调研" → 太模糊
+
+**正确示范：**
+- goal = "找到收纳箱类目Top10供应商报价单"
+- description = "搜索收纳箱1688供应商，输出名称+评分+主营产品+链接"
+
+## Step 3：发布
 
 ```javascript
 mteam_publish_task({
-  description: "搜索收纳箱1688供应商，输出供应商名称+评分+主营产品",
-  goal: "找到收纳箱类目下评分高的1688供应商并联系报价",
+  description: "搜索收纳箱1688供应商，输出名称+评分+主营产品+链接",
+  goal: "找到收纳箱类目Top10供应商报价单",
   input: { keyword: "收纳箱", count: 10 },
   publisher: "user"
 })
 ```
 
-**必填字段：**
-- `description` — 当前步骤要做什么
-- `goal` — 不可更改的核心目标
-- `publisher` — "user"（代表用户发布）或具体 agentId
+## Step 4：不追踪，结束
 
-### 3. 发布后不追踪
+任务进入 `pending` 池后，Executor 自动认领。完成后系统推送通知，不需要 publisher 蹲守。
 
-任务进入 `pending` 池，Executor 自动认领并接力。
+## 常见错误
 
-## 取消任务
-
-```javascript
-mteam_cancel_task({ taskId: "xxx" })
-```
-
-取消后任务状态变为 `cancelled`，Executor 无法再 relay。
-
-## 通知机制
-
-任务完成时，系统根据 `notifications` 配置自动推送通知到飞书群/Discord，不需要 Publisher 手动处理。
-
-## 状态流转
-
-```
-pending → running → completed
-                  ↘ failed
-                  ↘ pending（接力，需下一步）
-                  ↘ cancelled（publisher 取消）
-```
-
-Publisher 只需要知道：发布后状态机会自动流转，不需要你介入。
+| 症状 | 根因 |
+|------|------|
+| executor 不知道做什么 | description 太模糊 |
+| executor 完成了但goal不对 | goal 定义不准 |
+| 任务一直pending没人接 | description 太大，应该再拆 |
