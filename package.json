@@ -17,7 +17,7 @@
       "./dist/index.js"
     ],
     "skills": [
-      "./skills/m-team"
+      "./skills"
     ],
     "compat": {
       "pluginApi": ">=2026.4.22"

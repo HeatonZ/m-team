@@ -42,7 +42,5 @@
       }
     }
   },
-  "openclaw": {
-    "pluginApi": "2026.4.22"
-  }
+  "skills": ["./skills/m-team-publisher", "./skills/m-team-executor"],
 }
