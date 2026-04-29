@@ -9,7 +9,7 @@ export default defineConfig({
     globals: true,
     environment: 'node',
     setupFiles: ['./tests/setup-sdk-mock.js', './tests/setup.js'],
-    include: ['tests/**/*.test.js'],
+    include: ['tests/**/*.test.{js,ts}'],
     alias: [
       {
         // 匹配 import from 'openclaw/plugin-sdk/core'
