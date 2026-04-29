@@ -41,8 +41,9 @@ const plugin = definePluginEntry({
   name: 'M-Team 去中心化任务池',
   description: '去中心化任务池协作插件 — 多Agent任务分发与执行',
 
-  register(api, config = {}) {
-    // 设置 workspace 根目录
+  register(api) {
+    // 设置 workspace 根目录（OpenClaw 5.x 通过 api.pluginConfig 传递）
+    const config = api.pluginConfig ?? {};
     const workspaceRoot = config.workspaceRoot ?? '/mnt/d/code/m-team';
     setWorkspaceRoot(workspaceRoot);
 
