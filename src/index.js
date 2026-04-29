@@ -41,7 +41,7 @@ import { TaskStatus, TaskPriority } from './schema/task.js';
  */
 export async function register(api, config = {}) {
   // 设置 workspace 根目录
-  const workspaceRoot = config.workspace?.root ?? '/mnt/d/code/m-team';
+  const workspaceRoot = config.workspaceRoot ?? '/mnt/d/code/m-team';
   setWorkspaceRoot(workspaceRoot);
 
   // 设置通知配置（供 tools 和 hooks 共享）

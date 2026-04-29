@@ -1,6 +1,6 @@
 # M-Team — 任务格式与 Tool API
 
-> 版本：2.0 | 更新：2026-04-29
+> 版本：2.1 | 更新：2026-04-29
 > 参考：[ARCHITECTURE.md](./ARCHITECTURE.md)、[SESSION.md](./SESSION.md)
 
 ---
@@ -67,15 +67,17 @@ pending → running → completed
 
 ---
 
-## Tool API（9 个）
+## Tool API（11 个）
 
 | Tool | 调用者 | 说明 |
 |------|--------|------|
 | `mteam_publish_task` | 管理者 | 发布新任务（goal 必填，不可更改） |
 | `mteam_claim_task` | 执行者 | 认领任务（SQLite 事务，原子操作） |
-| `mteam_update_task` | 执行者 | 更新状态/追加 context 步骤 |
+| `mteam_update_task` | 执行者 | 只更新心跳或追加 context |
+| `mteam_complete_task` | 执行者 | 完成任务，标记 completed |
+| `mteam_relay_task` | 执行者 | 接力，追加 context 后变回 pending |
 | `mteam_cancel_task` | 管理者 | Publisher 取消任务（不可再 relay） |
-| `mteam_relinquish_task` | 执行者 | Executor 主动放弃（放回 pending） |
+| `mteam_relinquish_task` | 执行者 | 主动放弃（放回 pending） |
 | `mteam_get_pending` | 执行者 | 获取待认领任务（agent 有任务时返回空） |
 | `mteam_get_agent_active` | 执行者 | 获取 agent 当前进行中任务 |
 | `mteam_get_task` | 执行者 | 获取任务详情 |
@@ -133,34 +135,66 @@ mteam_claim_task({
 
 ### mteam_update_task
 
-更新任务状态、追加 context 步骤、或只更新心跳。
+只更新心跳或追加 context 步骤。**不**用于完成或 relay。
 
 ```javascript
-// 完成任务
+// 只更新心跳
 mteam_update_task({
-  taskId: "task_1745740800000_abc123",
-  status: "completed",
+  taskId: "task_xxx",
+  agentId: "maker",
+  lastHeartbeatAt: Date.now()
+})
+
+// Executor 追加 context 步骤（配合 complete/relay 使用，由 executor session 调用）
+mteam_update_task({
+  taskId: "task_xxx",
+  agentId: "maker",
   contextStep: "联系供应商确认价格",
   contextOutput: {
     summary: "联系了5家，3家回复",
     files: ["data/contact_log.md"]
   }
 })
+```
 
-// 接力：需要下一步，放回池子
-mteam_update_task({
-  taskId: "task_xxx",
-  status: "pending",           // 放回 pending
-  contextStep: "整理报价单",
-  contextOutput: { summary: "整理了报价对比", files: ["data/quotes.xlsx"] },
-  description: "向客户发送最终报价"  // 下一步做什么
-})
+**注意**：`status` 字段不再由外部调用控制。完成用 `mteam_complete_task`，接力用 `mteam_relay_task`。
 
-// 只更新心跳
-mteam_update_task({
+---
+
+### mteam_complete_task
+
+Executor 完成任务，标记 `completed`，发送通知。
+
+```javascript
+mteam_complete_task({
   taskId: "task_xxx",
-  lastHeartbeatAt: Date.now()
+  contextStep: "搜索1688供应商",
+  contextOutput: {
+    summary: "找到10家供应商",
+    files: ["data/suppliers.json"]
+  }
 })
+// 返回: { success: true, task: { ... } }
+```
+
+---
+
+### mteam_relay_task
+
+Executor 完成当前步骤并交接给下一个 agent。追加 context 后任务变回 `pending`。
+
+```javascript
+mteam_relay_task({
+  taskId: "task_xxx",
+  agentId: "maker",
+  contextStep: "搜索1688供应商",
+  contextOutput: {
+    summary: "找到10家供应商",
+    files: ["data/suppliers.json"]
+  }
+})
+// 返回: { success: true, task: { ... } }
+// 调用后 status → pending，executor → null，context 追加当前步骤
 ```
 
 ---
@@ -193,7 +227,9 @@ mteam_relinquish_task({
 // 调用后 status → pending，executor → null，lastExecutor → "agent_1"
 ```
 
-**约束**：只能是当前 `executor` 才能 relinquish。如果 executor session 已经结束（超时/崩溃），由 Heartbeat Session 通过 `lastHeartbeatAt` 检测僵尸任务，下一轮自行 relinquish。
+**两种 relinquish 场景**：
+- **Executor session 主动放弃**：自己判断无法完成，调用 `relinquish_task({ executorId: "maker" })`
+- **Heartbeat session 检测到 executor session 已死**：通过 sessions_list 检查 updatedAt 超过 20 分钟，主动调用 `relinquish_task` 释放任务
 
 ---
 

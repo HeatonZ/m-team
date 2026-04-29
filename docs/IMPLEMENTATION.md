@@ -151,7 +151,7 @@ npm run test:run # 单次运行
 
 | 配置项 | 说明 |
 |--------|------|
-| `workspace.root` | 工作区根目录，tasks/ 和 queue/ 建在此下 |
+| `workspaceRoot` | 工作区根目录，tasks/ 和 queue/ 建在此下 |
 | `notifications` | 任务完成时通知（可选，支持 feishu / discord）|
 | `notifications[].agents` | 限定特定 agent 完成时触发通知 |
 
