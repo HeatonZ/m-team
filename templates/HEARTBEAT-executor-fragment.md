@@ -44,7 +44,10 @@ if (activeTask) {
   // 无进行中，去拿一个
   const { pending } = mteam_get_pending({ agentId: myAgentId })
   if (pending.length > 0) {
-    mteam_claim_task({ agentId: myAgentId, taskId: pending[0].taskId })
+    // executor 自己判断：看 pending 列表里哪个任务适合自己
+    // goal / description 在 pending[i] 里，根据任务描述选择要 claim 的那个
+    const chosen = pending.find(t => /* 自己判断这个任务是否适合 */ true) ?? pending[0]
+    mteam_claim_task({ agentId: myAgentId, taskId: chosen.taskId })
     // 插件会自动 spawn 新 session 执行任务
   }
 }

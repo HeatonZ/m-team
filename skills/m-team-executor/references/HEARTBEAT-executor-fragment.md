@@ -16,9 +16,12 @@
 
 | 状态 | 操作 |
 |------|------|
-| 无任务 | `mteam_get_pending({ agentId })` → 有则 `mteam_claim_task` → 立即 `update_task({ status: 'running' })` |
-| status='claimed' | 立即 `update_task({ taskId, status: 'running' })`，开始执行 |
-| status='running' | 只传 `lastHeartbeatAt: Date.now()` 更新心跳，不改变状态 |
+| 无任务 | `mteam_get_pending({ agentId })` → **看 pending[].description 选一个** → `mteam_claim_task` → claim 内部自动转 `running`，插件自动 spawn 执行 session |
+| 有任务（running） | 只传 `lastHeartbeatAt: Date.now()` 更新心跳，不改变状态 |
+
+### claim 后不需要再 update_task
+
+`mteam_claim_task` 内部已自动将 status 改为 `running`，插件检测到后自动 spawn 新 session 执行。
 
 ### 心跳更新写法（running 时）
 
@@ -32,7 +35,6 @@ mteam_update_task({
 
 ### 注意
 
-- `claimed` ≠ 正在执行。认领后必须立即转 `running` 才是真正开始。
 - running 时不能自动释放任务。
 
 ### Running 状态判断：任务是否真实在执行？
