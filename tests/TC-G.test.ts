@@ -16,7 +16,8 @@ async function callTool(api, toolName, params) {
 }
 
 function extract(result: { ok: boolean; data: unknown }): unknown {
-  return result.ok ? result.data : result;
+  if (result.ok) return result.data;
+  return result.data as { success: boolean; reason?: string };
 }
 
 function getTask(result: { ok: boolean; data: unknown }): unknown {

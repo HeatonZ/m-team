@@ -68,7 +68,7 @@ export function registerTools(api, config) {
 
       // 1. Claim 任务
       const result = claimTask(taskId, agentId);
-      if (!result.success) return jsonResult(result);
+      if (!result.success) return { ok: false, data: result };
 
       // 2. 获取完整 task 信息用于创建 session
       const task = result.task;
@@ -145,7 +145,8 @@ export function registerTools(api, config) {
       const publisher = readStr(rawParams, 'publisher', { required: true });
       const reason = readStr(rawParams, 'reason');
       const result = cancelTask(taskId, publisher, reason);
-      return jsonResult(result);
+      if (!result.success) return { ok: false, data: result };
+      return jsonResult({ success: result.success, task: result.task });
     
       } catch(e) { return { ok: false, error: e?.message ?? String(e) }; }
     }
@@ -173,7 +174,7 @@ export function registerTools(api, config) {
       const contextEntry = { step: contextStep, output: contextOutput || {} };
 
       const result = completeTask(taskId, contextEntry);
-      if (!result.success) return jsonResult(result);
+      if (!result.success) return { ok: false, data: result };
 
       // 发送完成通知（内部发送，不返回给调用方）
       if (result.task && config.notifications?.length > 0) {
@@ -210,9 +211,10 @@ export function registerTools(api, config) {
 
       const contextEntry = { step: contextStep, output: contextOutput || {} };
       const result = relayTask(taskId, agentId, contextEntry);
+      if (!result.success) return { ok: false, data: result };
 
       // relay 不发通知（交接是正常流程，不是异常放弃）
-      return jsonResult(result);
+      return jsonResult({ success: result.success, task: result.task });
     
       } catch(e) { return { ok: false, error: e?.message ?? String(e) }; }
     }
@@ -232,6 +234,7 @@ export function registerTools(api, config) {
       const taskId = readStr(rawParams, 'taskId', { required: true });
       const executorId = readStr(rawParams, 'executorId', { required: true });
       const result = relinquishTask(taskId, executorId);
+      if (!result.success) return { ok: false, data: result };
 
       // 发送放回池子通知（内部发送，不返回给调用方）
       if (result.success && result.task && config.notifications?.length > 0) {
