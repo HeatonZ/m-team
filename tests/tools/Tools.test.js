@@ -65,7 +65,7 @@ afterEach(() => {
 // ============================================================
 
 describe('Tool Registration', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     api = createMockApi(NOOP_CONFIG);
     // 动态 import tools/index.js 并注册
     const { registerTools } = await import('../../src/tools/index.js');
