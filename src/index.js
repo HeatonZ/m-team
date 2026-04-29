@@ -1,3 +1,4 @@
+import { homedir } from 'node:os';
 /**
  * M-Team 插件 — OpenClaw 多 Agent 任务池编排
  *
@@ -47,7 +48,7 @@ const plugin = definePluginEntry({
     const config = api.pluginConfig ?? {};
     let workspaceRoot = config.workspaceRoot ?? '/mnt/d/code/m-team';
     if (workspaceRoot.startsWith('~')) {
-      workspaceRoot = path.join(homedir(), workspaceRoot.slice(1));
+      workspaceRoot = require('node:path').join(homedir(), workspaceRoot.slice(1));
     }
     setWorkspaceRoot(workspaceRoot);
 
