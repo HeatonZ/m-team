@@ -139,7 +139,6 @@ export function registerTools(api, config) {
     description: 'Executor 完成任务（带通知）',
     parameters: Type.Object({
       taskId: Type.String({ description: '任务ID' }),
-      agentId: Type.Optional(Type.String({ description: '执行者 agentId（追加 context 时必填）' })),
       contextStep: Type.String({ description: '当前步骤描述（必填，必须说明这一步做了什么）' }),
       contextOutput: Type.Optional(Type.Object({
         summary: Type.Optional(Type.String({ description: '步骤摘要' })),
@@ -148,7 +147,6 @@ export function registerTools(api, config) {
     }),
     async execute(_toolCallId, rawParams) {
       const taskId = readStr(rawParams, 'taskId', { required: true });
-      const agentId = readStr(rawParams, 'agentId');
       const contextStep = readStr(rawParams, 'contextStep', { required: true });
       const contextOutput = rawParams.contextOutput ?? null;
 
