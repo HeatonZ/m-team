@@ -7,15 +7,18 @@ import {
   publishTask,
   claimTask,
   updateTask,
+  completeTask,
   getPendingTasks,
   getAgentActiveTask,
   getTask,
   getAllTasks,
   cancelTask,
   relinquishTask,
-  formatTaskNotifications
+  formatTaskNotifications,
+  formatRelinquishNotifications
 } from '../pool/index.js';
 import { readStr, readNum, jsonResult } from './helpers.js';
+import { sendNotifications } from '../notifications.js';
 
 /**
  * @param {object} api - OpenClaw plugin api
@@ -107,14 +110,7 @@ export function registerTools(api, config) {
       }
 
       const task = updateTask(taskId, status, contextEntry, description, lastHeartbeatAt, agentId);
-
-      // 任务完成时，生成通知内容
-      let notifications = null;
-      if (task && status === 'completed' && config.notifications?.length > 0) {
-        notifications = formatTaskNotifications(task, config.notifications);
-      }
-
-      return jsonResult({ task, notifications });
+      return jsonResult({ task });
     }
   });
 
@@ -136,6 +132,43 @@ export function registerTools(api, config) {
     }
   });
 
+  // === mteam_complete_task ===
+  api.registerTool({
+    name: 'mteam_complete_task',
+    description: 'Executor 完成任务（带通知）',
+    parameters: Type.Object({
+      taskId: Type.String({ description: '任务ID' }),
+      agentId: Type.Optional(Type.String({ description: '执行者 agentId（追加 context 时必填）' })),
+      contextStep: Type.Optional(Type.String({ description: '当前步骤描述' })),
+      contextOutput: Type.Optional(Type.Object({
+        summary: Type.Optional(Type.String({ description: '步骤摘要' })),
+        files: Type.Optional(Type.Array(Type.String(), { description: '任务文件夹内的相对路径' }))
+      }, { description: '步骤输出' }))
+    }),
+    async execute(_toolCallId, rawParams) {
+      const taskId = readStr(rawParams, 'taskId', { required: true });
+      const agentId = readStr(rawParams, 'agentId');
+      const contextStep = readStr(rawParams, 'contextStep');
+      const contextOutput = rawParams.contextOutput ?? null;
+
+      let contextEntry = null;
+      if (contextStep) {
+        contextEntry = { step: contextStep, output: contextOutput || {} };
+      }
+
+      const result = completeTask(taskId, contextEntry);
+      if (!result.success) return jsonResult(result);
+
+      // 发送完成通知（内部发送，不返回给调用方）
+      if (result.task && config.notifications?.length > 0) {
+        const notifications = formatTaskNotifications(result.task, config.notifications);
+        await sendNotifications(notifications, api);
+      }
+
+      return jsonResult({ task: result.task });
+    }
+  });
+
   // === mteam_relinquish_task ===
   api.registerTool({
     name: 'mteam_relinquish_task',
@@ -148,7 +181,14 @@ export function registerTools(api, config) {
       const taskId = readStr(rawParams, 'taskId', { required: true });
       const executorId = readStr(rawParams, 'executorId', { required: true });
       const result = relinquishTask(taskId, executorId);
-      return jsonResult(result);
+
+      // 发送放回池子通知（内部发送，不返回给调用方）
+      if (result.success && result.task && config.notifications?.length > 0) {
+        const notifications = formatRelinquishNotifications(result.task, config.notifications);
+        await sendNotifications(notifications, api);
+      }
+
+      return jsonResult({ task: result.task });
     }
   });
 

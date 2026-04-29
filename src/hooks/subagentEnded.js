@@ -1,15 +1,14 @@
 /**
  * M-Team Hooks — subagent_ended handler
  *
- * executor session 正常/异常结束时自动触发，稳定调用完成任务/失败任务。
- * 不依赖 executor 主动调工具。
+ * executor session 正常/异常结束时自动触发，标记任务完成/失败并发送通知。
  */
 
 import { completeTask, failTask } from '../pool/operations.js';
+import { getNotifications, formatTaskNotifications, sendNotifications } from '../notifications.js';
 
 /**
  * @param {object} api - OpenClaw plugin api
- * @returns {void}
  */
 export function registerSubagentEndedHook(api) {
   api.on('subagent_ended', async (event) => {
@@ -33,6 +32,8 @@ export function registerSubagentEndedHook(api) {
       const result = completeTask(taskId);
       if (result.success) {
         api.logger?.info(`[m-team] subagent_ended: 任务 ${taskId} 标记完成 (outcome=${outcome})`);
+        const notifications = formatTaskNotifications(result.task, getNotifications());
+        await sendNotifications(notifications, api);
       } else {
         api.logger?.info(`[m-team] subagent_ended: 任务 ${taskId} 无操作 (${result.reason})`);
       }
@@ -44,6 +45,7 @@ export function registerSubagentEndedHook(api) {
       } else {
         api.logger?.info(`[m-team] subagent_ended: 任务 ${taskId} 无操作 (${result.reason})`);
       }
+      // 失败不发通知
     }
   });
 }
