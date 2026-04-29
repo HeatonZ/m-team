@@ -295,7 +295,7 @@ export function cancelTask(taskId, publisher, reason) {
 }
 
 /**
- * executor 主动放弃当前任务（放回 pending）
+ * Executor 主动放弃当前任务（放回 pending）
  * @param {string} taskId
  * @param {string} executorId
  * @returns {{ success: boolean, task: object|null, reason?: string }}
@@ -379,4 +379,87 @@ export function formatTaskNotifications(task, notifications = []) {
   }
 
   return result;
+}
+
+/**
+ * subagent_ended hook 调用：executor 正常结束
+ * @param {string} taskId
+ * @param {Object} [contextEntry] - 可选的 context 步骤
+ * @returns {{ success: boolean, task: object|null }}
+ */
+export function completeTask(taskId, contextEntry = null) {
+  init();
+  const db = getDb();
+
+  return db.transaction(() => {
+    const task = getTaskRow(taskId);
+    if (!task) return { success: false, reason: 'TASK_NOT_FOUND' };
+
+    // relay 后旧 session 结束时任务已非 running，直接跳过
+    if (task.status !== TaskStatus.RUNNING) {
+      return { success: false, reason: `TASK_NOT_RUNNING_${task.status}` };
+    }
+
+    const patch = { status: TaskStatus.COMPLETED, completedAt: Date.now() };
+
+    if (contextEntry) {
+      const newContext = [...task.context];
+      newContext.push({
+        executor: task.executor || 'unknown',
+        step: contextEntry.step,
+        output: contextEntry.output || {},
+        completedAt: Date.now()
+      });
+      patch.context = JSON.stringify(newContext);
+    }
+
+    updateTaskRow(taskId, patch);
+    const updated = getTaskRow(taskId);
+    syncTaskJson(updated);
+
+    console.log(`[m-team-queue] 任务 ${taskId} 完成（subagent_ended hook）`);
+    return { success: true, task: updated };
+  })();
+}
+
+/**
+ * subagent_ended hook 调用：executor 异常结束
+ * @param {string} taskId
+ * @param {string} [errorMsg]
+ * @param {Object} [contextEntry] - 可选的 context 步骤
+ * @returns {{ success: boolean, task: object|null }}
+ */
+export function failTask(taskId, errorMsg = null, contextEntry = null) {
+  init();
+  const db = getDb();
+
+  return db.transaction(() => {
+    const task = getTaskRow(taskId);
+    if (!task) return { success: false, reason: 'TASK_NOT_FOUND' };
+
+    // relay 后旧 session 结束时任务已非 running，直接跳过
+    if (task.status !== TaskStatus.RUNNING) {
+      return { success: false, reason: `TASK_NOT_RUNNING_${task.status}` };
+    }
+
+    const patch = { status: TaskStatus.FAILED, completedAt: Date.now() };
+
+    if (contextEntry) {
+      const newContext = [...task.context];
+      newContext.push({
+        executor: task.executor || 'unknown',
+        step: contextEntry.step,
+        output: contextEntry.output || {},
+        completedAt: Date.now()
+      });
+      patch.context = JSON.stringify(newContext);
+    }
+
+    updateTaskRow(taskId, patch);
+    const updated = getTaskRow(taskId);
+    syncTaskJson(updated);
+
+    console.log(`[m-team-queue] 任务 ${taskId} 失败（subagent_ended hook）: ${errorMsg ?? ''}`);
+    return { success: true, task: updated };
+  })();
 }
