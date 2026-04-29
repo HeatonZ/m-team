@@ -27,7 +27,7 @@
     }
   },
   "scripts": {
-    "build": "esbuild src/index.js --bundle --platform=node --outdir=dist --format=esm --external:node:* --external:openclaw --external:openclaw/plugin-sdk --external:better-sqlite3",
+    "build": "esbuild src/index.js --bundle --platform=node --outdir=dist --format=cjs --external:node:* --external:openclaw --external:openclaw/plugin-sdk --external:better-sqlite3",
     "test": "vitest",
     "test:run": "vitest run",
     "prepublishOnly": "npm run build"
