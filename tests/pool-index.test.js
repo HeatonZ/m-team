@@ -61,10 +61,10 @@ describe('pool/index.js', () => {
     opsMod.publishTask({ description: 'normal', goal: 'g', priority: 'normal' });
 
     const pending = poolMod.getPendingTasks();
-    // ORDER BY priority ASC = 字母序：high < low < normal
+    // ORDER BY CASE WHEN: high=1, normal=2, low=3
     assert(pending[0].description === 'high', `expected high, got ${pending[0].description}`);
-    assert(pending[1].description === 'low', `expected low, got ${pending[1].description}`);
-    assert(pending[2].description === 'normal', `expected normal, got ${pending[2].description}`);
+    assert(pending[1].description === 'normal', `expected normal, got ${pending[1].description}`);
+    assert(pending[2].description === 'low', `expected low, got ${pending[2].description}`);
   });
 
   it('getPendingTasks 同优先级按 created_at ASC', () => {

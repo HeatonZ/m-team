@@ -96,7 +96,9 @@ export function getAllTaskRows() {
 export function getTaskRowsByStatus(status) {
   const db = getDb();
   const rows = db.prepare(
-    'SELECT * FROM tasks WHERE status = ? ORDER BY priority ASC, created_at ASC'
+    `SELECT * FROM tasks WHERE status = ?
+     ORDER BY CASE priority WHEN 'high' THEN 1 WHEN 'normal' THEN 2 WHEN 'low' THEN 3 END ASC,
+              created_at ASC`
   ).all(status);
   return rows.map(deserializeTask);
 }
