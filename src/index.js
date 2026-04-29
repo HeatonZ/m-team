@@ -10,6 +10,7 @@
  *     index.js        插件入口
  */
 
+import { definePluginEntry } from 'openclaw/plugin-sdk/plugin-entry';
 import { setNotifications } from './notifications.js';
 import { registerTools } from './tools/index.js';
 import { registerSubagentEndedHook } from './hooks/subagentEnded.js';
@@ -32,51 +33,54 @@ import {
 import { TaskStatus, TaskPriority } from './schema/task.js';
 
 // ============================================================
-// Plugin entry
+// Plugin entry — 使用 OpenClaw definePluginEntry 格式
 // ============================================================
 
-/**
- * @param {object} api - OpenClaw plugin api
- * @param {object} config - plugin config from openclaw.json
- */
-export async function register(api, config = {}) {
-  // 设置 workspace 根目录
-  const workspaceRoot = config.workspaceRoot ?? '/mnt/d/code/m-team';
-  setWorkspaceRoot(workspaceRoot);
+const plugin = definePluginEntry({
+  id: 'm-team',
+  name: 'M-Team 去中心化任务池',
+  description: '去中心化任务池协作插件 — 多Agent任务分发与执行',
 
-  // 设置通知配置（供 tools 和 hooks 共享）
-  setNotifications(config.notifications ?? []);
+  register(api, config = {}) {
+    // 设置 workspace 根目录
+    const workspaceRoot = config.workspaceRoot ?? '/mnt/d/code/m-team';
+    setWorkspaceRoot(workspaceRoot);
 
-  // 注册工具
-  registerTools(api, config);
+    // 设置通知配置（供 tools 和 hooks 共享）
+    setNotifications(config.notifications ?? []);
 
-  // 注册 subagent_ended hook
-  registerSubagentEndedHook(api);
+    // 注册工具
+    registerTools(api, config);
 
-  console.log('[m-team] 插件加载完成', {
-    workspaceRoot,
-    tools: [
-      'mteam_publish_task',
-      'mteam_claim_task',
-      'mteam_update_task',
-      'mteam_complete_task',
-      'mteam_cancel_task',
-      'mteam_relay_task',
-      'mteam_relinquish_task',
-      'mteam_get_pending',
-      'mteam_get_agent_active',
-      'mteam_get_task',
-      'mteam_get_all_tasks'
-    ]
-  });
-}
+    // 注册 subagent_ended hook
+    registerSubagentEndedHook(api);
+
+    api.logger?.info('[m-team] 插件加载完成', {
+      workspaceRoot,
+      tools: [
+        'mteam_publish_task',
+        'mteam_claim_task',
+        'mteam_update_task',
+        'mteam_complete_task',
+        'mteam_cancel_task',
+        'mteam_relay_task',
+        'mteam_relinquish_task',
+        'mteam_get_pending',
+        'mteam_get_agent_active',
+        'mteam_get_task',
+        'mteam_get_all_tasks'
+      ]
+    });
+  }
+});
+
+export default plugin;
 
 // ============================================================
-// 重新导出（向后兼容）
+// 重新导出（供内部使用和测试）
 // ============================================================
 
 export {
-  // pool 对外 API
   setWorkspaceRoot,
   publishTask,
   claimTask,
@@ -91,7 +95,6 @@ export {
   completeTask,
   failTask,
   formatTaskNotifications,
-  // schema
   TaskStatus,
   TaskPriority
 };

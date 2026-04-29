@@ -137,17 +137,29 @@ If the task takes more than 5 minutes, update heartbeat via mteam_update_task:
 ```javascript
 mteam_update_task({
   taskId: "xxx",
+<<<<<<< Updated upstream
   agentId: "maker",
+=======
+>>>>>>> Stashed changes
   lastHeartbeatAt: Date.now()
 })
 ```
 
+<<<<<<< Updated upstream
 Only these three fields — do NOT change status.
 
 | Threshold | Meaning | Action |
 |-----------|---------|--------|
 | > 20 min no heartbeat | Possibly stuck | Monitor |
 | > 40 min no heartbeat | Likely dead | `mteam_relinquish_task` |
+=======
+Only these two fields — do NOT change status.
+
+| Threshold | Meaning | Action |
+|-----------|---------|--------|
+| > 30 min no heartbeat | Possibly zombie | Monitor |
+| > 60 min no heartbeat | Dead task | `mteam_relinquish_task` |
+>>>>>>> Stashed changes
 
 **Heartbeat ≠ progress.** Progress means `contextStep` was added.
 
