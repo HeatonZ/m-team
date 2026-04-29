@@ -8,7 +8,7 @@
 
 export { setWorkspaceRoot } from './operations.js';
 export { completeTask, failTask } from './operations.js';
-export { publishTask, claimTask, updateTask, relinquishTask, cancelTask } from './operations.js';
+export { publishTask, claimTask, updateTask, relinquishTask, relayTask, cancelTask } from './operations.js';
 
 export { formatTaskNotifications, formatRelinquishNotifications } from '../notifications.js';
 

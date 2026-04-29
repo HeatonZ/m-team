@@ -24,6 +24,7 @@ import {
   getAllTasks,
   cancelTask,
   relinquishTask,
+  relayTask,
   completeTask,
   failTask,
   formatTaskNotifications
@@ -60,6 +61,7 @@ export async function register(api, config = {}) {
       'mteam_update_task',
       'mteam_complete_task',
       'mteam_cancel_task',
+      'mteam_relay_task',
       'mteam_relinquish_task',
       'mteam_get_pending',
       'mteam_get_agent_active',
@@ -85,6 +87,7 @@ export {
   getAllTasks,
   cancelTask,
   relinquishTask,
+  relayTask,
   completeTask,
   failTask,
   formatTaskNotifications,

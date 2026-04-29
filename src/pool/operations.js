@@ -251,7 +251,7 @@ export function cancelTask(taskId, publisher, reason) {
 }
 
 /**
- * Executor 主动放弃当前任务（放回 pending）
+ * Executor 主动放弃当前任务（放回 pending，不追加 context）
  * @returns {{ success: boolean, task?: object, reason?: string }}
  */
 export function relinquishTask(taskId, executorId) {
@@ -275,6 +275,49 @@ export function relinquishTask(taskId, executorId) {
     syncTaskJson(updated);
 
     console.log(`[m-team-pool] executor ${executorId} 放弃任务 ${taskId}`);
+    return { success: true, task: updated };
+  })();
+}
+
+/**
+ * Executor 完成当前步骤并交接给下一个 executor（放回 pending，追加 context）
+ * @param {string} taskId
+ * @param {string} executorId
+ * @param {{ step: string, output?: object }} contextEntry
+ * @returns {{ success: boolean, task?: object, reason?: string }}
+ */
+export function relayTask(taskId, executorId, contextEntry) {
+  init();
+  const db = getDb();
+
+  return db.transaction(() => {
+    const task = getTaskRow(taskId);
+    if (!task) return { success: false, task: null, reason: 'TASK_NOT_FOUND' };
+    if (task.executor !== executorId) return { success: false, task: null, reason: 'NOT_CURRENT_EXECUTOR' };
+    if (task.status === TaskStatus.CANCELLED) return { success: false, task: null, reason: 'TASK_CANCELLED' };
+
+    const patch = {
+      status: TaskStatus.PENDING,
+      executor: null,
+      lastExecutor: executorId
+    };
+
+    if (contextEntry) {
+      const newContext = [...task.context];
+      newContext.push({
+        executor: executorId,
+        step: contextEntry.step,
+        output: contextEntry.output || {},
+        completedAt: Date.now()
+      });
+      patch.context = JSON.stringify(newContext);
+    }
+
+    updateTaskRow(taskId, patch);
+    const updated = getTaskRow(taskId);
+    syncTaskJson(updated);
+
+    console.log(`[m-team-pool] executor ${executorId} 交接任务 ${taskId}（relay）`);
     return { success: true, task: updated };
   })();
 }

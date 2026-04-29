@@ -8,6 +8,7 @@ import {
   claimTask,
   updateTask,
   completeTask,
+  relayTask,
   getPendingTasks,
   getAgentActiveTask,
   getTask,
@@ -166,6 +167,33 @@ export function registerTools(api, config) {
       }
 
       return jsonResult({ task: result.task });
+    }
+  });
+
+  // === mteam_relay_task ===
+  api.registerTool({
+    name: 'mteam_relay_task',
+    description: 'Executor 完成当前步骤并交接给下一个 executor（追加 context 记录这一步，然后放回 pending 池子）',
+    parameters: Type.Object({
+      taskId: Type.String({ description: '任务ID' }),
+      agentId: Type.String({ description: '执行者 agentId' }),
+      contextStep: Type.String({ description: '当前步骤描述' }),
+      contextOutput: Type.Optional(Type.Object({
+        summary: Type.Optional(Type.String({ description: '步骤摘要' })),
+        files: Type.Optional(Type.Array(Type.String(), { description: '任务文件夹内的相对路径' }))
+      }, { description: '步骤输出' }))
+    }),
+    async execute(_toolCallId, rawParams) {
+      const taskId = readStr(rawParams, 'taskId', { required: true });
+      const agentId = readStr(rawParams, 'agentId', { required: true });
+      const contextStep = readStr(rawParams, 'contextStep', { required: true });
+      const contextOutput = rawParams.contextOutput ?? null;
+
+      const contextEntry = { step: contextStep, output: contextOutput || {} };
+      const result = relayTask(taskId, agentId, contextEntry);
+
+      // relay 不发通知（交接是正常流程，不是异常放弃）
+      return jsonResult(result);
     }
   });
 
