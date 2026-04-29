@@ -17,11 +17,13 @@ import {
   getTask,
   getAllTasks,
   cancelTask,
-  relinquishTask
+  relinquishTask,
+  formatTaskNotifications
 } from './queue/index.js';
 
 const DEFAULT_CONFIG = {
-  workspaceRoot: null
+  workspaceRoot: null,
+  notifications: []
 };
 
 let config = { ...DEFAULT_CONFIG };
@@ -42,6 +44,7 @@ export default definePluginEntry({
   register(api) {
     const pluginConfig = api.pluginConfig || {};
     config.workspaceRoot = pluginConfig.workspaceRoot || DEFAULT_CONFIG.workspaceRoot;
+    config.notifications = pluginConfig.notifications || DEFAULT_CONFIG.notifications;
 
     if (!config.workspaceRoot) {
       api.logger?.warn('[m-team] 未配置 workspaceRoot，跳过初始化');
@@ -84,7 +87,7 @@ export default definePluginEntry({
     // === mteam_claim_task ===
     api.registerTool({
       name: 'mteam_claim_task',
-      description: '认领一个待处理任务',
+      description: '认领一个待处理任务（Plugin内部直接创建executor session）',
       parameters: Type.Object({
         taskId: Type.String({ description: '任务ID' }),
         agentId: Type.String({ description: '认领者 agentId' })
@@ -92,8 +95,28 @@ export default definePluginEntry({
       async execute(_toolCallId, rawParams) {
         const taskId = readStringParam(rawParams, 'taskId', { required: true });
         const agentId = readStringParam(rawParams, 'agentId', { required: true });
+
+        // 1. Claim 任务
         const result = claimTask(taskId, agentId);
-        return jsonResult(result);
+        if (!result.ok) return jsonResult(result);
+
+        // 2. 获取完整 task 信息用于创建 session
+        const task = result.task ?? getTask(taskId);
+
+        // 3. Plugin 内部直接创建 executor session
+        //    sessionKey 格式: mteam:{taskId}:executor
+        //    HEARTBEAT 模板解析 sessionKey 提取 taskId
+        const sessionKey = `mteam:${taskId}:executor`;
+        const runResult = await api.runtime.subagent.run({
+          sessionKey,
+          message: `[M-Team Task #${taskId}] ${task?.description ?? ''}`
+        });
+
+        return jsonResult({
+          ...result,
+          runId: runResult.runId,
+          sessionKey
+        });
       }
     });
 
@@ -130,7 +153,14 @@ export default definePluginEntry({
         }
 
         const task = updateTask(taskId, status, contextEntry, description, lastHeartbeatAt, agentId);
-        return jsonResult({ task });
+
+        // 任务完成时，生成通知内容
+        let notifications = null;
+        if (task && status === 'completed' && config.notifications?.length > 0) {
+          notifications = formatTaskNotifications(task, config.notifications);
+        }
+
+        return jsonResult({ task, notifications });
       }
     });
 

@@ -332,3 +332,51 @@ export function relinquishTask(taskId, executorId) {
     return { success: true, task: updated };
   })();
 }
+
+/**
+ * 根据配置和任务，生成通知内容
+ * @param {Object} task - 任务对象
+ * @param {Array} notifications - 通知配置
+ * @returns {Array} 通知数组
+ */
+export function formatTaskNotifications(task, notifications = []) {
+  if (!notifications || notifications.length === 0) return [];
+  if (!task || task.status !== 'completed') return [];
+
+  const result = [];
+  for (const cfg of notifications) {
+    // 检查该任务的 executor 是否在 agents 列表中
+    if (!cfg.agents || !cfg.agents.includes(task.executor)) continue;
+
+    const duration = task.completedAt && task.claimedAt
+      ? `${Math.round((task.completedAt - task.claimedAt) / 1000)}秒`
+      : null;
+
+    if (cfg.provider === 'feishu') {
+      result.push({
+        provider: 'feishu',
+        chatId: cfg.groupId,
+        message: [
+          `✅ 任务完成`,
+          ``,
+          `📋 ${task.description}`,
+          `执行者: ${task.executor}`,
+          task.summary ? `结果: ${task.summary}` : null,
+          duration ? `耗时: ${duration}` : null,
+        ].filter(Boolean).join('\n')
+      });
+    } else if (cfg.provider === 'discord') {
+      result.push({
+        provider: 'discord',
+        channelId: cfg.channelId,
+        message: [
+          `✅ **${task.description}**`,
+          task.summary ? `_${task.summary}_` : null,
+          `执行者: ${task.executor}${duration ? ` | 耗时: ${duration}` : ''}`,
+        ].filter(Boolean).join('\n')
+      });
+    }
+  }
+
+  return result;
+}

@@ -10,6 +10,35 @@
       "workspaceRoot": {
         "type": "string",
         "description": "工作空间根目录"
+      },
+      "notifications": {
+        "type": "array",
+        "description": "任务完成通知配置",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "provider": {
+              "type": "string",
+              "enum": ["feishu", "discord"],
+              "description": "通知渠道"
+            },
+            "groupId": {
+              "type": "string",
+              "description": "飞书群 ID（provider=feishu 时使用）"
+            },
+            "channelId": {
+              "type": "string",
+              "description": "Discord 频道 ID（provider=discord 时使用）"
+            },
+            "agents": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "需要通知的 agentId 列表"
+            }
+          },
+          "required": ["provider", "agents"]
+        }
       }
     }
   },

@@ -1,141 +1,84 @@
-# HEARTBEAT.md
+# M-Team Executor 心跳模板
 
-## 两种情况
-
-执行 heartbeat 检查前，先判断当前有没有任务：
+## sessionKey 格式
 
 ```
-mteam_get_agent_active()
+mteam:{taskId}:executor
 ```
 
-- **有任务** → 执行情况 A（校验 + 更新心跳）
-- **无任务** → 执行情况 B（认领新任务）
+Plugin 在 `mteam_claim_task` 内部通过 `api.runtime.subagent.run({ sessionKey })` 直接创建。
+HEARTBEAT agent 通过解析 sessionKey 提取 taskId，无需 label 过滤。
 
----
+## 解析方式（TypeScript）
 
-## 情况 A：有任务时的心跳与真实性校验
-
-### 第一步：找到当前 session
-
-sessionKey 格式：`mteam:{taskId}:{随机后缀}`
-
-用 `sessions_list` 按 `agentId` 过滤，找到当前 agent 的所有 session，从 sessionKey 中解析出 taskId，匹配当前任务：
-
-```
-sessions_list(agentId: "executor_1")
+```typescript
+function parseSessionKey(sessionKey: string): { taskId: string } | null {
+  const parts = sessionKey.split(':');
+  if (parts[0] === 'mteam' && parts[2] === 'executor') {
+    return { taskId: parts[1] };
+  }
+  return null;
+}
 ```
 
-返回示例：
-```json
-[
-  { "sessionKey": "mteam:task_xyz789:abc123", "updatedAt": 1745800100000 },
-  { "sessionKey": "mteam:task_uvw123:def456", "updatedAt": 1745799900000 }
-]
-```
-
-解析 sessionKey：前缀 `mteam:` + 中间的 taskId 部分即为关联任务。
-
-### 第二步：交叉判断（双重校验）
-
-| 信号 | `lastHeartbeatAt` | session `updatedAt` | 判定 | 处理 |
-|------|-------------------|---------------------|------|------|
-| 正常 | < 30分钟 | < 5分钟 | 正常运行 | 继续执行 |
-| 疑似僵尸 | < 30分钟 | > 5分钟无更新 | **谎报心跳** | nudge 或放回池子 |
-| 任务卡住 | 30分钟~60分钟 | 任意 | 执行中断 | 发消息 nudge |
-| 已卡死 | > 60分钟 | 任意 | 完全失联 | 放回池子 |
-
-**交叉判断原则**：
-- `lastHeartbeatAt` 新但 session `updatedAt` 旧 → agent 在谎报，任务实际没推进
-- 两者都旧 → agent 真的停了
-
-### 第三步：更新心跳
+## 心跳循环（情况A：有任务）
 
 ```
-mteam_update_task({
-  taskId: "task_abc123",
-  agentId: "executor_1",
-  lastHeartbeatAt: Date.now()
-})
+WHILE true:
+  1. sessions_getMessages(currentSession, limit=1)
+     → 取最新一条消息的 updatedAt
+
+  2. mteam_get_agent_active(agentId)
+     → 返回 { task, lastHeartbeatAt, status }
+
+  3. 判断:
+     IF task == null:
+       // 已完成任务，转情况B
+       GOTO 情况B
+
+     ELSE IF (now - lastHeartbeatAt > 60min) OR (heartbeat新但session旧):
+       // 任务疑似僵尸
+       IF now - lastHeartbeatAt > 60min:
+         // 真正死亡，发 relinquish
+         mteam_relinquish_task(taskId, executorId)
+       ELSE:
+         // 谎报（heartbeat在跑但session已停），仅发 nudge
+       GOTO 情况B
+
+     ELSE:
+       // 正常：更新心跳
+       mteam_update_task({ taskId, lastHeartbeatAt: Date.now() })
+       sleep(10min)
 ```
 
-**心跳频率**：每 5 分钟更新一次。
-
-### 第四步：卡住时的处理
-
-**A1：Executor 还在跑，只是卡住（nudge）**
-```
-sessions_send(sessionKey: "mteam:task_abc123:abc123", message: "请继续执行当前任务，不要停留在上一步")
-```
-
-**A2：Executor 已失联（放回池子）**
-```
-mteam_relinquish_task({
-  taskId: "task_abc123",
-  executorId: "executor_1",
-  reason: "心跳超时且 session 已失联，任务放回池子"
-})
-```
-
----
-
-## 情况 B：空闲时主动认领任务
-
-如果 `mteam_get_agent_active()` 返回空数组，说明当前没有进行中的任务。
-
-### 第一步：查看待认领任务
+## 情况B（空闲：认领新任务）
 
 ```
-mteam_get_pending()
+LOOP:
+  pending = mteam_get_pending(agentId)
+  IF pending 非空:
+    // Plugin 内部已创建 session（mteam_claim_task 自动完成）
+    // 只需更新心跳
+    task = pending[0]
+    mteam_update_task({ taskId: task.taskId, lastHeartbeatAt: Date.now() })
+    // 不再需要手动 spawn session
+  ELSE:
+    sleep(5min)
 ```
-
-### 第二步：认领任务
-
-```
-mteam_claim_task({
-  taskId: "task_xyz789",
-  agentId: "executor_1"
-})
-```
-
-### 第三步：立即 spawn 执行 session
-
-认领成功后立即 spawn session，**关键：sessionKey 必须以 `mteam:{taskId}:` 开头**：
-
-```
-sessions_spawn(
-  task: "执行任务：{goal}。当前步骤：{description}。参考 context 历史。",
-  agentId: "executor_1",
-  sessionKey: "mteam:task_xyz789:{随机后缀}",
-  mode: "run",
-  runtime: "subagent"
-)
-```
-
-**sessionKey 格式必须为 `mteam:{taskId}:{随机后缀}`**，这样心跳时从 sessionKey 就能直接解析出 taskId，无需额外查询 label。
-
-### 认领策略
-
-- 优先认领 `priority` 高的任务
-- 优先认领创建时间早的任务
-- 不认领与自己技能不匹配的任务
-
-### 第四步：认领成功后立即发心跳
-
-```
-mteam_update_task({
-  taskId: "task_xyz789",
-  agentId: "executor_1",
-  lastHeartbeatAt: Date.now()
-})
-```
-
----
 
 ## 关键约束
 
-- **Publisher 不管心跳**：心跳是 Executor 的责任，Publisher 只负责发布和取消
-- **心跳不等于进度**：心跳只证明 Executor 还活着，不证明任务在推进
-- **真正的进度**是 context 有 contextStep 更新
-- **空闲是浪费**：没有任务时必须主动去 pending 队列认领，不等待
-- **双重校验**：必须用 session `updatedAt` 交叉验证 `lastHeartbeatAt`，防止谎报
-- **sessionKey 格式**：`mteam:{taskId}:{随机后缀}`，心跳时直接解析，无需 label 匹配
+1. **Plugin 内部创建 session**：`mteam_claim_task` 调用时 Plugin 已通过 `api.runtime.subagent.run()` 创建了 session，Executor 不需要单独调 `sessions_spawn`
+2. **sessionKey 固定格式**：`mteam:{taskId}:executor`，心跳时直接解析出 taskId
+3. **心跳时间窗口**：30min 疑似僵尸，60min 判定死亡
+4. **谎报僵尸检测**：若 `lastHeartbeatAt` 很新但 session `updatedAt` 很旧，说明 heartbeat 在跑但 executor session 已卡死，此时不发 relinquish，只发 nudge
+5. **一个 agent 一个任务**：通过 `mteam_get_agent_active` 保证不重复认领
+
+## 工具依赖
+
+- `sessions_getMessages` — 读 session 最后活跃时间
+- `mteam_get_agent_active` — 获取当前任务和心跳时间
+- `mteam_update_task({ lastHeartbeatAt })` — 更新心跳
+- `mteam_relinquish_task` — 放弃死亡任务（60min 阈值）
+- `mteam_get_pending` — 认领新任务
+- `mteam_claim_task` — Plugin 内部已创建 session，此处只做 claim 操作
