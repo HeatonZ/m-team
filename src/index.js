@@ -10,7 +10,7 @@
  *     index.js        插件入口
  */
 
-import { Type } from '@sinclair/typebox';
+import { setNotifications } from './notifications.js';
 import { registerTools } from './tools/index.js';
 import { registerSubagentEndedHook } from './hooks/subagentEnded.js';
 import {
@@ -43,6 +43,9 @@ export async function register(api, config = {}) {
   const workspaceRoot = config.workspace?.root ?? '/mnt/d/code/m-team';
   setWorkspaceRoot(workspaceRoot);
 
+  // 设置通知配置（供 tools 和 hooks 共享）
+  setNotifications(config.notifications ?? []);
+
   // 注册工具
   registerTools(api, config);
 
@@ -55,6 +58,7 @@ export async function register(api, config = {}) {
       'mteam_publish_task',
       'mteam_claim_task',
       'mteam_update_task',
+      'mteam_complete_task',
       'mteam_cancel_task',
       'mteam_relinquish_task',
       'mteam_get_pending',
