@@ -11,6 +11,7 @@
  */
 
 import { definePluginEntry } from 'openclaw/plugin-sdk/plugin-entry';
+import { homedir } from 'node:os';
 import { setNotifications } from './notifications.js';
 import { registerTools } from './tools/index.js';
 import { registerSubagentEndedHook } from './hooks/subagentEnded.js';
@@ -44,7 +45,10 @@ const plugin = definePluginEntry({
   register(api) {
     // 设置 workspace 根目录（OpenClaw 5.x 通过 api.pluginConfig 传递）
     const config = api.pluginConfig ?? {};
-    const workspaceRoot = config.workspaceRoot ?? '/mnt/d/code/m-team';
+    let workspaceRoot = config.workspaceRoot ?? '/mnt/d/code/m-team';
+    if (workspaceRoot.startsWith('~')) {
+      workspaceRoot = path.join(homedir(), workspaceRoot.slice(1));
+    }
     setWorkspaceRoot(workspaceRoot);
 
     // 设置通知配置（供 tools 和 hooks 共享）
