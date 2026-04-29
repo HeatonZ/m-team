@@ -104,9 +104,9 @@ export default definePluginEntry({
         const task = result.task;
 
         // 3. Plugin 内部直接创建 executor session
-        //    sessionKey 格式: mteam:{taskId}:executor
-        //    HEARTBEAT 模板解析 sessionKey 提取 taskId
-        const sessionKey = `mteam:${taskId}:executor`;
+        //    sessionKey 格式: mteam:{taskId}:{agentId}:{timestamp}
+        //    relay 后同一个 agent 重新 claim 也不会冲突
+        const sessionKey = `mteam:${taskId}:${agentId}:${Date.now()}`;
         const runResult = await api.runtime.subagent.run({
           sessionKey,
           message: `[M-Team Task #${taskId}] ${task?.description ?? ''}`

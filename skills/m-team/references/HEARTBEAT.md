@@ -3,18 +3,17 @@
 ## sessionKey 格式
 
 ```
-mteam:{taskId}:executor
+mteam:{taskId}:{agentId}:{timestamp}
 ```
 
-Plugin 在 `mteam_claim_task` 内部通过 `api.runtime.subagent.run({ sessionKey })` 直接创建。
-HEARTBEAT agent 通过解析 sessionKey 提取 taskId，无需 label 过滤。
+Plugin 在 `mteam_claim_task` 内部通过 `api.runtime.subagent.run({ sessionKey })` 直接创建。HEARTBEAT agent 通过解析 sessionKey 提取 taskId（取第一段），不需要 label 过滤。
 
 ## 解析方式（TypeScript）
 
 ```typescript
 function parseSessionKey(sessionKey: string): { taskId: string } | null {
   const parts = sessionKey.split(':');
-  if (parts[0] === 'mteam' && parts[2] === 'executor') {
+  if (parts[0] === 'mteam' && parts.length >= 2) {
     return { taskId: parts[1] };
   }
   return null;
@@ -69,7 +68,7 @@ LOOP:
 ## 关键约束
 
 1. **Plugin 内部创建 session**：`mteam_claim_task` 调用时 Plugin 已通过 `api.runtime.subagent.run()` 创建了 session，Executor 不需要单独调 `sessions_spawn`
-2. **sessionKey 固定格式**：`mteam:{taskId}:executor`，心跳时直接解析出 taskId
+2. **sessionKey 格式**：`mteam:{taskId}:{agentId}:{timestamp}`，心跳时取 `split(':')[1]` 得到 taskId
 3. **心跳时间窗口**：30min 疑似僵尸，60min 判定死亡
 4. **谎报僵尸检测**：若 `lastHeartbeatAt` 很新但 session `updatedAt` 很旧，说明 heartbeat 在跑但 executor session 已卡死，此时不发 relinquish，只发 nudge
 5. **一个 agent 一个任务**：通过 `mteam_get_agent_active` 保证不重复认领
