@@ -1,35 +1,40 @@
 ---
 name: m-team-executor
-description: M-Team 任务执行技能——当 agent 认领了 M-Team 任务后触发。执行当前步骤→判断完成/接力/放弃。
-triggers:
-  - mteam_claim_task
-  - 认领了任务
-  - 执行任务
-  - mteam_update_task
-  - 任务放回池子
-  - 接力执行
+description: "Use when agent has claimed a M-Team task via mteam_claim_task. Executes the current step, then decides: complete / relay / relinquish."
+version: 1.0.0
+author: Hermes Agent
+license: MIT
+metadata:
+  hermes:
+    tags: [m-team, task-execute, multi-agent, autonomous-agents]
+    related_skills: [m-team-publisher, skill-triggering, task-delegation]
 ---
 
-# M-Team 任务执行
+# M-Team Executor
 
-## What
+## Overview
 
-认领任务后执行当前步骤，判断是否完成、是否接力、是否放弃。
+After claiming a task from the M-Team pool, the Executor reads the task context, executes the current step described in `description`, then makes a three-way decision: complete (goal met), relay (did useful work but goal not met, return to pool), or relinquish (no progress made). Heartbeat keeps the task alive during execution.
 
-## When
+## When to Use
 
-- `mteam_claim_task` 返回成功后
-- 开始执行 `description` 中的步骤前
+- `mteam_claim_task` returned successfully
+- About to start work on `description`
+- Checking progress after a work session
+- Deciding whether to continue or return a task
 
-## Step 1：认领并读取 context
+**Do NOT use when:**
+- Task has `status: cancelled` (不可 relay)
+- Task belongs to a different executor (check `mteam_get_agent_active`)
+- No active task to work on
 
-认领成功后，读取任务详情：
+## Step 1: Read Task and Context
 
 ```javascript
 mteam_get_task({ taskId: "xxx" })
 ```
 
-**有 context 历史？** 说明是接力任务：
+If `context` is non-empty, this is a relay — prior executors left their output:
 
 ```json
 "context": [
@@ -38,28 +43,28 @@ mteam_get_task({ taskId: "xxx" })
 ]
 ```
 
-→ 从 context 了解完整链路，只做下一步，不重复已完成的工作。
+→ Resume from where the last executor stopped. Do NOT repeat已完成步骤.
 
-## Step 2：执行当前步骤
+## Step 2: Execute the Current Step
 
-按 `description` 执行。只做这一件事，不要扩大范围。
+Execute exactly what `description` says. One step only — do not expand scope.
 
-## Step 3：判断结果（三岔口）
+## Step 3: Three-Way Decision
 
 ```
-执行完毕
+After executing description:
     │
-    ├─► 核心目标达成了？
-    │     └─► 是 → 更新 status="completed"，结束
+    ├─► Goal achieved?
+    │     └─ YES → status = "completed"
     │
-    ├─► 做了有用的事（没完全达成goal）？
-    │     └─► 是 → status="pending"，追加 contextStep，放回池子接力
+    ├─► Did useful work (goal not met)?
+    │     └─ YES → status = "pending" + contextStep + contextOutput (relay)
     │
-    └─► 完全没进展？
-          └─► 调用 relinquish_task，不写无效 context
+    └─► No progress at all?
+          └─ YES → mteam_relinquish_task (no fake context)
 ```
 
-**完成（goal 达成）：**
+**Complete (goal met):**
 
 ```javascript
 mteam_update_task({
@@ -71,7 +76,7 @@ mteam_update_task({
 })
 ```
 
-**接力（做了有用的事，没完全达成）：**
+**Relay (useful work done, goal not met):**
 
 ```javascript
 mteam_update_task({
@@ -83,43 +88,43 @@ mteam_update_task({
   description: "联系这10家供应商确认价格和MOQ"
 })
 ```
+→ `executor` is auto-cleared; next agent picks it up.
 
-→ `executor` 自动置空，下一个 agent 继续。
-
-**放弃（完全没进展）：**
+**Relinquish (no progress):**
 
 ```javascript
 mteam_relinquish_task({ taskId: "xxx", agentId: "maker" })
 ```
+→ Do NOT write a fake `contextStep`. That corrupts the audit trail.
 
-→ 不写 contextStep，避免伪造进度记录。
+## Step 4: Heartbeat
 
-## Step 4：心跳保活
-
-每 5 分钟更新一次：
+Every 5 minutes while working:
 
 ```javascript
 mteam_update_task({ taskId: "xxx", lastHeartbeatAt: Date.now() })
 ```
 
-- 超过 30 分钟未更新 → 疑似僵尸
-- 超过 60 分钟 → 调用 `relinquish_task`
+| Threshold | Meaning | Action |
+|-----------|---------|--------|
+| > 30 min since last heartbeat | Possibly zombie | Monitor closely |
+| > 60 min since last heartbeat | Dead task | `mteam_relinquish_task` |
 
-**心跳 ≠ 进度。** 进度看 `contextStep` 有没有追加。
+**Heartbeat ≠ progress.** Progress = `contextStep` was appended. Heartbeat only says "I'm still alive."
 
-## 接力规则
+## Relay Rules
 
-| 情况 | 操作 |
-|------|------|
-| 当前步骤做完了，没达到 goal | 接力放回 |
-| 当前步骤做完了，达到 goal | completed |
-| 遇到障碍但能绕过去 | 自己绕，继续 |
-| 遇到障碍绕不过去 | relinquish |
-| 完全没做 | relinquish，不写假 context |
+| Situation | Action |
+|-----------|--------|
+| Step done, goal not met | Relay with contextStep |
+| Step done, goal met | Completed |
+| Blocked but can work around | Continue on own |
+| Blocked, cannot work around | Relinquish |
+| Did nothing | Relinquish, no fake context |
 
-## 产出文件规范
+## Output File Convention
 
-写入任务文件夹，只存相对路径：
+Write outputs to the task folder, store relative paths in `contextOutput.files`:
 
 ```
 {workspaceRoot}/tasks/{taskId}/
@@ -128,3 +133,21 @@ mteam_update_task({ taskId: "xxx", lastHeartbeatAt: Date.now() })
     ├── suppliers.json
     └── contact_log.md
 ```
+
+## Common Pitfalls
+
+1. **Writing fake contextStep on relinquish** — corrupts history. Relinquish = no `contextStep`.
+2. **Expanding scope beyond description** — executor should do one step, not the whole goal.
+3. **Forgetting to clear executor on relay** — plugin clears automatically, but if manual `mteam_update_task`, set `executor: null`.
+4. **Heartbeat not updated during long tasks** — task looks zombie even when working. Update every 5 min.
+5. **Treating heartbeat as progress** — if no new `contextStep` added, no real progress was made.
+
+## Verification Checklist
+
+- [ ] Read `context` before starting (know relay history)
+- [ ] Executed exactly what `description` asked
+- [ ] Decision matches reality (complete / relay / relinquish)
+- [ ] Relay includes `contextStep` + `contextOutput`
+- [ ] Relinquish has NO `contextStep`
+- [ ] Heartbeat updated every 5 min during work
+- [ ] Output files use correct relative path convention

@@ -1,75 +1,92 @@
 ---
 name: m-team-publisher
-description: M-Team 任务发布技能——当用户需要发布任务到去中心化任务池时触发。分析需求→拆解goal/description→发布。
-triggers:
-  - 发布任务
-  - 发个任务
-  - 发任务
-  - 把这个交给别人做
-  - 发布到m-team
-  - mteam_publish_task
+description: Use when user wants to publish a task to M-Team decentralized task pool. Analyzes requirements, extracts goal/input/description, calls mteam_publish_task, then exits without tracking.
+version: 1.0.0
+author: Hermes Agent
+license: MIT
+metadata:
+  hermes:
+    tags: [m-team, task-publish, multi-agent, autonomous-agents]
+    related_skills: [m-team-executor, skill-triggering, task-delegation]
 ---
 
-# M-Team 任务发布
+# M-Team Publisher
 
-## What
+## Overview
 
-将用户需求转化为 M-Team 任务池中的可执行任务。
+When a user wants to offload a task to the M-Team decentralized pool, this skill transforms a vague request into a structured task entry. Publisher analyzes the goal, extracts the first executable step as `description`, publishes via `mteam_publish_task`, then walks away — no tracking, no polling. Execution is handled by Executors; completion is pushed via notification.
 
-## When
+## When to Use
 
-- 用户要求"帮我做xxx"
-- 用户说"发布任务"
-- 用户想把任务派发给其他 agent
+- User says "帮我做xxx" or "发个任务"
+- User says "发布到m-team" or "把这个交给别人做"
+- User asks to delegate a multi-step task to other agents
+- `mteam_publish_task` tool is available and user wants task offloading
 
-## Step 1：分析需求
+**Do NOT use when:**
+- User wants you to do it yourself (no delegation needed)
+- Task is a single-step question with no meaningful subtask decomposition
+- User explicitly says "你自己做"
 
-确认三件事：
+## Step 1: Analyze the Request
 
-1. **Goal（目标）** — 不可更改的最终状态，用户要什么
-2. **Input（输入）** — 执行需要什么参数（关键词、数量、文件等）
-3. **第一步描述** — 现在立刻要做什么
+Confirm three fields before publishing:
+
+| Field | Meaning | Rule |
+|-------|---------|------|
+| `goal` | The不可更改的最终状态 | What the user ultimately wants |
+| `input` | Execution parameters | Keywords, count, files — whatever the first step needs |
+| `description` | What the next executor should do **right now** | Must be specific enough that a cold agent can act on it immediately |
+
+**Goal vs Description distinction:**
 
 ```
-Goal：找到收纳箱类目下评分高的1688供应商并报价
-Input：{ keyword: "收纳箱", count: 10 }
-第一步：搜索1688供应商，输出列表
+Goal: "找到收纳箱Top10供应商报价单"   ← 终点，不可拆
+Description: "搜索收纳箱1688供应商，输出名称+评分+主营产品+链接"  ← 第一步，可执行
 ```
 
-## Step 2：区分 Goal 和 Description
+If `description` describes the entire goal, it means the task is too small to benefit from the pool.
 
-| 字段 | 含义 | 规则 |
-|------|------|------|
-| `goal` | 最终目标 | 不可拆分、不可更改 |
-| `description` | **当前这一步**要做什么 | 下一个 executor 看到能直接执行 |
+## Step 2: Validate Before Publishing
 
-**错误示范：**
-- goal 写"搜索+联系+报价" → 太长，不是单一目标
-- description 写"完成供应商调研" → 太模糊
+Ask if unclear:
 
-**正确示范：**
-- goal = "找到收纳箱类目Top10供应商报价单"
-- description = "搜索收纳箱1688供应商，输出名称+评分+主营产品+链接"
+- Goal 模糊？→ 先澄清再发
+- Input 参数不全？→ 补全再发
+- description 太笼统（>3句）？→ 拆成更细的第一步
 
-## Step 3：发布
+## Step 3: Publish
 
 ```javascript
 mteam_publish_task({
   description: "搜索收纳箱1688供应商，输出名称+评分+主营产品+链接",
-  goal: "找到收纳箱类目Top10供应商报价单",
+  goal: "找到收纳箱Top10供应商报价单",
   input: { keyword: "收纳箱", count: 10 },
-  publisher: "user"
+  publisher: "user"   // or specific agentId
 })
 ```
 
-## Step 4：不追踪，结束
+## Step 4: Done — No Tracking
 
-任务进入 `pending` 池后，Executor 自动认领。完成后系统推送通知，不需要 publisher 蹲守。
+After publishing:
 
-## 常见错误
+- **Do not** poll `mteam_get_all_tasks`
+- **Do not** check status periodically
+- **Do not** wait for completion
 
-| 症状 | 根因 |
-|------|------|
-| executor 不知道做什么 | description 太模糊 |
-| executor 完成了但goal不对 | goal 定义不准 |
-| 任务一直pending没人接 | description 太大，应该再拆 |
+The Executor handles execution. When done, the plugin sends notifications per `notifications` config. Publisher's job is finished at Step 3.
+
+## Common Pitfalls
+
+1. **description 太模糊** — e.g. "完成供应商调研" → executor 不知道具体做什么. Fix: break into concrete first step.
+2. **goal 和 description 一样** — means task is one-step, doesn't need the pool. Fix: either do it yourself or define a real multi-step goal.
+3. **input 参数缺失** — executor gets task but lacks enough info to act. Fix: always include `{ keyword, count, file }` as appropriate.
+4. **publisher 写 agentId 而不是 "user"** — unless explicitly assigning to a specific agent, use "user" to mean "user-initiated".
+
+## Verification Checklist
+
+- [ ] `goal` is the true end state (not a step)
+- [ ] `description` is the exact next action (≤2 sentences, concrete)
+- [ ] `input` contains all parameters the first step needs
+- [ ] `publisher` is correct ("user" or specific agentId)
+- [ ] Task published without additional tracking
