@@ -56,8 +56,8 @@ function initSchema(db) {
 
     CREATE INDEX IF NOT EXISTS idx_tasks_status      ON tasks(status);
     CREATE INDEX IF NOT EXISTS idx_tasks_executor   ON tasks(executor);
-    CREATE INDEX IF NOT EXISTS idx_tasks_priority    ON tasks(priority);
-    CREATE INDEX IF NOT EXISTS idx_tasks_created_at  ON tasks(created_at);
+    CREATE INDEX IF NOT EXISTS idx_tasks_priority   ON tasks(priority);
+    CREATE INDEX IF NOT EXISTS idx_tasks_created_at ON tasks(created_at);
   `);
 }
 
@@ -91,7 +91,9 @@ export function getAllTaskRows() {
  */
 export function getTaskRowsByStatus(status) {
   const db = getDb();
-  const rows = db.prepare('SELECT * FROM tasks WHERE status = ? ORDER BY priority ASC, created_at ASC').all(status);
+  const rows = db.prepare(
+    'SELECT * FROM tasks WHERE status = ? ORDER BY priority ASC, created_at ASC'
+  ).all(status);
   return rows.map(deserializeTask);
 }
 
@@ -101,7 +103,9 @@ export function getTaskRowsByStatus(status) {
  */
 export function getTaskRowByExecutor(executor) {
   const db = getDb();
-  const row = db.prepare('SELECT * FROM tasks WHERE executor = ? AND status = ?').get(executor, 'running');
+  const row = db.prepare(
+    'SELECT * FROM tasks WHERE executor = ? AND status = ?'
+  ).get(executor, 'running');
   if (!row) return null;
   return deserializeTask(row);
 }
@@ -112,15 +116,19 @@ export function getTaskRowByExecutor(executor) {
 export function insertTask(task) {
   const db = getDb();
   db.prepare(`
-    INSERT INTO tasks (task_id, description, goal, context, priority, publisher, status, executor, last_executor, created_at, completed_at, last_heartbeat_at)
-    VALUES (@taskId, @description, @goal, @context, @priority, @publisher, @status, @executor, @lastExecutor, @createdAt, @completedAt, @lastHeartbeatAt)
+    INSERT INTO tasks
+      (task_id, description, goal, context, priority, publisher,
+       status, executor, last_executor, created_at, completed_at, last_heartbeat_at)
+    VALUES
+      (@taskId, @description, @goal, @context, @priority, @publisher,
+       @status, @executor, @lastExecutor, @createdAt, @completedAt, @lastHeartbeatAt)
   `).run(serializeTask(task));
 }
 
 /**
  * @param {string} taskId
- * @param {object} patch  - partial task fields
- * @returns {object|null} - updated row or null
+ * @param {object} patch
+ * @returns {object|null}
  */
 export function updateTaskRow(taskId, patch) {
   const db = getDb();

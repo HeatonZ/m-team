@@ -1,5 +1,5 @@
 /**
- * M-Team Queue — 去中心化任务池（SQLite 版）
+ * M-Team 任务池 — 内部写操作（需要事务的操作）
  */
 
 import fs from 'node:fs';
@@ -7,13 +7,9 @@ import path from 'node:path';
 import {
   openDb,
   getDb,
-  closeDb,
   getTaskRow,
-  getAllTaskRows,
-  getTaskRowsByStatus,
-  getTaskRowByExecutor,
-  insertTask,
   updateTaskRow,
+  insertTask,
   deleteTaskRow
 } from './db.js';
 import {
@@ -46,10 +42,6 @@ function syncTaskJson(task) {
   fs.writeFileSync(p, JSON.stringify(task, null, 2), 'utf8');
 }
 
-// ============================================================
-// init
-// ============================================================
-
 function init() {
   fs.mkdirSync(getTasksDir(), { recursive: true });
   fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
@@ -57,9 +49,13 @@ function init() {
 }
 
 // ============================================================
-// operations
+// 写操作
 // ============================================================
 
+/**
+ * 发布任务
+ * @returns {string} taskId
+ */
 export function publishTask({ description, goal, input = {}, publisher = 'user', priority }) {
   init();
 
@@ -71,10 +67,14 @@ export function publishTask({ description, goal, input = {}, publisher = 'user',
     syncTaskJson(task);
   })();
 
-  console.log(`[m-team-queue] 任务发布: ${task.taskId} - ${description}`);
+  console.log(`[m-team-pool] 任务发布: ${task.taskId} - ${description}`);
   return task.taskId;
 }
 
+/**
+ * 认领任务
+ * @returns {{ success: boolean, taskId: string, task?: object, reason?: string }}
+ */
 export function claimTask(taskId, agentId) {
   init();
 
@@ -99,47 +99,13 @@ export function claimTask(taskId, agentId) {
     const updatedTask = getTaskRow(taskId);
     syncTaskJson(updatedTask);
 
-    console.log(`[m-team-queue] ${agentId} 认领了任务 ${taskId}`);
+    console.log(`[m-team-pool] ${agentId} 认领了任务 ${taskId}`);
     return { success: true, taskId, task: updatedTask };
   })();
 }
 
-export function getPendingTasks(agentId = null) {
-  init();
-
-  if (agentId && getAgentActiveTask(agentId)) return [];
-
-  const rows = getTaskRowsByStatus(TaskStatus.PENDING);
-  return rows.slice(0, 3);
-}
-
-export function getAgentActiveTask(agentId) {
-  init();
-  return getTaskRowByExecutor(agentId);
-}
-
-export function getTask(taskId) {
-  init();
-  return getTaskRow(taskId);
-}
-
-export function getAllTasks() {
-  init();
-  return getAllTaskRows();
-}
-
-export function getTasksByExecutor(agentId) {
-  init();
-  return getAllTaskRows().filter(t => t.executor === agentId);
-}
-
 /**
- * @param {string} taskId
- * @param {string|null} status
- * @param {Object|null} contextEntry
- * @param {string|null} description
- * @param {number|null} lastHeartbeatAt
- * @param {string|null} executorId
+ * 更新任务（状态 / context / description / heartbeat）
  */
 export function updateTask(taskId, status, contextEntry = null, description = null, lastHeartbeatAt = null, executorId = null) {
   init();
@@ -182,7 +148,6 @@ export function updateTask(taskId, status, contextEntry = null, description = nu
       return task;
     }
 
-    // 普通任务：原有逻辑
     // relay：重新放回 pending 时，清空 executor，记录 lastExecutor
     if (status === TaskStatus.PENDING) {
       const patch = {
@@ -193,7 +158,6 @@ export function updateTask(taskId, status, contextEntry = null, description = nu
         lastHeartbeatAt: lastHeartbeatAt ?? null
       };
 
-      // 追加 context 步骤
       if (contextEntry) {
         const newContext = [...task.context];
         newContext.push({
@@ -234,7 +198,7 @@ export function updateTask(taskId, status, contextEntry = null, description = nu
       }
     }
 
-    // 追加 context 步骤（任何状态都可能需要追加 context）
+    // 追加 context 步骤
     if (contextEntry) {
       const current = getTaskRow(taskId);
       const newContext = [...current.context];
@@ -250,17 +214,14 @@ export function updateTask(taskId, status, contextEntry = null, description = nu
     const updated = getTaskRow(taskId);
     syncTaskJson(updated);
 
-    console.log(`[m-team-queue] 任务 ${taskId} 状态: ${status}`);
+    console.log(`[m-team-pool] 任务 ${taskId} 状态: ${status}`);
     return updated;
   })();
 }
 
 /**
- * publisher 取消任务（不可再 relay）
- * @param {string} taskId
- * @param {string} publisher
- * @param {string} [reason]
- * @returns {{ success: boolean, task: object|null, reason?: string }}
+ * Publisher 取消任务（不可再 relay）
+ * @returns {{ success: boolean, task?: object, reason?: string }}
  */
 export function cancelTask(taskId, publisher, reason) {
   init();
@@ -269,13 +230,7 @@ export function cancelTask(taskId, publisher, reason) {
   return db.transaction(() => {
     const task = getTaskRow(taskId);
     if (!task) return { success: false, task: null, reason: 'TASK_NOT_FOUND' };
-
-    // 只有 publisher 才能取消
-    if (task.publisher !== publisher) {
-      return { success: false, task, reason: 'NOT_PUBLISHER' };
-    }
-
-    // 终态任务不可取消
+    if (task.publisher !== publisher) return { success: false, task, reason: 'NOT_PUBLISHER' };
     if (task.status === TaskStatus.COMPLETED || task.status === TaskStatus.CANCELLED) {
       return { success: false, task, reason: 'ALREADY_TERMINAL' };
     }
@@ -289,16 +244,14 @@ export function cancelTask(taskId, publisher, reason) {
     const updated = getTaskRow(taskId);
     syncTaskJson(updated);
 
-    console.log(`[m-team-queue] 任务 ${taskId} 被 ${publisher} 取消: ${reason ?? '无原因'}`);
+    console.log(`[m-team-pool] 任务 ${taskId} 被 ${publisher} 取消: ${reason ?? '无原因'}`);
     return { success: true, task: updated };
   })();
 }
 
 /**
  * Executor 主动放弃当前任务（放回 pending）
- * @param {string} taskId
- * @param {string} executorId
- * @returns {{ success: boolean, task: object|null, reason?: string }}
+ * @returns {{ success: boolean, task?: object, reason?: string }}
  */
 export function relinquishTask(taskId, executorId) {
   init();
@@ -307,16 +260,8 @@ export function relinquishTask(taskId, executorId) {
   return db.transaction(() => {
     const task = getTaskRow(taskId);
     if (!task) return { success: false, task: null, reason: 'TASK_NOT_FOUND' };
-
-    // 只有当前 executor 才能放弃
-    if (task.executor !== executorId) {
-      return { success: false, task, reason: 'NOT_CURRENT_EXECUTOR' };
-    }
-
-    // cancelled 任务不能 relinquish
-    if (task.status === TaskStatus.CANCELLED) {
-      return { success: false, task, reason: 'TASK_CANCELLED' };
-    }
+    if (task.executor !== executorId) return { success: false, task, reason: 'NOT_CURRENT_EXECUTOR' };
+    if (task.status === TaskStatus.CANCELLED) return { success: false, task, reason: 'TASK_CANCELLED' };
 
     const patch = {
       status: TaskStatus.PENDING,
@@ -328,64 +273,14 @@ export function relinquishTask(taskId, executorId) {
     const updated = getTaskRow(taskId);
     syncTaskJson(updated);
 
-    console.log(`[m-team-queue] executor ${executorId} 放弃任务 ${taskId}`);
+    console.log(`[m-team-pool] executor ${executorId} 放弃任务 ${taskId}`);
     return { success: true, task: updated };
   })();
 }
 
 /**
- * 根据配置和任务，生成通知内容
- * @param {Object} task - 任务对象
- * @param {Array} notifications - 通知配置
- * @returns {Array} 通知数组
- */
-export function formatTaskNotifications(task, notifications = []) {
-  if (!notifications || notifications.length === 0) return [];
-  if (!task || task.status !== 'completed') return [];
-
-  const result = [];
-  for (const cfg of notifications) {
-    // 检查该任务的 executor 是否在 agents 列表中
-    if (!cfg.agents || !cfg.agents.includes(task.executor)) continue;
-
-    const duration = task.completedAt && task.claimedAt
-      ? `${Math.round((task.completedAt - task.claimedAt) / 1000)}秒`
-      : null;
-
-    if (cfg.provider === 'feishu') {
-      result.push({
-        provider: 'feishu',
-        chatId: cfg.groupId,
-        message: [
-          `✅ 任务完成`,
-          ``,
-          `📋 ${task.description}`,
-          `执行者: ${task.executor}`,
-          task.summary ? `结果: ${task.summary}` : null,
-          duration ? `耗时: ${duration}` : null,
-        ].filter(Boolean).join('\n')
-      });
-    } else if (cfg.provider === 'discord') {
-      result.push({
-        provider: 'discord',
-        channelId: cfg.channelId,
-        message: [
-          `✅ **${task.description}**`,
-          task.summary ? `_${task.summary}_` : null,
-          `执行者: ${task.executor}${duration ? ` | 耗时: ${duration}` : ''}`,
-        ].filter(Boolean).join('\n')
-      });
-    }
-  }
-
-  return result;
-}
-
-/**
  * subagent_ended hook 调用：executor 正常结束
- * @param {string} taskId
- * @param {Object} [contextEntry] - 可选的 context 步骤
- * @returns {{ success: boolean, task: object|null }}
+ * @returns {{ success: boolean, task?: object, reason?: string }}
  */
 export function completeTask(taskId, contextEntry = null) {
   init();
@@ -417,17 +312,14 @@ export function completeTask(taskId, contextEntry = null) {
     const updated = getTaskRow(taskId);
     syncTaskJson(updated);
 
-    console.log(`[m-team-queue] 任务 ${taskId} 完成（subagent_ended hook）`);
+    console.log(`[m-team-pool] 任务 ${taskId} 完成（subagent_ended hook）`);
     return { success: true, task: updated };
   })();
 }
 
 /**
  * subagent_ended hook 调用：executor 异常结束
- * @param {string} taskId
- * @param {string} [errorMsg]
- * @param {Object} [contextEntry] - 可选的 context 步骤
- * @returns {{ success: boolean, task: object|null }}
+ * @returns {{ success: boolean, task?: object, reason?: string }}
  */
 export function failTask(taskId, errorMsg = null, contextEntry = null) {
   init();
@@ -459,7 +351,7 @@ export function failTask(taskId, errorMsg = null, contextEntry = null) {
     const updated = getTaskRow(taskId);
     syncTaskJson(updated);
 
-    console.log(`[m-team-queue] 任务 ${taskId} 失败（subagent_ended hook）: ${errorMsg ?? ''}`);
+    console.log(`[m-team-pool] 任务 ${taskId} 失败（subagent_ended hook）: ${errorMsg ?? ''}`);
     return { success: true, task: updated };
   })();
 }
