@@ -1,6 +1,6 @@
 # M-Team 架构文档
 
-> 版本：1.2.0 | 更新：2026-04-28
+> 版本：1.3.0 | 更新：2026-04-29
 
 ---
 
@@ -30,6 +30,27 @@
 └────┬────────────────────────────┘
      │ mteam_claim_task
      ▼
+┌──────────────┐    ┌─────────────────────────────────────┐
+│ Heartbeat    │    │         Executor Session              │
+│ Session      │    │  (Plugin 内部通过 api.runtime.subagent │
+│ (HEARTBEAT   │    │   .run() 创建，sessionKey 格式:       │
+│  模板驱动)   │    │   mteam:{taskId}:executor)           │
+│              │    │                                      │
+│ 心跳轮询:    │    │  独立跑任务，不占用心跳 session       │
+│ mteam_get_   │    │  完成后写 tasks/{taskId}/task.json   │
+│  agent_active│    │  不通知心跳 session                   │
+│              │    │                                      │
+│ mteam_update │    │                                      │
+│ _task        │    │                                      │
+│ (lastHeartb..│    │                                      │
+└──────┬───────┘    └─────────────────────────────────────┘
+       │                     ↑
+       │ mteam_claim_task     │
+       │ ├─ claimTask()      │
+       │ └─ api.runtime.      │
+       │     subagent.run() ──┘  (Plugin 内部创建)
+       │
+       ▼
 ┌─────────┐ ┌─────────┐ ┌─────────┐
 │ Agent B │ │ Agent C │ │ Agent D │  自主认领
 └────┬────┘ └────┬────┘ └────┬────┘
@@ -158,8 +179,11 @@ mteam_claim_task({
   taskId: "task_1745740800000_abc123",
   agentId: "my-agent-id"
 })
-// 返回: { claimed: true, taskId: "..." }
+// 返回: { claimed: true, taskId: "...", runId: "...", sessionKey: "mteam:{taskId}:executor" }
 // 原子操作：锁文件 + 状态校验，确保只有一个 agent 能抢到
+// Plugin 内部通过 api.runtime.subagent.run() 直接创建 executor session
+// sessionKey 格式: mteam:{taskId}:executor
+// 创建成功后返回 runId 和 sessionKey
 ```
 
 ### 6.3 更新状态 / 追加步骤
@@ -291,7 +315,49 @@ npm run test:run # 单次运行
 
 ---
 
-## 10. 关键原则
+## 10. 双 Session 模型
+
+M-Team 使用两个独立的 OpenClaw Session，它们之间没有任何消息传递机制：
+
+### 两个 Session
+
+| Session | 创建方式 | 用途 | 生命周期 |
+|---------|----------|------|----------|
+| **Heartbeat Session** | HEARTBEAT 模板驱动 | 轮询任务池、维护心跳、认领任务 | 长期运行 |
+| **Executor Session** | `mteam_claim_task` 内部通过 `api.runtime.subagent.run()` 创建 | 实际执行任务 | 任务级 |
+
+### 关键约束
+
+- **Plugin 内部创建**：`mteam_claim_task` 在 claim 成功后直接调用 `api.runtime.subagent.run()`，无需 executor agent 单独操作
+- **sessionKey 格式**：`mteam:{taskId}:executor`，心跳 session 通过解析此格式提取 taskId
+- **完全独立**：Executor session 完成后不通知 Heartbeat session；Heartbeat 靠 `lastHeartbeatAt` + 轮询 `mteam_get_agent_active` 判断状态
+- **无跨 Session 回调**：这是 OpenClaw Gateway 的设计约束，任何"任务完成后通知心跳"的逻辑都需要自己实现（如 executor 完成任务后主动写心跳）
+
+### 时序
+
+```
+Heartbeat Session                Executor Session
+─────────────────              ─────────────────
+mteam_claim_task()
+  ├─ claimTask()
+  └─ api.runtime.subagent.run()
+       sessionKey="mteam:task123:executor"
+       message="[M-Team Task...]"        ← 启动 executor agent
+       ← ~100ms 创建确认
+  return { taskId, runId, sessionKey }
+
+mteam_update_task({ heartbeat })
+sleep(10min)                     [executor 跑任务]
+
+sleep(10min)                     [executor 完成，session 空闲]
+mteam_get_agent_active()
+  → lastHeartbeatAt 旧值 → 疑似僵尸
+  → 下一轮发现 status=completed → 不 relinquish
+```
+
+---
+
+## 11. 关键原则
 
 1. **schema 固定，路径可配置** — task.js 只定义任务格式，workspaceRoot 是唯一配置项
 2. **去中心化 = 没有单点** — 任务池是共享的，节点自主抢
@@ -302,7 +368,7 @@ npm run test:run # 单次运行
 
 ---
 
-## 11. 已知限制
+## 12. 已知限制
 
 - ~~并发竞态~~ — ✅ 已用锁文件解决
 - ~~暂无超时机制~~ — ✅ 心跳机制解决
