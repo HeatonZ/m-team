@@ -98,10 +98,10 @@ export default definePluginEntry({
 
         // 1. Claim 任务
         const result = claimTask(taskId, agentId);
-        if (!result.ok) return jsonResult(result);
+        if (!result.success) return jsonResult(result);
 
         // 2. 获取完整 task 信息用于创建 session
-        const task = result.task ?? getTask(taskId);
+        const task = result.task;
 
         // 3. Plugin 内部直接创建 executor session
         //    sessionKey 格式: mteam:{taskId}:executor
