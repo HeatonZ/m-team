@@ -140,7 +140,7 @@ export function registerTools(api, config) {
     parameters: Type.Object({
       taskId: Type.String({ description: '任务ID' }),
       agentId: Type.Optional(Type.String({ description: '执行者 agentId（追加 context 时必填）' })),
-      contextStep: Type.Optional(Type.String({ description: '当前步骤描述' })),
+      contextStep: Type.String({ description: '当前步骤描述（必填，必须说明这一步做了什么）' }),
       contextOutput: Type.Optional(Type.Object({
         summary: Type.Optional(Type.String({ description: '步骤摘要' })),
         files: Type.Optional(Type.Array(Type.String(), { description: '任务文件夹内的相对路径' }))
@@ -149,13 +149,10 @@ export function registerTools(api, config) {
     async execute(_toolCallId, rawParams) {
       const taskId = readStr(rawParams, 'taskId', { required: true });
       const agentId = readStr(rawParams, 'agentId');
-      const contextStep = readStr(rawParams, 'contextStep');
+      const contextStep = readStr(rawParams, 'contextStep', { required: true });
       const contextOutput = rawParams.contextOutput ?? null;
 
-      let contextEntry = null;
-      if (contextStep) {
-        contextEntry = { step: contextStep, output: contextOutput || {} };
-      }
+      const contextEntry = { step: contextStep, output: contextOutput || {} };
 
       const result = completeTask(taskId, contextEntry);
       if (!result.success) return jsonResult(result);

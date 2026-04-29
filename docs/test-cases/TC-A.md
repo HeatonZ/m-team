@@ -37,13 +37,24 @@
 
 ---
 
-## TC-A3：快速完成（无中间步骤）
+## TC-A3：快速完成（一步完成）
 
-**场景描述：** Agent 认领后直接完成，不追加任何上下文步骤。
+**场景描述：** Agent 认领后直接完成，调用 `mteam_complete_task` 传入最终步骤，任务立即完成。
 
 **测试步骤：**
 
 1. Publisher 发布任务，Agent 认领成功
-2. Agent 直接调用完成接口，不传任何上下文步骤
-3. 验证完成成功，任务状态变为已完成，完成时间被记录
-4. 验证上下文长度保持为 1（无追加，只有初始输入）
+2. Agent 调用 `mteam_complete_task`，传入 `contextStep="任务完成"`，输出摘要`{ summary: "完成" }`
+3. 验证完成成功，任务状态变为 `completed`，完成时间被记录
+4. 验证上下文长度变为 2（初始 input + 最终步骤），最终步骤的 step 和 output 正确
+
+## TC-A4：Hook 兜底完成（Executor 未主动完成）
+
+**场景描述：** Executor 异常中断或未主动调用 `mteam_complete_task`，`subagent_ended` hook 触发时以 `outcome` 信息作为兜底步骤完成记录。
+
+**测试步骤：**
+
+1. Publisher 发布任务，Agent 认领成功
+2. Executor 异常结束（不调用任何工具），`subagent_ended` hook 被触发，`outcome='error'`，`error='connection lost'`
+3. 验证任务状态变为 `failed`（而非 `completed`），失败原因被记录
+4. 验证上下文长度变为 2（初始 input + 兜底步骤），兜底步骤的 step 为 `'error'`，output 包含 `{ error: 'connection lost' }`

@@ -328,4 +328,55 @@ describe('operations.js', () => {
     assert(result.success === false);
     assert(result.reason.startsWith('TASK_NOT_RUNNING'));
   });
+
+  // ============================================================
+  // TC-A4: Hook 兜底完成
+  // ============================================================
+
+  it('completeTask 仅传 fallbackEntry（hook 兜底）', () => {
+    const taskId = opsMod.publishTask({ description: 'd', goal: 'g' });
+    opsMod.claimTask(taskId, 'agent_1');
+
+    // hook 调用时不传 contextEntry，只传 fallbackEntry
+    const result = opsMod.completeTask(taskId, null, { outcome: 'ok', error: null });
+    assert(result.success === true);
+
+    const task = poolMod.getTask(taskId);
+    assert(task.status === schemaMod.TaskStatus.COMPLETED);
+    assert(task.context.length === 2);
+    assert(task.context[1].step === 'ok');
+    assert(JSON.stringify(task.context[1].output) === '{}');
+  });
+
+  it('failTask 仅传 fallbackEntry（hook 兜底）', () => {
+    const taskId = opsMod.publishTask({ description: 'd', goal: 'g' });
+    opsMod.claimTask(taskId, 'agent_1');
+
+    const result = opsMod.failTask(taskId, 'connection lost', null, { outcome: 'error', error: 'connection lost' });
+    assert(result.success === true);
+
+    const task = poolMod.getTask(taskId);
+    assert(task.status === schemaMod.TaskStatus.FAILED);
+    assert(task.context.length === 2);
+    assert(task.context[1].step === 'error');
+    assert(task.context[1].output.error === 'connection lost');
+  });
+
+  it('completeTask executor 优先于 hook 兜底', () => {
+    const taskId = opsMod.publishTask({ description: 'd', goal: 'g' });
+    opsMod.claimTask(taskId, 'agent_1');
+
+    // executor 先完成
+    const result1 = opsMod.completeTask(taskId, { step: 'done', output: { summary: 'ok' } });
+    assert(result1.success === true);
+
+    // hook 兜底时任务已非 running，不会追加
+    const result2 = opsMod.completeTask(taskId, null, { outcome: 'ok', error: null });
+    assert(result2.success === false);
+    assert(result2.reason.startsWith('TASK_NOT_RUNNING'));
+
+    const task = poolMod.getTask(taskId);
+    assert(task.context.length === 2);
+    assert(task.context[1].step === 'done'); // executor 的 step，不是 'ok'
+  });
 });

@@ -29,7 +29,7 @@ export function registerSubagentEndedHook(api) {
     const isOk = outcome === 'ok' || outcome === 'reset';
 
     if (isOk) {
-      const result = completeTask(taskId);
+      const result = completeTask(taskId, null, { outcome, error: error || null });
       if (result.success) {
         api.logger?.info(`[m-team] subagent_ended: 任务 ${taskId} 标记完成 (outcome=${outcome})`);
         const notifications = formatTaskNotifications(result.task, getNotifications());
@@ -39,7 +39,7 @@ export function registerSubagentEndedHook(api) {
       }
     } else {
       const errorMsg = error || reason || outcome;
-      const result = failTask(taskId, errorMsg);
+      const result = failTask(taskId, errorMsg, null, { outcome, error: errorMsg });
       if (result.success) {
         api.logger?.info(`[m-team] subagent_ended: 任务 ${taskId} 标记失败 (outcome=${outcome}, error=${errorMsg})`);
       } else {

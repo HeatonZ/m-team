@@ -330,10 +330,11 @@ export function relayTask(taskId, executorId, contextEntry) {
 }
 
 /**
- * subagent_ended hook 调用：executor 正常结束
- * @returns {{ success: boolean, task?: object, reason?: string }}
+ * @param {string} taskId
+ * @param {object|null} contextEntry - executor 主动完成时传入的最终步骤
+ * @param {object|null} fallbackEntry - hook 兜底时传入 { outcome, error }
  */
-export function completeTask(taskId, contextEntry = null) {
+export function completeTask(taskId, contextEntry = null, fallbackEntry = null) {
   init();
   const db = getDb();
 
@@ -348,12 +349,14 @@ export function completeTask(taskId, contextEntry = null) {
 
     const patch = { status: TaskStatus.COMPLETED, completedAt: Date.now() };
 
-    if (contextEntry) {
+    // 优先用 executor 主动传来的 contextEntry，没有才用 hook 兜底的 fallbackEntry
+    const entryToAdd = contextEntry ?? fallbackEntry;
+    if (entryToAdd) {
       const newContext = [...task.context];
       newContext.push({
         executor: task.executor || 'unknown',
-        step: contextEntry.step,
-        output: contextEntry.output || {},
+        step: entryToAdd.step || (typeof entryToAdd.outcome === 'string' ? entryToAdd.outcome : 'completed'),
+        output: entryToAdd.output || (entryToAdd.error ? { error: entryToAdd.error } : {}),
         completedAt: Date.now()
       });
       patch.context = JSON.stringify(newContext);
@@ -363,16 +366,20 @@ export function completeTask(taskId, contextEntry = null) {
     const updated = getTaskRow(taskId);
     syncTaskJson(updated);
 
-    console.log(`[m-team-pool] 任务 ${taskId} 完成（subagent_ended hook）`);
+    const source = contextEntry ? 'executor' : 'hook';
+    console.log(`[m-team-pool] 任务 ${taskId} 完成（${source}）`);
     return { success: true, task: updated };
   })();
 }
 
 /**
  * subagent_ended hook 调用：executor 异常结束
- * @returns {{ success: boolean, task?: object, reason?: string }}
+ * @param {string} taskId
+ * @param {string|null} errorMsg
+ * @param {object|null} contextEntry - executor 主动传来
+ * @param {object|null} fallbackEntry - hook 兜底
  */
-export function failTask(taskId, errorMsg = null, contextEntry = null) {
+export function failTask(taskId, errorMsg = null, contextEntry = null, fallbackEntry = null) {
   init();
   const db = getDb();
 
@@ -387,12 +394,13 @@ export function failTask(taskId, errorMsg = null, contextEntry = null) {
 
     const patch = { status: TaskStatus.FAILED, completedAt: Date.now() };
 
-    if (contextEntry) {
+    const entryToAdd = contextEntry ?? fallbackEntry;
+    if (entryToAdd) {
       const newContext = [...task.context];
       newContext.push({
         executor: task.executor || 'unknown',
-        step: contextEntry.step,
-        output: contextEntry.output || {},
+        step: entryToAdd.step || (typeof entryToAdd.outcome === 'string' ? entryToAdd.outcome : 'failed'),
+        output: entryToAdd.output || (entryToAdd.error ? { error: entryToAdd.error } : { error: errorMsg }),
         completedAt: Date.now()
       });
       patch.context = JSON.stringify(newContext);
@@ -402,7 +410,7 @@ export function failTask(taskId, errorMsg = null, contextEntry = null) {
     const updated = getTaskRow(taskId);
     syncTaskJson(updated);
 
-    console.log(`[m-team-pool] 任务 ${taskId} 失败（subagent_ended hook）: ${errorMsg ?? ''}`);
+    console.log(`[m-team-pool] 任务 ${taskId} 失败（${contextEntry ? 'executor' : 'hook'}）: ${errorMsg ?? ''}`);
     return { success: true, task: updated };
   })();
 }
