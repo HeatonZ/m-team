@@ -71,9 +71,11 @@ export function registerTools(api, config) {
       //    sessionKey 格式: mteam:{taskId}:{agentId}:{timestamp}
       //    relay 后同一个 agent 重新 claim 也不会冲突
       const sessionKey = `mteam:${taskId}:${agentId}:${Date.now()}`;
+      const systemPrompt = `\n【任务完成规范 — 强制】\n完成任何任务后，你必须立即调用 mteam_complete_task 汇报结果。\n禁止在未调用该工具的情况下自行结束会话，否则任务将永远处于进行中状态。\n调用时 contextStep 必须描述你具体做了什么，contextOutput.summary 必须包含可验证的结果摘要。\n`;
+
       const runResult = await api.runtime.subagent.run({
         sessionKey,
-        message: `[M-Team Task #${taskId}] ${task?.description ?? ''}`
+        message: `[M-Team Task #${taskId}] ${task?.description ?? ''}${systemPrompt}`
       });
 
       return jsonResult({ ...result, runId: runResult.runId, sessionKey });
