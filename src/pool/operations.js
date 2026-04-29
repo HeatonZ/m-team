@@ -237,6 +237,7 @@ export function cancelTask(taskId, publisher, reason) {
 
     const patch = {
       status: TaskStatus.CANCELLED,
+      executor: null,
       completedAt: Date.now()
     };
 
