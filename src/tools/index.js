@@ -39,12 +39,16 @@ export function registerTools(api, config) {
       priority: Type.Optional(Type.String({ description: '优先级 high/normal/low，默认 normal', enum: ['high', 'normal', 'low'] }))
     }),
     async execute(_toolCallId, rawParams) {
+      try {
+
       const description = readStr(rawParams, 'description', { required: true });
       const goal = readStr(rawParams, 'goal', { required: true });
       const publisher = readStr(rawParams, 'publisher') ?? 'user';
       const priority = readStr(rawParams, 'priority');
       const taskId = publishTask({ description, goal, input: rawParams.input ?? {}, publisher, priority });
       return jsonResult({ taskId });
+
+      } catch(e) { return { ok: false, error: e?.message ?? String(e) }; }
     }
   });
 
@@ -57,6 +61,8 @@ export function registerTools(api, config) {
       agentId: Type.String({ description: '认领者 agentId' })
     }),
     async execute(_toolCallId, rawParams) {
+      try {
+
       const taskId = readStr(rawParams, 'taskId', { required: true });
       const agentId = readStr(rawParams, 'agentId', { required: true });
 
@@ -79,6 +85,8 @@ export function registerTools(api, config) {
       });
 
       return jsonResult({ ...result, runId: runResult.runId, sessionKey });
+
+      } catch(e) { return { ok: false, error: e?.message ?? String(e) }; }
     }
   });
 
@@ -99,6 +107,8 @@ export function registerTools(api, config) {
       lastHeartbeatAt: Type.Optional(Type.Number({ description: '心跳时间戳（毫秒）' }))
     }),
     async execute(_toolCallId, rawParams) {
+      try {
+
       const taskId = readStr(rawParams, 'taskId', { required: true });
       const agentId = readStr(rawParams, 'agentId');
       const status = readStr(rawParams, 'status');
@@ -114,6 +124,8 @@ export function registerTools(api, config) {
 
       const task = updateTask(taskId, status, contextEntry, description, lastHeartbeatAt, agentId);
       return jsonResult({ task });
+    
+      } catch(e) { return { ok: false, error: e?.message ?? String(e) }; }
     }
   });
 
@@ -127,11 +139,15 @@ export function registerTools(api, config) {
       reason: Type.Optional(Type.String({ description: '取消原因' }))
     }),
     async execute(_toolCallId, rawParams) {
+      try {
+
       const taskId = readStr(rawParams, 'taskId', { required: true });
       const publisher = readStr(rawParams, 'publisher', { required: true });
       const reason = readStr(rawParams, 'reason');
       const result = cancelTask(taskId, publisher, reason);
       return jsonResult(result);
+    
+      } catch(e) { return { ok: false, error: e?.message ?? String(e) }; }
     }
   });
 
@@ -148,6 +164,8 @@ export function registerTools(api, config) {
       }, { description: '步骤输出' }))
     }),
     async execute(_toolCallId, rawParams) {
+      try {
+
       const taskId = readStr(rawParams, 'taskId', { required: true });
       const contextStep = readStr(rawParams, 'contextStep', { required: true });
       const contextOutput = rawParams.contextOutput ?? null;
@@ -163,7 +181,9 @@ export function registerTools(api, config) {
         await sendNotifications(notifications, api);
       }
 
-      return jsonResult({ task: result.task });
+      return jsonResult({ success: result.success, task: result.task });
+
+      } catch(e) { return { ok: false, error: e?.message ?? String(e) }; }
     }
   });
 
@@ -181,6 +201,8 @@ export function registerTools(api, config) {
       }, { description: '步骤输出' }))
     }),
     async execute(_toolCallId, rawParams) {
+      try {
+
       const taskId = readStr(rawParams, 'taskId', { required: true });
       const agentId = readStr(rawParams, 'agentId', { required: true });
       const contextStep = readStr(rawParams, 'contextStep', { required: true });
@@ -191,6 +213,8 @@ export function registerTools(api, config) {
 
       // relay 不发通知（交接是正常流程，不是异常放弃）
       return jsonResult(result);
+    
+      } catch(e) { return { ok: false, error: e?.message ?? String(e) }; }
     }
   });
 
@@ -203,6 +227,8 @@ export function registerTools(api, config) {
       executorId: Type.String({ description: '执行者 agentId' })
     }),
     async execute(_toolCallId, rawParams) {
+      try {
+
       const taskId = readStr(rawParams, 'taskId', { required: true });
       const executorId = readStr(rawParams, 'executorId', { required: true });
       const result = relinquishTask(taskId, executorId);
@@ -213,7 +239,9 @@ export function registerTools(api, config) {
         await sendNotifications(notifications, api);
       }
 
-      return jsonResult({ task: result.task });
+      return jsonResult({ success: result.success, reason: result.reason, task: result.task });
+
+      } catch(e) { return { ok: false, error: e?.message ?? String(e) }; }
     }
   });
 
@@ -225,9 +253,13 @@ export function registerTools(api, config) {
       agentId: Type.Optional(Type.String({ description: '过滤：agentId' }))
     }),
     async execute(_toolCallId, rawParams) {
+      try {
+
       const agentId = readStr(rawParams, 'agentId');
       const pending = getPendingTasks(agentId ?? null);
       return jsonResult({ pending });
+    
+      } catch(e) { return { ok: false, error: e?.message ?? String(e) }; }
     }
   });
 
@@ -239,9 +271,13 @@ export function registerTools(api, config) {
       agentId: Type.String({ description: 'agentId' })
     }),
     async execute(_toolCallId, rawParams) {
+      try {
+
       const agentId = readStr(rawParams, 'agentId', { required: true });
       const activeTask = getAgentActiveTask(agentId);
       return jsonResult({ activeTask });
+    
+      } catch(e) { return { ok: false, error: e?.message ?? String(e) }; }
     }
   });
 
@@ -253,9 +289,13 @@ export function registerTools(api, config) {
       taskId: Type.String({ description: '任务ID' })
     }),
     async execute(_toolCallId, rawParams) {
+      try {
+
       const taskId = readStr(rawParams, 'taskId', { required: true });
       const task = getTask(taskId);
       return jsonResult({ task });
+    
+      } catch(e) { return { ok: false, error: e?.message ?? String(e) }; }
     }
   });
 
@@ -265,8 +305,12 @@ export function registerTools(api, config) {
     description: '获取所有任务',
     parameters: Type.Object({}),
     async execute(_toolCallId, rawParams) {
+      try {
+
       const tasks = getAllTasks();
       return jsonResult({ tasks });
+    
+      } catch(e) { return { ok: false, error: e?.message ?? String(e) }; }
     }
   });
 }

@@ -2,43 +2,69 @@
  * TC-K：db.js 底层
  * 对应 docs/test-cases/TC-K.md
  */
-import { describe, it } from 'vitest';
+import { describe, it, beforeEach } from 'vitest';
 import assert from 'node:assert';
 import fs from 'node:fs';
 import { openDb, closeDb, getDb } from '../src/pool/db.js';
-import { TaskStatus } from '../src/schema/task.js';
-import * as ops from '../src/pool/operations.js';
-import * as pool from '../src/pool/index.js';
+import { createMockApi } from './helpers/mockApi.js';
+import { registerTools } from '../src/tools/index.js';
+
+const NOOP_CONFIG = { notifications: [] };
+
+async function callTool(api, toolName, params) {
+  const tool = api.getTool(toolName);
+  if (!tool) throw new Error(`Tool not found: ${toolName}`);
+  return tool.execute('mock-call-id', params);
+}
+
+function extract(result: { ok: boolean; data: unknown }): unknown {
+  return result.ok ? result.data : result;
+}
+
+function getTask(result: { ok: boolean; data: unknown }): unknown {
+  const data = extract(result) as { task?: unknown; success?: boolean };
+  return data.task ?? data;
+}
 
 describe('TC-K：db.js 底层', () => {
 
-  describe('TC-K1：context 嵌套对象序列化正确', () => {
-    it('深层嵌套对象序列化后值不变', () => {
-      const taskId = ops.publishTask({ description: 'd', goal: 'g' });
-      ops.claimTask(taskId, 'alice');
+  let api: ReturnType<typeof createMockApi>;
 
-      ops.completeTask(taskId, {
-        step: 'deep',
-        output: {
+  beforeEach(async () => {
+    api = createMockApi(NOOP_CONFIG);
+    await registerTools(api, NOOP_CONFIG);
+  });
+
+  describe('TC-K1：context 嵌套对象序列化正确', () => {
+    it('深层嵌套对象序列化后值不变', async () => {
+      const pubResult = await callTool(api, 'mteam_publish_task', { description: 'd', goal: 'g' });
+      const taskId = (extract(pubResult) as { taskId: string }).taskId;
+      await callTool(api, 'mteam_claim_task', { taskId, agentId: 'alice' });
+
+      await callTool(api, 'mteam_complete_task', {
+        taskId,
+        contextStep: 'deep',
+        contextOutput: {
           data: { nested: { deep: { value: 42 } } },
           items: ['a', 'b'],
           map: { k1: 'v1' }
         }
       });
 
-      const task = pool.getTask(taskId);
-      assert.equal(task!.context[1].output!.data!.nested!.deep!.value, 42);
-      assert.equal(task!.context[1].output!.items![0], 'a');
-      assert.equal(task!.context[1].output!.map!.k1, 'v1');
+      const task = getTask(await callTool(api, 'mteam_get_task', { taskId })) as { context: { output?: { data?: { nested?: { deep?: { value?: number } } } } }[] };
+      assert.equal(task.context[1].output!.data!.nested!.deep!.value, 42);
+      assert.equal(task.context[1].output!.items![0], 'a');
+      assert.equal(task.context[1].output!.map!.k1, 'v1');
     });
   });
 
   describe('TC-K2：updateTaskRow 字段名映射正确（camelCase → snake_case）', () => {
-    it('completedAt → completed_at，lastHeartbeatAt → last_heartbeat_at，lastExecutor → last_executor', () => {
-      const taskId = ops.publishTask({ description: 'd', goal: 'g' });
-      ops.claimTask(taskId, 'alice');
+    it('completedAt → completed_at，lastHeartbeatAt → last_heartbeat_at，lastExecutor → last_executor', async () => {
+      const pubResult = await callTool(api, 'mteam_publish_task', { description: 'd', goal: 'g' });
+      const taskId = (extract(pubResult) as { taskId: string }).taskId;
+      await callTool(api, 'mteam_claim_task', { taskId, agentId: 'alice' });
 
-      ops.completeTask(taskId, { step: 'done', output: {} });
+      await callTool(api, 'mteam_complete_task', { taskId, contextStep: 'done', contextOutput: {} });
 
       const db = getDb();
       const row = db.prepare('SELECT completed_at, last_heartbeat_at, last_executor FROM tasks WHERE task_id = ?').get(taskId) as any;

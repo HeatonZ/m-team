@@ -3,74 +3,104 @@
  * 对应 docs/test-cases/TC-E.md
  * 区别于 relay：relinquish 不追加 context 步骤
  */
-import { describe, it } from 'vitest';
+import { describe, it, beforeEach } from 'vitest';
 import assert from 'node:assert';
-import { TaskStatus } from '../src/schema/task.js';
-import * as pool from '../src/pool/index.js';
-import * as ops from '../src/pool/operations.js';
+import { createMockApi } from './helpers/mockApi.js';
+import { registerTools } from '../src/tools/index.js';
+
+const NOOP_CONFIG = { notifications: [] };
+
+async function callTool(api, toolName, params) {
+  const tool = api.getTool(toolName);
+  if (!tool) throw new Error(`Tool not found: ${toolName}`);
+  return tool.execute('mock-call-id', params);
+}
+
+function extract(result: { ok: boolean; data: unknown }): unknown {
+  return result.ok ? result.data : result;
+}
+
+function getTask(result: { ok: boolean; data: unknown }): unknown {
+  const data = extract(result) as { task?: unknown; success?: boolean };
+  return data.task ?? data;
+}
 
 describe('TC-E：放弃任务流程', () => {
 
+  let api: ReturnType<typeof createMockApi>;
+
+  beforeEach(async () => {
+    api = createMockApi(NOOP_CONFIG);
+    await registerTools(api, NOOP_CONFIG);
+  });
+
   describe('TC-E1：Agent 放弃后另一个 Agent 完成', () => {
-    it('relinquish 不追加 context（与 relay 的关键区别）', () => {
-      const taskId = ops.publishTask({ description: 'd', goal: 'g' });
-      ops.claimTask(taskId, 'alice');
+    it('relinquish 不追加 context（与 relay 的关键区别）', async () => {
+      const pubResult = await callTool(api, 'mteam_publish_task', { description: 'd', goal: 'g' });
+      const taskId = (extract(pubResult) as { taskId: string }).taskId;
+      await callTool(api, 'mteam_claim_task', { taskId, agentId: 'alice' });
 
       // 先用 updateTask 追加一条上下文（模拟部分工作）
-      ops.updateTask(taskId, null, { step: '做了部分工作', output: {} });
-      assert.equal(pool.getTask(taskId)!.context.length, 2);
+      await callTool(api, 'mteam_update_task', { taskId, contextStep: '做了部分工作', contextOutput: {} });
+      const afterUpdate = getTask(await callTool(api, 'mteam_get_task', { taskId })) as { context: unknown[] };
+      assert.equal(afterUpdate.context.length, 2);
 
-      const result = ops.relinquishTask(taskId, 'alice');
-      assert.equal(result.success, true);
+      const relinquishResult = await callTool(api, 'mteam_relinquish_task', { taskId, executorId: 'alice' });
+      assert.equal((extract(relinquishResult) as { success: boolean }).success, true);
 
-      const task = pool.getTask(taskId);
-      assert.equal(task!.status, TaskStatus.PENDING);
-      assert.equal(task!.executor, null);
-      assert.equal(task!.lastExecutor, 'alice');
-      assert.equal(task!.context.length, 2); // relinquish 不追加，context 不变
+      const task = getTask(await callTool(api, 'mteam_get_task', { taskId })) as { status: string; executor: string; lastExecutor: string; context: unknown[] };
+      assert.equal(task.status, 'pending');
+      assert.equal(task.executor, null);
+      assert.equal(task.lastExecutor, 'alice');
+      assert.equal(task.context.length, 2); // relinquish 不追加，context 不变
     });
 
-    it('bob 接手完成，context 长度只增加 1（bob 的完成步骤）', () => {
-      const taskId = ops.publishTask({ description: 'd', goal: 'g' });
-      ops.claimTask(taskId, 'alice');
-      ops.updateTask(taskId, null, { step: '部分工作', output: {} });
-      ops.relinquishTask(taskId, 'alice');
+    it('bob 接手完成，context 长度只增加 1（bob 的完成步骤）', async () => {
+      const pubResult = await callTool(api, 'mteam_publish_task', { description: 'd', goal: 'g' });
+      const taskId = (extract(pubResult) as { taskId: string }).taskId;
+      await callTool(api, 'mteam_claim_task', { taskId, agentId: 'alice' });
+      await callTool(api, 'mteam_update_task', { taskId, contextStep: '部分工作', contextOutput: {} });
+      await callTool(api, 'mteam_relinquish_task', { taskId, executorId: 'alice' });
 
-      ops.claimTask(taskId, 'bob');
-      const result = ops.completeTask(taskId, { step: 'bob 完成', output: {} });
+      await callTool(api, 'mteam_claim_task', { taskId, agentId: 'bob' });
+      const completeResult = await callTool(api, 'mteam_complete_task', { taskId, contextStep: 'bob 完成', contextOutput: {} });
 
-      assert.equal(result.success, true);
-      const task = pool.getTask(taskId);
-      assert.equal(task!.status, TaskStatus.COMPLETED);
-      assert.equal(task!.context.length, 3); // input + alice部分 + bob完成
+      assert.equal((extract(completeResult) as { success: boolean }).success, true);
+      const task = getTask(await callTool(api, 'mteam_get_task', { taskId })) as { status: string; context: unknown[] };
+      assert.equal(task.status, 'completed');
+      assert.equal(task.context.length, 3); // input + alice部分 + bob完成
     });
   });
 
   describe('TC-E2：非当前 Executor 放弃失败', () => {
-    it('bob 放弃 alice 的任务失败', () => {
-      const taskId = ops.publishTask({ description: 'd', goal: 'g' });
-      ops.claimTask(taskId, 'alice');
+    it('bob 放弃 alice 的任务失败', async () => {
+      const pubResult = await callTool(api, 'mteam_publish_task', { description: 'd', goal: 'g' });
+      const taskId = (extract(pubResult) as { taskId: string }).taskId;
+      await callTool(api, 'mteam_claim_task', { taskId, agentId: 'alice' });
 
-      const result = ops.relinquishTask(taskId, 'bob');
+      const result = await callTool(api, 'mteam_relinquish_task', { taskId, executorId: 'bob' });
 
-      assert.equal(result.success, false);
-      assert.equal(result.reason, 'NOT_CURRENT_EXECUTOR');
-      assert.equal(pool.getTask(taskId)!.executor, 'alice');
-      assert.equal(pool.getTask(taskId)!.status, TaskStatus.RUNNING);
+      assert.equal((extract(result) as { success: boolean }).success, false);
+      assert.equal((extract(result) as { reason: string }).reason, 'NOT_CURRENT_EXECUTOR');
+      const task = getTask(await callTool(api, 'mteam_get_task', { taskId })) as { executor: string; status: string };
+      assert.equal(task.executor, 'alice');
+      assert.equal(task.status, 'running');
     });
   });
 
   describe('TC-E3：CANCELLED 任务不可放弃', () => {
-    it('已取消的任务 relinquishment 失败', () => {
-      const taskId = ops.publishTask({ description: 'd', goal: 'g' });
-      ops.claimTask(taskId, 'alice');
-      ops.cancelTask(taskId, 'user', 'reason');
+    it('已取消的任务 relinquishment 失败', async () => {
+      const pubResult = await callTool(api, 'mteam_publish_task', { description: 'd', goal: 'g' });
+      const taskId = (extract(pubResult) as { taskId: string }).taskId;
+      await callTool(api, 'mteam_claim_task', { taskId, agentId: 'alice' });
+      await callTool(api, 'mteam_cancel_task', { taskId, publisher: 'user', reason: 'reason' });
 
-      const result = ops.relinquishTask(taskId, 'alice');
+      const result = await callTool(api, 'mteam_relinquish_task', { taskId, executorId: 'alice' });
 
-      assert.equal(result.success, false);
-      assert.equal(result.reason, 'TASK_CANCELLED');
-      assert.equal(pool.getTask(taskId)!.status, TaskStatus.CANCELLED);
+      assert.equal((extract(result) as { success: boolean }).success, false);
+      assert.equal((extract(result) as { reason: string }).reason, 'TASK_CANCELLED');
+      const task = getTask(await callTool(api, 'mteam_get_task', { taskId })) as { status: string };
+      assert.equal(task.status, 'cancelled');
     });
   });
 });
