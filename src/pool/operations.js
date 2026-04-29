@@ -7,6 +7,8 @@ import path from 'node:path';
 import {
   openDb,
   getDb,
+  closeDb,
+  isDbOpen,
   getTaskRow,
   updateTaskRow,
   insertTask,
@@ -20,12 +22,17 @@ import {
 } from '../schema/task.js';
 
 let WORKSPACE_ROOT = '/mnt/d/code/m-team';
-let DB_PATH = null;
+export let DB_PATH = null;
 
 export function setWorkspaceRoot(root) {
   WORKSPACE_ROOT = root;
   DB_PATH = path.join(root, 'queue', 'm-team.db');
   setSchemaWorkspaceRoot(path.join(root, 'tasks'));
+
+  // 工作空间路径变了必须关闭旧连接，否则下次 openDb 仍返回缓存的旧 DB
+  if (isDbOpen()) {
+    closeDb();
+  }
 }
 
 function getTasksDir() {
@@ -261,8 +268,8 @@ export function relinquishTask(taskId, executorId) {
   return db.transaction(() => {
     const task = getTaskRow(taskId);
     if (!task) return { success: false, task: null, reason: 'TASK_NOT_FOUND' };
-    if (task.executor !== executorId) return { success: false, task, reason: 'NOT_CURRENT_EXECUTOR' };
     if (task.status === TaskStatus.CANCELLED) return { success: false, task, reason: 'TASK_CANCELLED' };
+    if (task.executor !== executorId) return { success: false, task, reason: 'NOT_CURRENT_EXECUTOR' };
 
     const patch = {
       status: TaskStatus.PENDING,
@@ -293,8 +300,8 @@ export function relayTask(taskId, executorId, contextEntry) {
   return db.transaction(() => {
     const task = getTaskRow(taskId);
     if (!task) return { success: false, task: null, reason: 'TASK_NOT_FOUND' };
-    if (task.executor !== executorId) return { success: false, task: null, reason: 'NOT_CURRENT_EXECUTOR' };
     if (task.status === TaskStatus.CANCELLED) return { success: false, task: null, reason: 'TASK_CANCELLED' };
+    if (task.executor !== executorId) return { success: false, task: null, reason: 'NOT_CURRENT_EXECUTOR' };
 
     const patch = {
       status: TaskStatus.PENDING,

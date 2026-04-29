@@ -34,6 +34,10 @@ export function closeDb() {
   }
 }
 
+export function isDbOpen() {
+  return _db !== null;
+}
+
 /**
  * @param {Database.Database} db
  */
