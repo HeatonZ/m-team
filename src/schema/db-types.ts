@@ -1,0 +1,59 @@
+/**
+ * M-Team 数据库行类型
+ *
+ * SQLite 行使用 snake_case 列名，与内存中 Task 的 camelCase 对应。
+ */
+
+import type { Task, TaskPriority, TaskStatus } from './task.js';
+
+// DB 行类型（snake_case）
+export interface TaskRow {
+  task_id: string;
+  description: string;
+  goal: string;
+  context: string; // JSON string
+  priority: string;
+  publisher: string;
+  status: string;
+  executor: string | null;
+  last_executor: string | null;
+  created_at: number;
+  completed_at: number | null;
+  last_heartbeat_at: number | null;
+}
+
+// 序列化：Task → TaskRow（写入 DB）
+export function serializeTask(task: Task): TaskRow {
+  return {
+    task_id: task.taskId,
+    description: task.description,
+    goal: task.goal,
+    context: JSON.stringify(task.context),
+    priority: task.priority,
+    publisher: task.publisher,
+    status: task.status,
+    executor: task.executor,
+    last_executor: task.lastExecutor,
+    created_at: task.createdAt,
+    completed_at: task.completedAt ?? null,
+    last_heartbeat_at: task.lastHeartbeatAt ?? null
+  };
+}
+
+// 反序列化：TaskRow → Task（从 DB 读出）
+export function deserializeTask(row: TaskRow): Task {
+  return {
+    taskId: row.task_id,
+    description: row.description,
+    goal: row.goal,
+    context: JSON.parse(row.context),
+    priority: row.priority as TaskPriority,
+    publisher: row.publisher,
+    status: row.status as TaskStatus,
+    executor: row.executor,
+    lastExecutor: row.last_executor,
+    createdAt: row.created_at,
+    completedAt: row.completed_at,
+    lastHeartbeatAt: row.last_heartbeat_at
+  };
+}

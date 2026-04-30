@@ -11,46 +11,44 @@ import {
   isDbOpen,
   getTaskRow,
   updateTaskRow,
-  insertTask,
-  deleteTaskRow
-} from './db.js';
+  insertTask
+} from './db';
 import {
   TaskStatus,
-  createTask,
-  ensureTaskWorkspace,
-  setWorkspaceRoot as setSchemaWorkspaceRoot
-} from '../schema/task.js';
+  TaskPriority,
+  type Task,
+  type ContextStepEntry,
+  createTask
+} from '../schema/task';
 
 let WORKSPACE_ROOT = '/mnt/d/code/m-team';
-export let DB_PATH = null;
+export let DB_PATH: string | null = null;
 
-export function setWorkspaceRoot(root) {
+export function setWorkspaceRoot(root: string): void {
   WORKSPACE_ROOT = root;
   DB_PATH = path.join(root, 'queue', 'm-team.db');
-  setSchemaWorkspaceRoot(path.join(root, 'tasks'));
-
-  // 工作空间路径变了必须关闭旧连接，否则下次 openDb 仍返回缓存的旧 DB
+  // 工作空间路径变了必须关闭旧连接
   if (isDbOpen()) {
     closeDb();
   }
 }
 
-function getTasksDir() {
+function getTasksDir(): string {
   return path.join(WORKSPACE_ROOT, 'tasks');
 }
 
-function getTaskPath(taskId) {
-  return path.join(ensureTaskWorkspace(taskId), 'task.json');
+function getTaskPath(taskId: string): string {
+  return path.join(getTasksDir(), taskId, 'task.json');
 }
 
 /** 同步 task.json 代理文件（供 agents 直接读文件系统） */
-function syncTaskJson(task) {
+function syncTaskJson(task: Task): void {
   const p = getTaskPath(task.taskId);
+  fs.mkdirSync(path.dirname(p), { recursive: true });
   fs.writeFileSync(p, JSON.stringify(task, null, 2), 'utf8');
 }
 
-function init() {
-  // 仅当工作空间根目录已设置时才初始化（测试环境由 setup.js 调用 setWorkspaceRoot）
+function init(): void {
   if (!DB_PATH) return;
   fs.mkdirSync(getTasksDir(), { recursive: true });
   fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
@@ -61,14 +59,17 @@ function init() {
 // 写操作
 // ============================================================
 
-/**
- * 发布任务
- * @returns {string} taskId
- */
-export function publishTask({ description, goal, input = {}, publisher = 'user', priority }) {
+export function publishTask(input: {
+  description: string;
+  goal: string;
+  input?: Record<string, unknown>;
+  publisher?: string;
+  priority?: string;
+}): string {
   init();
 
-  const task = createTask({ description, goal, input, publisher, priority });
+  const { description, goal, input: inputData, publisher, priority } = input;
+  const task = createTask({ description, goal, input: inputData, publisher, priority: priority as TaskPriority | undefined });
 
   const db = getDb();
   db.transaction(() => {
@@ -76,29 +77,35 @@ export function publishTask({ description, goal, input = {}, publisher = 'user',
     syncTaskJson(task);
   })();
 
-  console.log(`[m-team-pool] 任务发布: ${task.taskId} - ${description}`);
+  console.log(`[m-team-pool] 任务发布: ${task.taskId} - ${input.description}`);
   return task.taskId;
 }
 
-/**
- * 认领任务
- * @returns {{ success: boolean, taskId: string, task?: object, reason?: string }}
- */
-export function claimTask(taskId, agentId) {
-  init();
+// ============================================================
+// claimTask
+// ============================================================
 
+export interface ClaimResult {
+  success: boolean;
+  taskId: string;
+  task?: Task;
+  reason?: string;
+}
+
+export function claimTask(taskId: string, agentId: string): ClaimResult {
+  init();
   const db = getDb();
 
-  return db.transaction(() => {
+  const result = db.transaction(() => {
     const task = getTaskRow(taskId);
     if (!task) return { success: false, taskId, reason: 'TASK_NOT_FOUND' };
     if (task.status !== TaskStatus.PENDING) return { success: false, taskId, reason: 'NOT_PENDING' };
 
-    // 防重认领：agent 已持有活跃任务时不能再认领新任务
-    const existingActive = db.prepare('SELECT task_id FROM tasks WHERE executor = ? AND status = ?').get(agentId, TaskStatus.RUNNING);
+    const existingActive = db.prepare(
+      'SELECT task_id FROM tasks WHERE executor = ? AND status = ?'
+    ).get(agentId, TaskStatus.RUNNING);
     if (existingActive) return { success: false, taskId, reason: 'ALREADY_HAS_ACTIVE_TASK' };
 
-    // relay：上一个 executor 成为 lastExecutor
     const newLastExecutor = task.executor !== null ? task.executor : task.lastExecutor;
 
     const updated = db.prepare(
@@ -109,138 +116,147 @@ export function claimTask(taskId, agentId) {
       return { success: false, taskId, reason: 'ALREADY_CLAIMED' };
     }
 
-    const updatedTask = getTaskRow(taskId);
+    const updatedTask = getTaskRow(taskId)!;
     syncTaskJson(updatedTask);
-
     console.log(`[m-team-pool] ${agentId} 认领了任务 ${taskId}`);
     return { success: true, taskId, task: updatedTask };
   })();
+
+  return result as ClaimResult;
 }
 
-/**
- * 更新任务（状态 / context / description / heartbeat）
- */
-export function updateTask(taskId, status, contextEntry = null, description = null, lastHeartbeatAt = null, executorId = null) {
-  init();
+// ============================================================
+// updateTask
+// ============================================================
 
+export interface ContextEntryInput {
+  step: string;
+  output?: Record<string, unknown>;
+}
+
+export function updateTask(
+  taskId: string,
+  status: string | null,
+  contextEntry: ContextEntryInput | null,
+  description: string | null,
+  lastHeartbeatAt: number | null,
+  executorId: string | null
+): Task | null {
+  init();
   const db = getDb();
 
-  return db.transaction(() => {
+  const result = db.transaction(() => {
     const task = getTaskRow(taskId);
     if (!task) return null;
 
-    // cancelled 任务：允许追加 context，允许完成/失败；拒绝 relay
+    // cancelled 任务处理
     if (task.status === TaskStatus.CANCELLED) {
       if (status === TaskStatus.PENDING) {
-        return { error: 'TASK_CANCELLED', task };
+        return task; // relay 被拒绝，保持 cancelled
       }
-
       if (status === TaskStatus.COMPLETED || status === TaskStatus.FAILED) {
-        const patch = { status, completedAt: Date.now() };
+        const patch: Record<string, unknown> = { status: status as Task['status'], completedAt: Date.now() };
         updateTaskRow(taskId, patch);
-        const updated = getTaskRow(taskId);
+        const updated = getTaskRow(taskId)!;
         syncTaskJson(updated);
         return updated;
       }
-
-      // 只追加 context 或心跳，保持 cancelled
+      // 只追加 context 或心跳
       if (contextEntry) {
         const newContext = [...task.context];
         newContext.push({
+          type: 'step',
           executor: executorId || task.executor || 'unknown',
           step: contextEntry.step,
-          output: contextEntry.output || {},
+          output: (contextEntry.output ?? {}) as ContextStepEntry['output'],
           completedAt: Date.now()
         });
         updateTaskRow(taskId, { context: JSON.stringify(newContext) });
-        const updated = getTaskRow(taskId);
+        const updated = getTaskRow(taskId)!;
         syncTaskJson(updated);
         return updated;
       }
-
       return task;
     }
 
-    // relay：重新放回 pending 时，清空 executor，记录 lastExecutor
+    // relay：重新放回 pending
     if (status === TaskStatus.PENDING) {
-      const patch = {
+      const patch: Record<string, unknown> = {
         status: TaskStatus.PENDING,
         executor: null,
         lastExecutor: task.executor ?? null,
         description: description ?? task.description,
         lastHeartbeatAt: lastHeartbeatAt ?? null
       };
-
       if (contextEntry) {
         const newContext = [...task.context];
         newContext.push({
+          type: 'step',
           executor: executorId || task.executor || 'unknown',
           step: contextEntry.step,
-          output: contextEntry.output || {},
+          output: (contextEntry.output ?? {}) as ContextStepEntry['output'],
           completedAt: Date.now()
         });
         patch.context = JSON.stringify(newContext);
       }
-
       updateTaskRow(taskId, patch);
-      const updated = getTaskRow(taskId);
+      const updated = getTaskRow(taskId)!;
       syncTaskJson(updated);
       return updated;
     }
 
     // 普通状态更新
     if (status) {
-      const patch = { status };
+      const patch: Record<string, unknown> = { status: status as Task['status'] };
       if (status === TaskStatus.COMPLETED || status === TaskStatus.FAILED) {
         patch.completedAt = Date.now();
       }
-      if (status === TaskStatus.RUNNING && !task.lastHeartbeatAt) {
-        patch.lastHeartbeatAt = Date.now();
-      }
       if (description) patch.description = description;
       if (lastHeartbeatAt) patch.lastHeartbeatAt = lastHeartbeatAt;
-
       updateTaskRow(taskId, patch);
     } else {
-      // 只更新心跳
-      if (lastHeartbeatAt) {
-        updateTaskRow(taskId, { lastHeartbeatAt });
-      }
-      if (description) {
-        updateTaskRow(taskId, { description });
-      }
+      if (lastHeartbeatAt) updateTaskRow(taskId, { lastHeartbeatAt });
+      if (description) updateTaskRow(taskId, { description });
     }
 
     // 追加 context 步骤
     if (contextEntry) {
-      const current = getTaskRow(taskId);
+      const current = getTaskRow(taskId)!;
       const newContext = [...current.context];
       newContext.push({
+        type: 'step',
         executor: executorId || current.executor || 'unknown',
         step: contextEntry.step,
-        output: contextEntry.output || {},
+        output: (contextEntry.output ?? {}) as ContextStepEntry['output'],
         completedAt: Date.now()
       });
       updateTaskRow(taskId, { context: JSON.stringify(newContext) });
     }
 
-    const updated = getTaskRow(taskId);
+    const updated = getTaskRow(taskId)!;
     syncTaskJson(updated);
-
     console.log(`[m-team-pool] 任务 ${taskId} 状态: ${status}`);
     return updated;
   })();
+
+  return result as Task | null;
 }
 
-/**
- * Publisher 取消任务（不可再 relay）
- * @returns {{ success: boolean, task?: object, reason?: string }}
- */
-export function cancelTask(taskId, publisher, reason) {
+// ============================================================
+// cancelTask
+// ============================================================
+
+export interface CancelResult {
+  success: boolean;
+  task?: Task | null;
+  reason?: string;
+}
+
+export function cancelTask(taskId: string, publisher: string, reason?: string): CancelResult {
   init();
   const db = getDb();
 
-  return db.transaction(() => {
+  const result = db.transaction(() => {
     const task = getTaskRow(taskId);
     if (!task) return { success: false, task: null, reason: 'TASK_NOT_FOUND' };
     if (task.publisher !== publisher) return { success: false, task, reason: 'NOT_PUBLISHER' };
@@ -248,175 +264,213 @@ export function cancelTask(taskId, publisher, reason) {
       return { success: false, task, reason: 'ALREADY_TERMINAL' };
     }
 
-    const patch = {
+    const patch: Record<string, unknown> = {
       status: TaskStatus.CANCELLED,
       executor: null,
       completedAt: Date.now()
     };
-
     updateTaskRow(taskId, patch);
-    const updated = getTaskRow(taskId);
+    const updated = getTaskRow(taskId)!;
     syncTaskJson(updated);
-
     console.log(`[m-team-pool] 任务 ${taskId} 被 ${publisher} 取消: ${reason ?? '无原因'}`);
     return { success: true, task: updated };
   })();
+
+  return result as CancelResult;
 }
 
-/**
- * Executor 主动放弃当前任务（放回 pending，不追加 context）
- * @returns {{ success: boolean, task?: object, reason?: string }}
- */
-export function relinquishTask(taskId, executorId) {
+// ============================================================
+// relinquishTask
+// ============================================================
+
+export interface RelinquishResult {
+  success: boolean;
+  task?: Task | null;
+  reason?: string;
+}
+
+export function relinquishTask(taskId: string, executorId: string): RelinquishResult {
   init();
   const db = getDb();
 
-  return db.transaction(() => {
+  const result = db.transaction(() => {
     const task = getTaskRow(taskId);
     if (!task) return { success: false, task: null, reason: 'TASK_NOT_FOUND' };
     if (task.status === TaskStatus.CANCELLED) return { success: false, task, reason: 'TASK_CANCELLED' };
     if (task.executor !== executorId) return { success: false, task, reason: 'NOT_CURRENT_EXECUTOR' };
 
-    const patch = {
+    const patch: Record<string, unknown> = {
       status: TaskStatus.PENDING,
       executor: null,
       lastExecutor: executorId
     };
-
     updateTaskRow(taskId, patch);
-    const updated = getTaskRow(taskId);
+    const updated = getTaskRow(taskId)!;
     syncTaskJson(updated);
-
     console.log(`[m-team-pool] executor ${executorId} 放弃任务 ${taskId}`);
     return { success: true, task: updated };
   })();
+
+  return result as RelinquishResult;
 }
 
-/**
- * Executor 完成当前步骤并交接给下一个 executor（放回 pending，追加 context）
- * @param {string} taskId
- * @param {string} executorId
- * @param {{ step: string, output?: object }} contextEntry
- * @returns {{ success: boolean, task?: object, reason?: string }}
- */
-export function relayTask(taskId, executorId, contextEntry) {
+// ============================================================
+// relayTask
+// ============================================================
+
+export interface RelayResult {
+  success: boolean;
+  task?: Task | null;
+  reason?: string;
+}
+
+export function relayTask(
+  taskId: string,
+  executorId: string,
+  contextEntry: ContextEntryInput
+): RelayResult {
   init();
   const db = getDb();
 
-  return db.transaction(() => {
+  const result = db.transaction(() => {
     const task = getTaskRow(taskId);
     if (!task) return { success: false, task: null, reason: 'TASK_NOT_FOUND' };
     if (task.status === TaskStatus.CANCELLED) return { success: false, task: null, reason: 'TASK_CANCELLED' };
     if (task.executor !== executorId) return { success: false, task: null, reason: 'NOT_CURRENT_EXECUTOR' };
 
-    const patch = {
+    const patch: Record<string, unknown> = {
       status: TaskStatus.PENDING,
       executor: null,
       lastExecutor: executorId
     };
-
-    if (contextEntry) {
-      const newContext = [...task.context];
-      newContext.push({
-        executor: executorId,
-        step: contextEntry.step,
-        output: contextEntry.output || {},
-        completedAt: Date.now()
-      });
-      patch.context = JSON.stringify(newContext);
-    }
+    const newContext = [...task.context];
+    newContext.push({
+      type: 'step',
+      executor: executorId,
+      step: contextEntry.step,
+      output: (contextEntry.output ?? {}) as ContextStepEntry['output'],
+      completedAt: Date.now()
+    });
+    patch.context = JSON.stringify(newContext);
 
     updateTaskRow(taskId, patch);
-    const updated = getTaskRow(taskId);
+    const updated = getTaskRow(taskId)!;
     syncTaskJson(updated);
-
     console.log(`[m-team-pool] executor ${executorId} 交接任务 ${taskId}（relay）`);
     return { success: true, task: updated };
   })();
+
+  return result as RelayResult;
 }
 
-/**
- * @param {string} taskId
- * @param {object|null} contextEntry - executor 主动完成时传入的最终步骤
- * @param {object|null} fallbackEntry - hook 兜底时传入 { outcome, error }
- */
-export function completeTask(taskId, contextEntry = null, fallbackEntry = null) {
+// ============================================================
+// completeTask
+// ============================================================
+
+export interface CompleteResult {
+  success: boolean;
+  task?: Task;
+  reason?: string;
+}
+
+export function completeTask(
+  taskId: string,
+  contextEntry: ContextEntryInput | null,
+  fallbackEntry?: { outcome?: string; error?: string }
+): CompleteResult {
   init();
   const db = getDb();
 
-  return db.transaction(() => {
+  const result = db.transaction(() => {
     const task = getTaskRow(taskId);
     if (!task) return { success: false, reason: 'TASK_NOT_FOUND' };
 
-    // relay 后旧 session 结束时任务已非 running，直接跳过
     if (task.status !== TaskStatus.RUNNING) {
       return { success: false, reason: `TASK_NOT_RUNNING_${task.status}` };
     }
 
-    const patch = { status: TaskStatus.COMPLETED, completedAt: Date.now(), executor: null };
+    const patch: Record<string, unknown> = {
+      status: TaskStatus.COMPLETED,
+      completedAt: Date.now(),
+      executor: null
+    };
 
-    // 优先用 executor 主动传来的 contextEntry，没有才用 hook 兜底的 fallbackEntry
     const entryToAdd = contextEntry ?? fallbackEntry;
     if (entryToAdd) {
       const newContext = [...task.context];
       newContext.push({
+        type: 'step',
         executor: task.executor || 'unknown',
-        step: entryToAdd.step || (typeof entryToAdd.outcome === 'string' ? entryToAdd.outcome : 'completed'),
-        output: entryToAdd.output || (entryToAdd.error ? { error: entryToAdd.error } : {}),
+        step: (entryToAdd as ContextEntryInput).step || (entryToAdd as { outcome?: string }).outcome || 'completed',
+        output: (typeof (entryToAdd as ContextEntryInput).output !== 'undefined'
+          ? (entryToAdd as ContextEntryInput).output
+          : (entryToAdd as { error?: string }).error ? { error: (entryToAdd as { error?: string }).error } : {}) as ContextStepEntry['output'],
         completedAt: Date.now()
       });
       patch.context = JSON.stringify(newContext);
     }
 
     updateTaskRow(taskId, patch);
-    const updated = getTaskRow(taskId);
+    const updated = getTaskRow(taskId)!;
     syncTaskJson(updated);
 
     const source = contextEntry ? 'executor' : 'hook';
     console.log(`[m-team-pool] 任务 ${taskId} 完成（${source}）`);
     return { success: true, task: updated };
   })();
+
+  return result as CompleteResult;
 }
 
-/**
- * subagent_ended hook 调用：executor 异常结束
- * @param {string} taskId
- * @param {string|null} errorMsg
- * @param {object|null} contextEntry - executor 主动传来
- * @param {object|null} fallbackEntry - hook 兜底
- */
-export function failTask(taskId, errorMsg = null, contextEntry = null, fallbackEntry = null) {
+// ============================================================
+// failTask
+// ============================================================
+
+export function failTask(
+  taskId: string,
+  errorMsg: string | null,
+  contextEntry?: ContextEntryInput,
+  fallbackEntry?: { outcome?: string; error?: string }
+): CompleteResult {
   init();
   const db = getDb();
 
-  return db.transaction(() => {
+  const result = db.transaction(() => {
     const task = getTaskRow(taskId);
     if (!task) return { success: false, reason: 'TASK_NOT_FOUND' };
 
-    // relay 后旧 session 结束时任务已非 running，直接跳过
     if (task.status !== TaskStatus.RUNNING) {
       return { success: false, reason: `TASK_NOT_RUNNING_${task.status}` };
     }
 
-    const patch = { status: TaskStatus.FAILED, completedAt: Date.now(), executor: null };
+    const patch: Record<string, unknown> = {
+      status: TaskStatus.FAILED,
+      completedAt: Date.now(),
+      executor: null
+    };
 
     const entryToAdd = contextEntry ?? fallbackEntry;
     if (entryToAdd) {
       const newContext = [...task.context];
       newContext.push({
+        type: 'step',
         executor: task.executor || 'unknown',
-        step: entryToAdd.step || (typeof entryToAdd.outcome === 'string' ? entryToAdd.outcome : 'failed'),
-        output: entryToAdd.output || (entryToAdd.error ? { error: entryToAdd.error } : { error: errorMsg }),
+        step: (entryToAdd as ContextEntryInput).step || (entryToAdd as { outcome?: string }).outcome || 'failed',
+        output: (typeof (entryToAdd as ContextEntryInput).output !== 'undefined'
+          ? (entryToAdd as ContextEntryInput).output
+          : (entryToAdd as { error?: string }).error ? { error: (entryToAdd as { error?: string }).error } : { error: errorMsg }) as ContextStepEntry['output'],
         completedAt: Date.now()
       });
       patch.context = JSON.stringify(newContext);
     }
 
     updateTaskRow(taskId, patch);
-    const updated = getTaskRow(taskId);
+    const updated = getTaskRow(taskId)!;
     syncTaskJson(updated);
 
     console.log(`[m-team-pool] 任务 ${taskId} 失败（${contextEntry ? 'executor' : 'hook'}）: ${errorMsg ?? ''}`);
     return { success: true, task: updated };
   })();
+
+  return result as CompleteResult;
 }

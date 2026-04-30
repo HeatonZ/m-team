@@ -7,11 +7,32 @@
 import { completeTask, failTask } from '../pool/operations.js';
 import { getNotifications, formatTaskNotifications, sendNotifications } from '../notifications.js';
 
-/**
- * @param {object} api - OpenClaw plugin api
- */
-export function registerSubagentEndedHook(api) {
-  api.on('subagent_ended', async (event) => {
+// ============================================================
+// OpenClaw Plugin API 子集（内联，无外部依赖）
+// ============================================================
+
+interface Logger {
+  error(msg: string, meta?: Record<string, unknown>): void;
+  warn(msg: string, meta?: Record<string, unknown>): void;
+  info(msg: string, meta?: Record<string, unknown>): void;
+}
+
+export interface OpenClawApi {
+  logger?: Logger;
+  on(event: string, handler: (event: SubagentEndedEvent) => Promise<void>): void;
+}
+
+interface SubagentEndedEvent {
+  targetSessionKey: string;
+  outcome: string;
+  reason?: string;
+  error?: string;
+}
+
+// ============================================================
+
+export function registerSubagentEndedHook(api: OpenClawApi): void {
+  api.on('subagent_ended', async (event: SubagentEndedEvent) => {
     const { targetSessionKey, outcome, reason, error } = event;
 
     // 只处理 mteam: 前缀的 session
@@ -29,17 +50,17 @@ export function registerSubagentEndedHook(api) {
     const isOk = outcome === 'ok' || outcome === 'reset';
 
     if (isOk) {
-      const result = completeTask(taskId, null, { outcome, error: error || null });
+      const result = completeTask(taskId, null, { outcome, error: error || undefined });
       if (result.success) {
         api.logger?.info(`[m-team] subagent_ended: 任务 ${taskId} 标记完成 (outcome=${outcome})`);
-        const notifications = formatTaskNotifications(result.task, getNotifications());
+        const notifications = formatTaskNotifications(result.task!, getNotifications());
         await sendNotifications(notifications, api);
       } else {
         api.logger?.info(`[m-team] subagent_ended: 任务 ${taskId} 无操作 (${result.reason})`);
       }
     } else {
       const errorMsg = error || reason || outcome;
-      const result = failTask(taskId, errorMsg, null, { outcome, error: errorMsg });
+      const result = failTask(taskId, errorMsg ?? undefined, undefined, { outcome, error: errorMsg });
       if (result.success) {
         api.logger?.info(`[m-team] subagent_ended: 任务 ${taskId} 标记失败 (outcome=${outcome}, error=${errorMsg})`);
       } else {
