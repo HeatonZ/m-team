@@ -58,13 +58,18 @@ export function formatTaskNotifications(task, notifications = []) {
   if (!notifications || notifications.length === 0) return [];
   if (!task || task.status !== 'completed') return [];
 
+  // 从最后一个 context entry 取 summary（executor 填写在 contextOutput.summary）
+  const lastEntry = task.context?.[task.context.length - 1];
+  const summary = lastEntry?.output?.summary ?? null;
+
+  // 耗时：completedAt - createdAt（Schema 只有这两个时间戳）
+  const duration = task.completedAt && task.createdAt
+    ? `${Math.round((task.completedAt - task.createdAt) / 1000)}秒`
+    : null;
+
   const result = [];
   for (const cfg of notifications) {
     if (!cfg.agents || !cfg.agents.includes(task.executor)) continue;
-
-    const duration = task.completedAt && task.claimedAt
-      ? `${Math.round((task.completedAt - task.claimedAt) / 1000)}秒`
-      : null;
 
     if (cfg.provider === 'feishu') {
       result.push({
@@ -75,7 +80,7 @@ export function formatTaskNotifications(task, notifications = []) {
           ``,
           `📋 ${task.description}`,
           `执行者: ${task.executor}`,
-          task.summary ? `结果: ${task.summary}` : null,
+          summary ? `结果: ${summary}` : null,
           duration ? `耗时: ${duration}` : null,
         ].filter(Boolean).join('\n')
       });
@@ -85,7 +90,7 @@ export function formatTaskNotifications(task, notifications = []) {
         channelId: cfg.channelId,
         message: [
           `✅ **${task.description}**`,
-          task.summary ? `_${task.summary}_` : null,
+          summary ? `_${summary}_` : null,
           `执行者: ${task.executor}${duration ? ` | 耗时: ${duration}` : ''}`,
         ].filter(Boolean).join('\n')
       });
@@ -99,13 +104,14 @@ export function formatRelinquishNotifications(task, notifications = []) {
   if (!notifications || notifications.length === 0) return [];
   if (!task) return [];
 
+  // 耗时：lastHeartbeatAt - createdAt
+  const duration = task.lastHeartbeatAt && task.createdAt
+    ? `${Math.round((task.lastHeartbeatAt - task.createdAt) / 1000)}秒`
+    : null;
+
   const result = [];
   for (const cfg of notifications) {
     if (!cfg.agents || !cfg.agents.includes(task.lastExecutor)) continue;
-
-    const duration = task.lastHeartbeatAt && task.claimedAt
-      ? `${Math.round((task.lastHeartbeatAt - task.claimedAt) / 1000)}秒`
-      : null;
 
     if (cfg.provider === 'feishu') {
       result.push({
