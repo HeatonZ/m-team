@@ -38,7 +38,7 @@ import type { NotificationConfig } from './notifications.js';
 // Plugin entry
 // ============================================================
 
-// OpenClaw plugin-sdk plugin-entry 导出类型
+import { startDashboard, registerDashboardCleanup } from './dashboard.js';
 declare function definePluginEntry(manifest: {
   id: string;
   name: string;
@@ -93,6 +93,10 @@ const plugin = definePluginEntry({
     setWorkspaceRoot(workspaceRoot);
 
     setNotifications(config.notifications ?? []);
+
+    // — 启动 dashboard UI（在插件进程内 spawn，随插件卸载而停止）—
+    startDashboard(workspaceRoot);
+    registerDashboardCleanup();
 
     registerTools(api as unknown as import('./tools/index.js').OpenClawApi, config);
 

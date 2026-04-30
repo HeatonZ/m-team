@@ -6,9 +6,9 @@
 import { openDb, getDb, getTaskRow, getAllTaskRows, getTaskRowsByStatus, getTaskRowByExecutor } from 'm-team/pool/db';
 import { TaskStatus } from 'm-team/schema/task';
 
-// Dashboard types (absolute import to avoid tsx relative path bug)
-import type { Task, TaskPriority } from '/mnt/d/code/m-team/dashboard/src/types/task';
-import { STATUS_LABELS, PRIORITY_LABELS } from '/mnt/d/code/m-team/dashboard/src/types/task';
+// Dashboard types (relative import — must work from any cwd when spawned)
+import type { Task, TaskPriority } from './types/task.ts';
+import { STATUS_LABELS, PRIORITY_LABELS } from './types/task.ts';
 
 export { TaskStatus, STATUS_LABELS, PRIORITY_LABELS };
 export type { Task, TaskPriority };
