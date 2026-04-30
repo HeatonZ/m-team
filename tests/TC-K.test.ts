@@ -6,7 +6,7 @@ import { describe, it, beforeEach } from 'vitest';
 import assert from 'node:assert';
 import fs from 'node:fs';
 import { openDb, closeDb, getDb } from '../src/pool/db.js';
-import { createMockApi } from './helpers/mockApi.js';
+import { createMockApi } from './helpers/testApi.js';
 import { registerTools } from '../src/tools/index.js';
 
 const NOOP_CONFIG = { notifications: [] };

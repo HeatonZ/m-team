@@ -9,7 +9,7 @@
  * - 验证返回格式：result.ok + extract(result).data
  */
 
-import { createMockApi } from '../helpers/mockApi.js';
+import { createMockApi } from '../helpers/testApi.js';
 import { registerTools } from '../../src/tools/index.js';
 import { publishTask, claimTask, setWorkspaceRoot } from '../../src/pool/operations.js';
 import { closeDb } from '../../src/pool/db.js';
