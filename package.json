@@ -13,6 +13,7 @@
     "collaboration"
   ],
   "openclaw": {
+    "hooks": [],
     "extensions": [
       "./dist/index.js"
     ],
@@ -20,7 +21,7 @@
       "./skills"
     ],
     "install": {
-      "localPath": ".",
+      "localPath": "./",
       "defaultChoice": "local"
     },
     "compat": {
