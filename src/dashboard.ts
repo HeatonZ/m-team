@@ -1,8 +1,8 @@
 /**
  * Dashboard 服务管理 — 插件启动时 spawn，插件卸载时 kill。
  *
- * OpenClaw 插件无 unload 钩子，故通过 process signal（SIGTERM/SIGINT）
- * 在插件进程退出时同步关闭 dashboard 子进程。
+ * 优先使用 OpenClaw 官方生命周期钩子（gateway:shutdown / gateway:pre-restart），
+ * SIGTERM/SIGTERM/SIGHUP 仅作 hard-kill 兜底。
  */
 
 import { spawn, type ChildProcess } from 'node:child_process';
@@ -13,6 +13,7 @@ import { fileURLToPath } from 'node:url';
 const DASHBOARD_SERVER = 'dashboard/server.ts';
 
 let _dashboardProc: ChildProcess | null = null;
+let _cleanedUp = false; // 防止 double cleanup
 
 /**
  * 启动 dashboard HTTP 服务。
@@ -59,10 +60,11 @@ export function startDashboard(workspaceRoot: string, port = 3000): ChildProcess
 
 /** 停止 dashboard 进程（SIGTERM）。 */
 export function stopDashboard(): void {
-  if (!_dashboardProc || _dashboardProc.killed) {
+  if (_cleanedUp || !_dashboardProc || _dashboardProc.killed) {
     _dashboardProc = null;
     return;
   }
+  _cleanedUp = true;
   const pid = _dashboardProc.pid;
   _dashboardProc.terminate();
   _dashboardProc.kill('SIGTERM');
@@ -71,17 +73,32 @@ export function stopDashboard(): void {
 }
 
 /**
- * 注册插件进程的信号处理器，确保卸载时 dashboard 一起停。
- * 覆盖同一 sig 的所有已有 handler（只注册一次）。
+ * 注册 OpenClaw 官方生命周期钩子 + hard-kill兜底信号。
+ *
+ * @param stopDashboard  回调，gateway shutdown/pre-restart 时调用
  */
-export function registerDashboardCleanup(): void {
+export function registerDashboardCleanup(stopDashboard: () => void): void {
+  // 清理函数（幂等）
   const cleanup = () => {
     stopDashboard();
-    // Give SIGTERM a moment to propagate before exiting
     setTimeout(() => process.exit(0), 100);
   };
+
+  // OpenClaw 官方钩子优先
+  try {
+    const api = globalThis.__openclaw_lifecycle_api__ as {
+      registerHook(event: string, handler: () => void): void;
+    } | undefined;
+    if (api?.registerHook) {
+      api.registerHook('gateway:shutdown', cleanup);
+      api.registerHook('gateway:pre-restart', cleanup);
+    }
+  } catch {
+    // 钩子不存在（老版本 OpenClaw），fallback 到 signal
+  }
+
+  // Hard-kill 兜底（nssm restart 等场景）
   for (const sig of ['SIGTERM', 'SIGINT', 'SIGHUP'] as const) {
-    // Only register once per signal to avoid double-cleanup
     process.removeListener(sig, cleanup);
     process.on(sig, cleanup);
   }
