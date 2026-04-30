@@ -142,16 +142,17 @@ export function registerTools(api: OpenClawApi, config: PluginConfig): void {
         const result = claimTask(taskId, agentId);
         if (!result.success) return { ok: false, data: result };
 
-        const task = result.task;
+        // claim 后重新读，拿 relay 后最新的 description（claim 返回的 result.task 是事务快照）
+        const task = getTask(taskId) ?? result.task;
 
         // Plugin 内部直接创建 executor session
         const sessionKey = `mteam:${taskId}:${agentId}:${Date.now()}`;
         const systemPrompt = `
-【任务规范 — M-Team 执行者】
+|【任务规范 — M-Team 执行者】
 你正在执行一个多步骤任务。当前任务信息：
 - 任务ID: ${taskId}
-- 任务描述: ${task?.description ?? ''}
-- 核心目标: ${task?.goal ?? ''}
+- 任务描述: ${task.description ?? ''}
+- 核心目标: ${task.goal ?? ''}
 
 【工具使用规范】
 1. 完成任务（最终完成）→ 调用 mteam_complete_task
@@ -171,7 +172,7 @@ export function registerTools(api: OpenClawApi, config: PluginConfig): void {
 
         const runResult = await api.runtime!.subagent!.run({
           sessionKey,
-          message: `[M-Team Task #${taskId}] ${task?.description ?? ''}${systemPrompt}`
+          message: `[M-Team Task #${taskId}] ${task.description ?? ''}${systemPrompt}`
         });
 
         return jsonResult({ ...result, runId: runResult.runId, sessionKey });
