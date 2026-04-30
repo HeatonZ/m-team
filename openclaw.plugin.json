@@ -23,7 +23,10 @@
           "properties": {
             "provider": {
               "type": "string",
-              "enum": ["feishu", "discord"],
+              "enum": [
+                "feishu",
+                "discord"
+              ],
               "description": "通知渠道"
             },
             "groupId": {
@@ -36,14 +39,22 @@
             },
             "agents": {
               "type": "array",
-              "items": { "type": "string" },
+              "items": {
+                "type": "string"
+              },
               "description": "需要通知的 agentId 列表"
             }
           },
-          "required": ["provider", "agents"]
+          "required": [
+            "provider",
+            "agents"
+          ]
         }
       }
     }
   },
-  "skills": ["./skills/m-team-publisher", "./skills/m-team-executor"],
+  "skills": [
+    "./skills/m-team-publisher",
+    "./skills/m-team-executor"
+  ]
 }
