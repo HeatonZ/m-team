@@ -21,6 +21,7 @@ import { readStr, readNum, jsonResult } from './helpers.js';
 import {
   formatTaskNotifications,
   formatRelinquishNotifications,
+  formatRelayNotifications,
   sendNotifications,
   type NotificationConfig
 } from '../notifications.js';
@@ -321,7 +322,8 @@ export function registerTools(api: OpenClawApi, config: PluginConfig): void {
             summary: { type: 'string', description: '步骤摘要' },
             files: { type: 'array', items: { type: 'string' }, description: '任务文件夹内的相对路径' }
           }
-        }
+        },
+        lastHeartbeatAt: { type: 'number', description: '心跳时间戳（毫秒），relay 时携带以便追踪' }
       },
       required: ['taskId', 'agentId', 'contextStep']
     },
@@ -331,10 +333,20 @@ export function registerTools(api: OpenClawApi, config: PluginConfig): void {
         const agentId = readStr(rawParams, 'agentId', { required: true })!;
         const contextStep = readStr(rawParams, 'contextStep', { required: true })!;
         const contextOutput = rawParams.contextOutput as { summary?: string; files?: string[] } | undefined;
+        const lastHeartbeatAt = readNum(rawParams, 'lastHeartbeatAt');
 
         const contextEntry = { step: contextStep, output: contextOutput || {} };
-        const result = relayTask(taskId, agentId, contextEntry);
+        const result = relayTask(taskId, agentId, contextEntry, lastHeartbeatAt ?? undefined);
         if (!result.success) return { ok: false, data: result };
+
+        if (result.task && config.notifications?.length) {
+          try {
+            const notifications = formatRelayNotifications(result.task, config.notifications);
+            await sendNotifications(notifications, api);
+          } catch (e) {
+            api.logger?.warn('[m-team] 通知发送失败', { error: (e as Error)?.message });
+          }
+        }
 
         return jsonResult({ success: result.success, task: result.task });
       } catch (e) {
@@ -351,7 +363,8 @@ export function registerTools(api: OpenClawApi, config: PluginConfig): void {
       type: 'object',
       properties: {
         taskId: { type: 'string', description: '任务ID' },
-        executorId: { type: 'string', description: '执行者 agentId' }
+        executorId: { type: 'string', description: '执行者 agentId' },
+        reason: { type: 'string', description: '放弃原因（会在 context step 中记录）' }
       },
       required: ['taskId', 'executorId']
     },
@@ -359,7 +372,8 @@ export function registerTools(api: OpenClawApi, config: PluginConfig): void {
       try {
         const taskId = readStr(rawParams, 'taskId', { required: true })!;
         const executorId = readStr(rawParams, 'executorId', { required: true })!;
-        const result = relinquishTask(taskId, executorId);
+        const reason = readStr(rawParams, 'reason') ?? 'executor_relinquish';
+        const result = relinquishTask(taskId, executorId, reason);
         if (!result.success) return { ok: false, data: result };
 
         if (result.success && result.task && config.notifications?.length) {

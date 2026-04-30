@@ -289,7 +289,11 @@ export interface RelinquishResult {
   reason?: string;
 }
 
-export function relinquishTask(taskId: string, executorId: string): RelinquishResult {
+export function relinquishTask(
+  taskId: string,
+  executorId: string,
+  reason: string = 'executor_relinquish'
+): RelinquishResult {
   init();
   const db = getDb();
 
@@ -297,17 +301,28 @@ export function relinquishTask(taskId: string, executorId: string): RelinquishRe
     const task = getTaskRow(taskId);
     if (!task) return { success: false, task: null, reason: 'TASK_NOT_FOUND' };
     if (task.status === TaskStatus.CANCELLED) return { success: false, task, reason: 'TASK_CANCELLED' };
+    if (task.status !== TaskStatus.RUNNING) return { success: false, task, reason: `TASK_NOT_RUNNING_${task.status}` };
     if (task.executor !== executorId) return { success: false, task, reason: 'NOT_CURRENT_EXECUTOR' };
+
+    const newContext = [...task.context];
+    newContext.push({
+      type: 'step',
+      executor: executorId,
+      step: reason,
+      output: { relinquish: true } as ContextStepEntry['output'],
+      completedAt: Date.now()
+    });
 
     const patch: Record<string, unknown> = {
       status: TaskStatus.PENDING,
       executor: null,
-      lastExecutor: executorId
+      lastExecutor: executorId,
+      context: JSON.stringify(newContext)
     };
     updateTaskRow(taskId, patch);
     const updated = getTaskRow(taskId)!;
     syncTaskJson(updated);
-    console.log(`[m-team-pool] executor ${executorId} 放弃任务 ${taskId}`);
+    console.log(`[m-team-pool] executor ${executorId} 放弃任务 ${taskId}: ${reason}`);
     return { success: true, task: updated };
   })();
 
@@ -327,7 +342,8 @@ export interface RelayResult {
 export function relayTask(
   taskId: string,
   executorId: string,
-  contextEntry: ContextEntryInput
+  contextEntry: ContextEntryInput,
+  heartbeat?: number
 ): RelayResult {
   init();
   const db = getDb();
@@ -336,13 +352,9 @@ export function relayTask(
     const task = getTaskRow(taskId);
     if (!task) return { success: false, task: null, reason: 'TASK_NOT_FOUND' };
     if (task.status === TaskStatus.CANCELLED) return { success: false, task: null, reason: 'TASK_CANCELLED' };
+    if (task.status !== TaskStatus.RUNNING) return { success: false, task: null, reason: `TASK_NOT_RUNNING_${task.status}` };
     if (task.executor !== executorId) return { success: false, task: null, reason: 'NOT_CURRENT_EXECUTOR' };
 
-    const patch: Record<string, unknown> = {
-      status: TaskStatus.PENDING,
-      executor: null,
-      lastExecutor: executorId
-    };
     const newContext = [...task.context];
     newContext.push({
       type: 'step',
@@ -351,7 +363,14 @@ export function relayTask(
       output: (contextEntry.output ?? {}) as ContextStepEntry['output'],
       completedAt: Date.now()
     });
-    patch.context = JSON.stringify(newContext);
+
+    const patch: Record<string, unknown> = {
+      status: TaskStatus.PENDING,
+      executor: null,
+      lastExecutor: executorId,
+      context: JSON.stringify(newContext)
+    };
+    if (heartbeat !== undefined) patch.lastHeartbeatAt = heartbeat;
 
     updateTaskRow(taskId, patch);
     const updated = getTaskRow(taskId)!;

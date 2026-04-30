@@ -144,10 +144,34 @@ export function formatRelinquishNotifications(
   task: Task,
   notifications: NotificationConfig[]
 ): FormattedNotification[] {
+  return formatRelayOrRelinquishNotifications(task, notifications, 'relinquish');
+}
+
+export function formatRelayNotifications(
+  task: Task,
+  notifications: NotificationConfig[]
+): FormattedNotification[] {
+  return formatRelayOrRelinquishNotifications(task, notifications, 'relay');
+}
+
+function formatRelayOrRelinquishNotifications(
+  task: Task,
+  notifications: NotificationConfig[],
+  type: 'relay' | 'relinquish'
+): FormattedNotification[] {
   if (!notifications || notifications.length === 0) return [];
   if (!task) return [];
 
-  // 耗时：lastHeartbeatAt - createdAt
+  const lastEntry = task.context[task.context.length - 1];
+  const stepLabel = type === 'relay' ? '交接' : '放弃';
+  const stepEmoji = type === 'relay' ? '🔄' : '↩️';
+  const lastExecutor = task.lastExecutor ?? 'unknown';
+
+  // 取最后一步的 step 描述作为动作说明
+  const stepText = (lastEntry as { type: string; step?: string })?.type === 'step'
+    ? (lastEntry as { step?: string }).step ?? stepLabel
+    : stepLabel;
+
   const duration =
     task.lastHeartbeatAt && task.createdAt
       ? `${Math.round((task.lastHeartbeatAt - task.createdAt) / 1000)}秒`
@@ -155,33 +179,23 @@ export function formatRelinquishNotifications(
 
   const result: FormattedNotification[] = [];
   for (const cfg of notifications) {
-    if (!cfg.agents.includes(task.lastExecutor ?? 'unknown')) continue;
+    if (!cfg.agents.includes(lastExecutor)) continue;
+
+    const lines = [
+      `${stepEmoji} 任务放回池子`,
+      ``,
+      `📋 ${task.description}`,
+      `执行者: ${lastExecutor}`,
+      `动作: ${stepText}`,
+      duration ? `耗时: ${duration}` : null
+    ].filter(Boolean);
+
+    const message = lines.join('\n');
 
     if (cfg.provider === 'feishu') {
-      result.push({
-        provider: 'feishu',
-        chatId: cfg.groupId,
-        message: [
-          `🔄 任务放回池子`,
-          ``,
-          `📋 ${task.description}`,
-          `执行者: ${task.lastExecutor}`,
-          duration ? `耗时: ${duration}` : null
-        ]
-          .filter(Boolean)
-          .join('\n')
-      });
+      result.push({ provider: 'feishu', chatId: cfg.groupId, message });
     } else if (cfg.provider === 'discord') {
-      result.push({
-        provider: 'discord',
-        channelId: cfg.channelId,
-        message: [
-          `🔄 **${task.description}**`,
-          `执行者: ${task.lastExecutor}${duration ? ` | 耗时: ${duration}` : ''}`
-        ]
-          .filter(Boolean)
-          .join('\n')
-      });
+      result.push({ provider: 'discord', channelId: cfg.channelId, message });
     }
   }
 
