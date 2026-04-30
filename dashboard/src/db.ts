@@ -1,21 +1,26 @@
 /**
  * Dashboard DB Layer
- * Wraps m-team/pool/db.js with WORKSPACE_ROOT setup.
+ * Wraps m-team/pool with WORKSPACE_ROOT setup.
  */
 
-import { openDb, getDb, getTaskRow, getAllTaskRows, getTaskRowsByStatus, getTaskRowByExecutor } from '../../src/pool/db.js';
-import { TaskStatus } from './schema/task.js';
+import { openDb, getDb, getTaskRow, getAllTaskRows, getTaskRowsByStatus, getTaskRowByExecutor } from 'm-team/pool/db';
+import { TaskStatus } from 'm-team/schema/task';
 
-export { TaskStatus };
+// Dashboard types (absolute import to avoid tsx relative path bug)
+import type { Task, TaskPriority } from '/mnt/d/code/m-team/dashboard/src/types/task';
+import { STATUS_LABELS, PRIORITY_LABELS } from '/mnt/d/code/m-team/dashboard/src/types/task';
 
-let _dbPath = null;
+export { TaskStatus, STATUS_LABELS, PRIORITY_LABELS };
+export type { Task, TaskPriority };
 
-export function setWorkspaceRoot(root) {
+let _dbPath: string | null = null;
+
+export function setWorkspaceRoot(root: string): void {
   _dbPath = `${root}/queue/m-team.db`;
   openDb(_dbPath);
 }
 
-function ensureInit() {
+function ensureInit(): void {
   if (!getDb()) throw new Error('[dashboard] DB not initialized — call setWorkspaceRoot first');
 }
 
@@ -24,7 +29,7 @@ export function getAllTasks() {
   return getAllTaskRows();
 }
 
-export function getTask(taskId) {
+export function getTask(taskId: string) {
   ensureInit();
   return getTaskRow(taskId);
 }
@@ -54,21 +59,7 @@ export function getCancelledTasks() {
   return getTaskRowsByStatus(TaskStatus.CANCELLED);
 }
 
-export function getAgentActiveTask(agentId) {
+export function getAgentActiveTask(agentId: string) {
   ensureInit();
   return getTaskRowByExecutor(agentId);
 }
-
-export const STATUS_LABELS = {
-  [TaskStatus.PENDING]:    '⏳ 待认领',
-  [TaskStatus.RUNNING]:    '⚙️ 执行中',
-  [TaskStatus.COMPLETED]:  '✅ 完成',
-  [TaskStatus.FAILED]:     '❌ 失败',
-  [TaskStatus.CANCELLED]:  '🚫 已取消'
-};
-
-export const PRIORITY_LABELS = {
-  high:   '🔴 高',
-  normal: '🟡 中',
-  low:    '🟢 低'
-};

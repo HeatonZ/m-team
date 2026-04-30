@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll } from 'vitest';
-import { setWorkspaceRoot, getPendingTasks, getRunningTasks, getAllTasks, getTask as getTaskById } from '../src/db.js';
-import { TaskStatus } from '../src/schema/task.js';
+import { setWorkspaceRoot, getPendingTasks, getRunningTasks, getAllTasks, getTask as getTaskById } from '../src/db.ts';
+import { TaskStatus } from 'm-team/schema/task';
 
 beforeAll(() => {
   setWorkspaceRoot('/mnt/d/code/m-team');

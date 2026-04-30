@@ -7,7 +7,7 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { setWorkspaceRoot, getAllTasks, getPendingTasks, getRunningTasks, getCompletedTasks, getFailedTasks, getCancelledTasks, getTask as getTaskById, STATUS_LABELS, PRIORITY_LABELS } from './src/db.js';
+import { setWorkspaceRoot, getAllTasks, getPendingTasks, getRunningTasks, getCompletedTasks, getFailedTasks, getCancelledTasks, getTask as getTaskById, STATUS_LABELS, PRIORITY_LABELS } from './src/db.ts';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 // Serve dist/ (production build) if present, else public/ (dev assets)

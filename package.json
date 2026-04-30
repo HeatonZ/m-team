@@ -4,6 +4,24 @@
   "description": "去中心化任务池协作插件 — 多Agent任务分发与执行",
   "type": "module",
   "main": "dist/index.js",
+  "exports": {
+    ".": {
+      "import": "./src/index.ts",
+      "types": "./src/index.ts"
+    },
+    "./pool/db": {
+      "import": "./src/pool/db.ts",
+      "types": "./src/pool/db.ts"
+    },
+    "./pool": {
+      "import": "./src/pool/index.ts",
+      "types": "./src/pool/index.ts"
+    },
+    "./schema/task": {
+      "import": "./src/schema/task.ts",
+      "types": "./src/schema/task.ts"
+    }
+  },
   "author": "郑尚丰",
   "license": "MIT",
   "keywords": [

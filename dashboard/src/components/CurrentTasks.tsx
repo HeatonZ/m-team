@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { type FC } from 'react';
 import type { Task } from '../types/task';
-import TaskCard from './TaskCard';
+import { TaskCard } from './TaskCard';
 
 interface CurrentTasksProps {
   pending: Task[];
