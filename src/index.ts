@@ -12,7 +12,7 @@
 
 import { homedir } from 'node:os';
 import path from 'node:path';
-import { setNotifications } from './notifications.js';
+import { setNotifications, formatTaskNotifications } from './notifications.js';
 import { registerTools } from './tools/index.js';
 import { registerSubagentEndedHook } from './hooks/subagentEnded.js';
 import {
@@ -28,8 +28,7 @@ import {
   relinquishTask,
   relayTask,
   completeTask,
-  failTask,
-  formatTaskNotifications
+  failTask
 } from './pool/index.js';
 import { TaskStatus, TaskPriority } from './schema/task.js';
 import type { NotificationConfig } from './notifications.js';
@@ -138,7 +137,6 @@ export {
   relayTask,
   completeTask,
   failTask,
-  formatTaskNotifications,
   TaskStatus,
   TaskPriority
 };
