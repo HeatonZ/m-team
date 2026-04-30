@@ -5,6 +5,8 @@
 import { describe, it, beforeEach } from 'vitest';
 import assert from 'node:assert';
 import { createMockApi } from './helpers/testApi.js';
+import { closeDb } from '../src/pool/db.js';
+import { setWorkspaceRoot } from '../src/pool/operations.js';
 import { registerTools } from '../src/tools/index.js';
 
 const NOOP_CONFIG = { notifications: [] };
@@ -30,6 +32,8 @@ describe('TC-G：并发场景', () => {
   let api: ReturnType<typeof createMockApi>;
 
   beforeEach(async () => {
+    closeDb();
+    setWorkspaceRoot('/tmp/m-team-test-' + process.pid);
     api = createMockApi(NOOP_CONFIG);
     await registerTools(api, NOOP_CONFIG);
   });
@@ -87,7 +91,9 @@ describe('TC-G：并发场景', () => {
       await callTool(api, 'mteam_claim_task', { taskId: taskId1, agentId: 'alice' });
 
       const result = await callTool(api, 'mteam_claim_task', { taskId: taskId2, agentId: 'alice' });
-      assert.equal((extract(result) as { success: boolean }).success, true);
+      const r = extract(result) as { success: boolean; reason?: string };
+      assert.equal(r.success, false);
+      assert.equal(r.reason, 'ALREADY_HAS_ACTIVE_TASK');
     });
   });
 });

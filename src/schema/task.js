@@ -136,7 +136,7 @@ export function validateTask(task) {
  * @returns {Task}
  */
 export function createTask({ goal, description, input = {}, publisher = 'user', priority = 'normal' }) {
-  const taskId = `task_${Math.floor(Date.now() / 1000)}`;
+  const taskId = `task_${Date.now()}`;
 
   return {
     taskId,

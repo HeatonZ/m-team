@@ -5,6 +5,8 @@
 import { describe, it, beforeEach } from 'vitest';
 import assert from 'node:assert';
 import { createMockApi } from './helpers/testApi.js';
+import { closeDb } from '../src/pool/db.js';
+import { setWorkspaceRoot } from '../src/pool/operations.js';
 import { registerTools } from '../src/tools/index.js';
 
 const NOOP_CONFIG = { notifications: [] };
@@ -16,7 +18,7 @@ async function callTool(api, toolName, params) {
 }
 
 function extract(result: { ok: boolean; data: unknown }): unknown {
-  return result.ok ? result.data : result;
+  return result.data;
 }
 
 function getTask(result: { ok: boolean; data: unknown }): unknown {
@@ -29,6 +31,8 @@ describe('TC-J：优先级调度', () => {
   let api: ReturnType<typeof createMockApi>;
 
   beforeEach(async () => {
+    closeDb();
+    setWorkspaceRoot('/tmp/m-team-test-' + process.pid);
     api = createMockApi(NOOP_CONFIG);
     await registerTools(api, NOOP_CONFIG);
   });

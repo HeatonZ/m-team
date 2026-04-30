@@ -6,6 +6,8 @@
 import { describe, it, beforeEach } from 'vitest';
 import assert from 'node:assert';
 import { createMockApi } from './helpers/testApi.js';
+import { closeDb } from '../src/pool/db.js';
+import { setWorkspaceRoot } from '../src/pool/operations.js';
 import { registerTools } from '../src/tools/index.js';
 
 const NOOP_CONFIG = { notifications: [] };
@@ -17,7 +19,7 @@ async function callTool(api, toolName, params) {
 }
 
 function extract(result: { ok: boolean; data: unknown }): unknown {
-  return result.ok ? result.data : result;
+  return result.data;
 }
 
 function getTask(result: { ok: boolean; data: unknown }): unknown {
@@ -30,6 +32,8 @@ describe('TC-H：守卫顺序验证', () => {
   let api: ReturnType<typeof createMockApi>;
 
   beforeEach(async () => {
+    closeDb();
+    setWorkspaceRoot('/tmp/m-team-test-' + process.pid);
     api = createMockApi(NOOP_CONFIG);
     await registerTools(api, NOOP_CONFIG);
   });
@@ -42,7 +46,7 @@ describe('TC-H：守卫顺序验证', () => {
       await callTool(api, 'mteam_cancel_task', { taskId, publisher: 'user', reason: 'reason' });
 
       const result = await callTool(api, 'mteam_relay_task', { taskId, agentId: 'alice', contextStep: 's', contextOutput: {} });
-
+      const data = extract(result) as { success: boolean; reason: string };
       assert.equal((extract(result) as { success: boolean }).success, false);
       assert.equal((extract(result) as { reason: string }).reason, 'TASK_CANCELLED');
     });
@@ -56,7 +60,7 @@ describe('TC-H：守卫顺序验证', () => {
       await callTool(api, 'mteam_cancel_task', { taskId, publisher: 'user', reason: 'reason' });
 
       const result = await callTool(api, 'mteam_relinquish_task', { taskId, executorId: 'alice' });
-
+      const data = extract(result) as { success: boolean; reason: string };
       assert.equal((extract(result) as { success: boolean }).success, false);
       assert.equal((extract(result) as { reason: string }).reason, 'TASK_CANCELLED');
     });

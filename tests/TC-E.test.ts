@@ -6,6 +6,8 @@
 import { describe, it, beforeEach } from 'vitest';
 import assert from 'node:assert';
 import { createMockApi } from './helpers/testApi.js';
+import { closeDb } from '../src/pool/db.js';
+import { setWorkspaceRoot } from '../src/pool/operations.js';
 import { registerTools } from '../src/tools/index.js';
 
 const NOOP_CONFIG = { notifications: [] };
@@ -17,7 +19,7 @@ async function callTool(api, toolName, params) {
 }
 
 function extract(result: { ok: boolean; data: unknown }): unknown {
-  return result.ok ? result.data : result;
+  return result.data;
 }
 
 function getTask(result: { ok: boolean; data: unknown }): unknown {
@@ -30,6 +32,8 @@ describe('TC-E：放弃任务流程', () => {
   let api: ReturnType<typeof createMockApi>;
 
   beforeEach(async () => {
+    closeDb();
+    setWorkspaceRoot('/tmp/m-team-test-' + process.pid);
     api = createMockApi(NOOP_CONFIG);
     await registerTools(api, NOOP_CONFIG);
   });
@@ -79,7 +83,7 @@ describe('TC-E：放弃任务流程', () => {
       await callTool(api, 'mteam_claim_task', { taskId, agentId: 'alice' });
 
       const result = await callTool(api, 'mteam_relinquish_task', { taskId, executorId: 'bob' });
-
+      const data = extract(result) as { success: boolean; reason: string };
       assert.equal((extract(result) as { success: boolean }).success, false);
       assert.equal((extract(result) as { reason: string }).reason, 'NOT_CURRENT_EXECUTOR');
       const task = getTask(await callTool(api, 'mteam_get_task', { taskId })) as { executor: string; status: string };
@@ -96,7 +100,7 @@ describe('TC-E：放弃任务流程', () => {
       await callTool(api, 'mteam_cancel_task', { taskId, publisher: 'user', reason: 'reason' });
 
       const result = await callTool(api, 'mteam_relinquish_task', { taskId, executorId: 'alice' });
-
+      const data = extract(result) as { success: boolean; reason: string };
       assert.equal((extract(result) as { success: boolean }).success, false);
       assert.equal((extract(result) as { reason: string }).reason, 'TASK_CANCELLED');
       const task = getTask(await callTool(api, 'mteam_get_task', { taskId })) as { status: string };

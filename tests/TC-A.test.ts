@@ -6,6 +6,8 @@
 import { describe, it, beforeEach } from 'vitest';
 import assert from 'node:assert';
 import { createMockApi } from './helpers/testApi.js';
+import { closeDb } from '../src/pool/db.js';
+import { setWorkspaceRoot } from '../src/pool/operations.js';
 import { registerTools } from '../src/tools/index.js';
 
 const NOOP_CONFIG = { notifications: [] };
@@ -19,7 +21,7 @@ async function callTool(api, toolName, params) {
 
 /** 从 jsonResult { ok, data } 中提取 data */
 function extract(result: { ok: boolean; data: unknown }): unknown {
-  return result.ok ? result.data : result;
+  return result.data;
 }
 
 /** 从工具返回结构中提取 task 对象 */
@@ -33,6 +35,8 @@ describe('TC-A：正常完成流程', () => {
   let api: ReturnType<typeof createMockApi>;
 
   beforeEach(async () => {
+    closeDb();
+    setWorkspaceRoot('/tmp/m-team-test-' + process.pid);
     api = createMockApi(NOOP_CONFIG);
     await registerTools(api, NOOP_CONFIG);
   });

@@ -5,6 +5,8 @@
 import { describe, it, beforeEach } from 'vitest';
 import assert from 'node:assert';
 import { createMockApi } from './helpers/testApi.js';
+import { closeDb } from '../src/pool/db.js';
+import { setWorkspaceRoot } from '../src/pool/operations.js';
 import { registerTools } from '../src/tools/index.js';
 
 const NOOP_CONFIG = { notifications: [] };
@@ -16,7 +18,7 @@ async function callTool(api, toolName, params) {
 }
 
 function extract(result: { ok: boolean; data: unknown }): unknown {
-  return result.ok ? result.data : result;
+  return result.data;
 }
 
 function getTask(result: { ok: boolean; data: unknown }): unknown {
@@ -29,6 +31,8 @@ describe('TC-D：取消任务流程', () => {
   let api: ReturnType<typeof createMockApi>;
 
   beforeEach(async () => {
+    closeDb();
+    setWorkspaceRoot('/tmp/m-team-test-' + process.pid);
     api = createMockApi(NOOP_CONFIG);
     await registerTools(api, NOOP_CONFIG);
   });
@@ -48,15 +52,31 @@ describe('TC-D：取消任务流程', () => {
       assert.equal(task.executor, null);
     });
 
+
+    // DEBUG TEST
+    it('DEBUG: check extract behavior', async () => {
+      const pubResult = await callTool(api, 'mteam_publish_task', { description: 'd', goal: 'g' });
+      const taskId = (extract(pubResult) as { taskId: string }).taskId;
+      await callTool(api, 'mteam_claim_task', { taskId, agentId: 'alice' });
+      await callTool(api, 'mteam_cancel_task', { taskId, publisher: 'user', reason: 'reason' });
+      
+      const claimResult = await callTool(api, 'mteam_claim_task', { taskId, agentId: 'bob' });
+      console.log('claimResult:', JSON.stringify(claimResult));
+      const claimData = extract(claimResult);
+      console.log('claimData:', JSON.stringify(claimData));
+      console.log('claimData.success:', claimData && (claimData as any).success);
+    });
+
     it('取消后 bob 认领失败，任务不是待认领状态', async () => {
       const pubResult = await callTool(api, 'mteam_publish_task', { description: 'd', goal: 'g' });
       const taskId = (extract(pubResult) as { taskId: string }).taskId;
       await callTool(api, 'mteam_claim_task', { taskId, agentId: 'alice' });
       await callTool(api, 'mteam_cancel_task', { taskId, publisher: 'user', reason: 'reason' });
 
-      const result = await callTool(api, 'mteam_claim_task', { taskId, agentId: 'bob' });
-      assert.equal((extract(result) as { success: boolean }).success, false);
-      assert.equal((extract(result) as { reason: string }).reason, 'NOT_PENDING');
+      const claimResult = await callTool(api, 'mteam_claim_task', { taskId, agentId: 'bob' });
+      const claimData = extract(claimResult) as { success: boolean; reason: string };
+      assert.equal(claimData.success, false);
+      assert.equal(claimData.reason, 'NOT_PENDING');
     });
   });
 
@@ -66,10 +86,10 @@ describe('TC-D：取消任务流程', () => {
       const taskId = (extract(pubResult) as { taskId: string }).taskId;
       await callTool(api, 'mteam_claim_task', { taskId, agentId: 'alice' });
 
-      const result = await callTool(api, 'mteam_cancel_task', { taskId, publisher: 'other_user', reason: 'reason' });
-
-      assert.equal((extract(result) as { success: boolean }).success, false);
-      assert.equal((extract(result) as { reason: string }).reason, 'NOT_PUBLISHER');
+      const cancelResult = await callTool(api, 'mteam_cancel_task', { taskId, publisher: 'other_user', reason: 'reason' });
+      const cancelData = extract(cancelResult) as { success: boolean; reason: string };
+      assert.equal(cancelData.success, false);
+      assert.equal(cancelData.reason, 'NOT_PUBLISHER');
       const task = getTask(await callTool(api, 'mteam_get_task', { taskId })) as { status: string; executor: string };
       assert.equal(task.status, 'running');
       assert.equal(task.executor, 'alice');
@@ -97,10 +117,10 @@ describe('TC-D：取消任务流程', () => {
       await callTool(api, 'mteam_claim_task', { taskId, agentId: 'alice' });
       await callTool(api, 'mteam_cancel_task', { taskId, publisher: 'user', reason: 'reason1' });
 
-      const result = await callTool(api, 'mteam_cancel_task', { taskId, publisher: 'user', reason: 'reason2' });
-
-      assert.equal((extract(result) as { success: boolean }).success, false);
-      assert.equal((extract(result) as { reason: string }).reason, 'ALREADY_TERMINAL');
+      const cancelResult2 = await callTool(api, 'mteam_cancel_task', { taskId, publisher: 'user', reason: 'reason2' });
+      const cancelData2 = extract(cancelResult2) as { success: boolean; reason: string };
+      assert.equal(cancelData2.success, false);
+      assert.equal(cancelData2.reason, 'ALREADY_TERMINAL');
       const task = getTask(await callTool(api, 'mteam_get_task', { taskId })) as { status: string };
       assert.equal(task.status, 'cancelled');
     });
