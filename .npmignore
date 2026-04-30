@@ -1,0 +1,29 @@
+# Build artifacts to include
+!dist/
+!dashboard/dist/
+
+# Exclude everything else
+node_modules/
+dashboard/node_modules/
+dashboard/bun.lock
+dashboard/package-lock.json
+*.local
+queue/
+src/
+tests/
+docs/test-cases/
+templates/
+scripts/*.sh
+vitest.config.*
+tsconfig.*
+*.ts
+*.tsx
+!*.d.ts
+dashboard/src/
+dashboard/__tests__/
+dashboard/docs/
+dashboard/public/
+dashboard/index.html
+dashboard/vite.config.*
+dashboard/tsconfig.*
+dashboard/vitest.config.*

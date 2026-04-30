@@ -9,10 +9,17 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { setWorkspaceRoot, getAllTasks, getPendingTasks, getRunningTasks, getCompletedTasks, getFailedTasks, getCancelledTasks, getTask as getTaskById, STATUS_LABELS, PRIORITY_LABELS } from './src/db.ts';
 
-const __dirname = fileURLToPath(new URL('.', import.meta.url));
-// Serve dist/ (production build) if present, else public/ (dev assets)
-const DIST = path.join(__dirname, 'dist');
-const PUBLIC = path.join(__dirname, 'public');
+const _scriptPath = import.meta.url
+  ? fileURLToPath(import.meta.url)
+  : process.argv[1];
+const __dirname = path.dirname(_scriptPath);
+// In production (bundled): script lives in repo/dist/, assets in repo/dashboard/dist/
+// In development: script lives in repo/dashboard/, same layout
+const REPO_ROOT = path.resolve(__dirname, '..');
+const IS_PROD = !import.meta.url || !process.env.VITE_DEV;
+const DASHBOARD_DIR = IS_PROD ? path.join(REPO_ROOT, 'dashboard') : __dirname;
+const DIST = path.join(DASHBOARD_DIR, 'dist');
+const PUBLIC = path.join(DASHBOARD_DIR, 'public');
 const PORT = process.env.PORT || 3000;
 
 // Initialise DB path

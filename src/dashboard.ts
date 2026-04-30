@@ -9,9 +9,6 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-// dashboard server 入口（相对于本仓库根目录）
-const DASHBOARD_SERVER = 'dashboard/server.ts';
-
 let _dashboardProc: ChildProcess | null = null;
 let _cleanedUp = false; // 防止 double cleanup
 
@@ -25,12 +22,24 @@ export function startDashboard(workspaceRoot: string, port = 3000): ChildProcess
     return _dashboardProc;
   }
 
-  const repoRoot = getRepoRoot();
+  // Build target: dist/dashboard-server.cjs (bundled by scripts/bundle-dashboard-server.mjs)
+  // This avoids tsx dependency in production.
+  // Dev: node --import tsx dashboard/server.ts
+  // Prod: node dist/dashboard-server.cjs
+  const BUNDLED_SERVER = 'dist/dashboard-server.cjs';
+  const DEV_SERVER = 'dashboard/server.ts';
 
-  // 用 node --import tsx 运行 dashboard（tsx 已作为 runtime 依赖安装）
+  const repoRoot = getRepoRoot();
+  const useBundled = !process.env.VITE_DEV;
+
+  const serverEntry = useBundled
+    ? path.join(repoRoot, BUNDLED_SERVER)
+    : path.join(repoRoot, DEV_SERVER);
+  const serverArgs = useBundled ? [] : ['--import', 'tsx'];
+
   const proc = spawn(
     process.execPath,
-    ['--import', 'tsx', DASHBOARD_SERVER],
+    [...serverArgs, serverEntry],
     {
       cwd: repoRoot,
       env: {
