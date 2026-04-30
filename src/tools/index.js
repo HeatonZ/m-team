@@ -18,6 +18,7 @@ import {
   formatTaskNotifications,
   formatRelinquishNotifications
 } from '../pool/index.js';
+import { TaskStatus, VALID_PRIORITIES } from '../schema/task.js';
 import { readStr, readNum, jsonResult } from './helpers.js';
 import { sendNotifications } from '../notifications.js';
 
@@ -117,9 +118,14 @@ export function registerTools(api, config) {
       const description = readStr(rawParams, 'description');
       const lastHeartbeatAt = readNum(rawParams, 'lastHeartbeatAt');
 
+      // 枚举校验：非法 status 直接拒绝
+      if (status !== undefined && !Object.values(TaskStatus).includes(status)) {
+        return { ok: false, error: `Invalid status '${status}', must be one of: ${Object.values(TaskStatus).join(', ')}` };
+      }
+
       let contextEntry = null;
       if (contextStep) {
-        contextEntry = { step: contextStep };
+        contextEntry = { step: contextStep, output: contextOutput || {} };
       }
 
       const task = updateTask(taskId, status, contextEntry, description, lastHeartbeatAt, agentId);
@@ -251,15 +257,15 @@ export function registerTools(api, config) {
   // === mteam_get_pending ===
   api.registerTool({
     name: 'mteam_get_pending',
-    description: '获取待认领任务列表（agent 有进行中任务时返回空）',
+    description: '获取 agent 的待认领任务列表（该 agent 有进行中任务时返回空）',
     parameters: Type.Object({
-      agentId: Type.Optional(Type.String({ description: '过滤：agentId' }))
+      agentId: Type.String({ description: 'agentId' })
     }),
     async execute(_toolCallId, rawParams) {
       try {
 
-      const agentId = readStr(rawParams, 'agentId');
-      const pending = getPendingTasks(agentId ?? null);
+      const agentId = readStr(rawParams, 'agentId', { required: true });
+      const pending = getPendingTasks(agentId);
       return jsonResult({ pending });
     
       } catch(e) { return { ok: false, error: e?.message ?? String(e) }; }

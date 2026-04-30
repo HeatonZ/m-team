@@ -372,11 +372,11 @@ describe('mteam_update_task', () => {
   test('心跳时间戳正常处理', async () => {
     const api = await freshApi();
     const taskId = publishTask({ description: 'd', goal: 'g' });
-    claimTask(taskId, 'alice');
     const before = Date.now();
+    claimTask(taskId, 'alice');
     const result = await callTool(api, 'mteam_update_task', { taskId, agentId: 'alice' });
     expect(result.ok).toBe(true);
-    expect(extract(result).task.lastHeartbeatAt).toBeGreaterThanOrEqual(before);
+    expect(extract(result).task.lastHeartbeatAt).toBeGreaterThan(before);
   });
 
   test('不存在的 taskId 返回 task=null', async () => {
@@ -392,11 +392,11 @@ describe('mteam_update_task', () => {
 // ============================================================
 
 describe('mteam_get_pending', () => {
-  test('无参数时返回待认领列表', async () => {
+  test('带 agentId 返回待认领列表', async () => {
     const api = await freshApi();
     publishTask({ description: 'd1', goal: 'g1' });
     publishTask({ description: 'd2', goal: 'g2' });
-    const result = await callTool(api, 'mteam_get_pending', {});
+    const result = await callTool(api, 'mteam_get_pending', { agentId: 'alice' });
     const data = extract(result);
     expect(result.ok).toBe(true);
     expect(data.pending).toBeInstanceOf(Array);

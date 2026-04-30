@@ -43,7 +43,7 @@ describe('TC-J：优先级调度', () => {
       await callTool(api, 'mteam_publish_task', { description: 'high任务', goal: 'g', priority: 'high' });
       await callTool(api, 'mteam_publish_task', { description: 'low任务', goal: 'g', priority: 'low' });
 
-      const pendingResult = await callTool(api, 'mteam_get_pending', {});
+      const pendingResult = await callTool(api, 'mteam_get_pending', { agentId: 'alice' });
       const pending = (extract(pendingResult) as { pending: { priority: string }[] }).pending;
 
       assert.ok(pending.length >= 3);
@@ -63,7 +63,7 @@ describe('TC-J：优先级调度', () => {
       const taskId1 = (extract(r1) as { taskId: string }).taskId;
       const taskId2 = (extract(r2) as { taskId: string }).taskId;
 
-      const pendingResult = await callTool(api, 'mteam_get_pending', {});
+      const pendingResult = await callTool(api, 'mteam_get_pending', { agentId: 'alice' });
       const pending = (extract(pendingResult) as { pending: { taskId: string }[] }).pending;
       const ids = pending.map(t => t.taskId);
 
