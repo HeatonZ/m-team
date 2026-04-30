@@ -50,18 +50,34 @@ Executor picks it up via heartbeat → executes → notifies on complete
 
 | Field | Meaning | Rule |
 |-------|---------|------|
-| `goal` | The immutable end state | What the user ultimately wants |
-| `input` | Execution parameters | Keywords, count, files — whatever the first step needs |
-| `description` | What the next executor should do **right now** | Must be specific enough that a cold agent can act on it immediately |
+| `goal` | 完整的任务终点描述 | executor 凭此判断接不接单，必须包含类型/平台/约束/验收标准/项目路径 |
+| `input` | 执行参数 | keyword、count、projectId 等第一步需要的参数 |
+| `description` | 当前这一步做什么 | 单步可执行，不超过 2 句 |
 
-**Goal vs Description:**
+**Goal 填写规范（必须详细）：**
+- 任务类型（选品 / 爬虫 / 文档 / 代码）
+- 数据源和平台（1688 / Shopee / 什么站点）
+- 关键约束（costPrice < 5 RMB、数量、截止时间）
+- 验收标准摘要（输出什么文件/字段）
+- 项目路径
+
+**Description 填写规范：**
+- 只写当前 executor 要做的这一件事
+- 格式：`动词 + 关键词 + 筛选条件 + 输出路径`
+
+**Goal vs Description 示例：**
 
 ```
-Goal: "找到收纳箱Top10供应商报价单"       ←终点，不可拆
-Description: "搜索收纳箱1688供应商，输出名称+评分+主营产品+链接"  ←第一步，可执行
+goal: "为 Shopee 马来西亚站点从 1688 选 3 个宠物玩具，costPrice < 5 RMB，
+      完成选品详情抓取 + 英文 Listing 生成，输出 title_en/description_en/skuProps_en（含 MYR 价格），
+      图片去背景处理，项目路径 /mnt/d/code/projects/T-20250430-001/"
+description: "搜索宠物玩具关键词，筛选 costPrice < 5 RMB 的商品，取 top 5 中符合条件的 3 个，
+              输出 {projectId}/{taskId}/selection-search/{taskId}_data.json"
 ```
 
-If `description` describes the entire goal, the task is too small to benefit from the pool.
+**常见错误：**
+- description = 整个任务 → task 太小，不需要池子
+- goal = description → executor 无法判断是否适合接单
 
 ---
 
@@ -79,10 +95,11 @@ Ask if unclear:
 
 ```javascript
 mteam_publish_task({
-  description: "搜索收纳箱1688供应商，输出名称+评分+主营产品+链接",
-  goal: "找到收纳箱Top10供应商报价单",
-  input: { keyword: "收纳箱", count: 10 },
-  publisher: "user"   // or specific agentId like "manager"
+  description: "搜索宠物玩具关键词，筛选 costPrice < 5 RMB 的商品，取 top 5 中符合条件的 3 个，输出 {projectId}/{taskId}/selection-search/{taskId}_data.json",
+  goal: "为 Shopee 马来西亚站点从 1688 选 3 个宠物玩具，costPrice < 5 RMB，完成选品详情抓取 + 英文 Listing 生成，输出 title_en/description_en/skuProps_en（含 MYR 价格），图片去背景处理，项目路径 /mnt/d/code/projects/T-20250430-001/",
+  input: { keyword: "宠物玩具", maxCostPriceRmb: 5, quantity: 3, projectId: "T-20250430-001", platform: "shopee_malaysia" },
+  publisher: "manager",
+  priority: "high"
 })
 ```
 
