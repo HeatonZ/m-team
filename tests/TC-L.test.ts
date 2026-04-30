@@ -2,13 +2,20 @@
  * TC-L：读 API
  * 对应 docs/test-cases/TC-L.md
  */
-import { describe, it } from 'vitest';
+import { describe, it, beforeEach } from 'vitest';
 import assert from 'node:assert';
 import { TaskStatus } from '../src/schema/task.js';
 import * as pool from '../src/pool/index.js';
 import * as ops from '../src/pool/operations.js';
+import { closeDb } from '../src/pool/db.js';
+import { setWorkspaceRoot } from '../src/pool/operations.js';
 
 describe('TC-L：读 API', () => {
+
+  beforeEach(async () => {
+    closeDb();
+    setWorkspaceRoot('/tmp/m-team-test-' + process.pid);
+  });
 
   describe('TC-L1：Agent 有活跃任务时不再返回待认领任务', () => {
     it('alice 有活跃任务时 getPendingTasks(alice) 返回空', () => {
