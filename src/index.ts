@@ -39,12 +39,7 @@ import type { NotificationConfig } from './notifications.js';
 // ============================================================
 
 import { startDashboard, registerDashboardCleanup, stopDashboard } from './dashboard.js';
-declare function definePluginEntry(manifest: {
-  id: string;
-  name: string;
-  description: string;
-  register(api: OpenClawPluginApi): void;
-}): { default: unknown };
+import { definePluginEntry } from 'openclaw/plugin-sdk/plugin-entry';
 
 interface Logger {
   error(msg: string, meta?: Record<string, unknown>): void;
