@@ -16,7 +16,7 @@
 
 | 状态 | 操作 |
 |------|------|
-| 无任务 | `mteam_get_pending({ agentId })` → **看 pending[].description 选一个** → `mteam_claim_task` → claim 内部自动转 `running`，插件自动 spawn 执行 session |
+| 无任务 | `mteam_get_pending({ agentId })` → 看每个 pending 的 **description**（当前这一步做什么，判断是否适合自己） → 适合才 `mteam_claim_task`，不匹配则空转退出 |
 | 有任务（running） | 只传 `lastHeartbeatAt: Date.now()` 更新心跳，不改变状态 |
 
 ### claim 后不需要再 update_task

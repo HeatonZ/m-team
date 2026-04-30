@@ -32,8 +32,8 @@ export function registerTools(api, config) {
     name: 'mteam_publish_task',
     description: '发布任务到 M-Team 任务池',
     parameters: Type.Object({
-      description: Type.String({ description: '第一步的描述' }),
-      goal: Type.String({ description: '核心目标，不可更改' }),
+      goal: Type.String({ description: '任务目标（executor 凭此判断任务是否适合自己，必须有区分度，不能只是标题）' }),
+      description: Type.String({ description: '当前这一步做什么（每次只写一步，relay 时由上一个 executor 填写下一步）' }),
       input: Type.Optional(Type.Object({}, { description: '初始输入数据', additionalProperties: true })),
       publisher: Type.Optional(Type.String({ description: '发布者，默认 "user"' })),
       priority: Type.Optional(Type.String({ description: '优先级 high/normal/low，默认 normal', enum: ['high', 'normal', 'low'] }))

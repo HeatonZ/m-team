@@ -30,16 +30,18 @@ Exit. Next agent picks up if needed.
 Step 1: mteam_get_task({ taskId })
         ↓
    context non-empty?
-    ├─ YES → Resume from last executor's output
+    ├─ YES → Resume from last executor's output (do NOT redo completed steps)
     └─ NO  → Start from scratch
         ↓
-Step 2: Execute exactly what description says
+Step 2: Do exactly ONE logical step — what description says NOW
         ↓
    After execution:
    ┌─ Goal achieved? ─────────────→ mteam_complete_task()
-   ├─ Useful work done, goal not met? → mteam_relay_task()
-   └─ No progress at all? ─────────→ mteam_relinquish_task()
+   ├─ Step done, goal not met? ──→ mteam_relay_task()   [description 写下一步做什么]
+   └─ No progress at all? ───────→ mteam_relinquish_task()
 ```
+
+**description 是"当前这一步"，不是完整方案。** relay 时，下一个 agent 的 description 就是上一步 relay 时写的 contextStep。
 
 ## Tool Reference
 
@@ -137,29 +139,17 @@ If the task takes more than 5 minutes, update heartbeat via mteam_update_task:
 ```javascript
 mteam_update_task({
   taskId: "xxx",
-<<<<<<< Updated upstream
   agentId: "maker",
-=======
->>>>>>> Stashed changes
   lastHeartbeatAt: Date.now()
 })
 ```
 
-<<<<<<< Updated upstream
 Only these three fields — do NOT change status.
 
 | Threshold | Meaning | Action |
 |-----------|---------|--------|
 | > 20 min no heartbeat | Possibly stuck | Monitor |
-| > 40 min no heartbeat | Likely dead | `mteam_relinquish_task` |
-=======
-Only these two fields — do NOT change status.
-
-| Threshold | Meaning | Action |
-|-----------|---------|--------|
-| > 30 min no heartbeat | Possibly zombie | Monitor |
-| > 60 min no heartbeat | Dead task | `mteam_relinquish_task` |
->>>>>>> Stashed changes
+| > 40 min no heartbeat | Likely dead | `mteam_relay_task` |
 
 **Heartbeat ≠ progress.** Progress means `contextStep` was added.
 

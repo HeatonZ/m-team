@@ -1,10 +1,15 @@
 /**
  * M-Team Task Schema — 固定任务格式规范
+ *
+ * goal 与 description 的职责分离：
+ * - goal：任务目标，executor 凭此判断任务是否适合自己，应有区分度
+ * - description：当前这一步做什么，每次 relay 时由上一个 executor 填写下一步
+ *
  * @typedef {Object} Task
  * @property {string} taskId
- * @property {string} description
- * @property {string} goal
- * @property {Array} context
+ * @property {string} goal       任务目标（executor 凭此判断是否接任务）
+ * @property {string} description 当前这一步做什么
+ * @property {Array}  context    执行历史：[input, ...steps]，steps 由 executor 追加
  * @property {string} publisher
  * @property {string} status
  * @property {string|null} executor
@@ -123,14 +128,14 @@ export function validateTask(task) {
 
 /**
  * @param {Object} params
- * @param {string} params.description
- * @param {string} params.goal
+ * @param {string} params.goal         任务目标（executor 凭此判断是否接任务）
+ * @param {string} params.description 第一步做什么
  * @param {Object} [params.input={}]
  * @param {string} [params.publisher='user']
  * @param {string} [params.priority='normal']
  * @returns {Task}
  */
-export function createTask({ description, goal, input = {}, publisher = 'user', priority = 'normal' }) {
+export function createTask({ goal, description, input = {}, publisher = 'user', priority = 'normal' }) {
   const taskId = `task_${Math.floor(Date.now() / 1000)}`;
 
   return {
