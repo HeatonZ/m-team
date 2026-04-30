@@ -44,11 +44,20 @@ if (activeTask) {
   // 无进行中，去拿一个
   const { pending } = mteam_get_pending({ agentId: myAgentId })
   if (pending.length > 0) {
-    // executor 自己判断：看 pending 列表里哪个任务适合自己
-    // goal / description 在 pending[i] 里，根据任务描述选择要 claim 的那个
-    const chosen = pending.find(t => /* 自己判断这个任务是否适合 */ true) ?? pending[0]
-    mteam_claim_task({ agentId: myAgentId, taskId: chosen.taskId })
-    // 插件会自动 spawn 新 session 执行任务
+    // 自己判断：看每个 pending 的 goal，判断是否适合自己
+    // - 读取本 agent 的 IDENTITY.md，理解自己的职责范围
+    // - goal 与 IDENTITY 匹配才 claim，不匹配就跳过
+    // - 若所有任务都不匹配，空转退出，不乱接
+    const chosen = pending.find(t => {
+      // TODO: 根据 goal 内容和本 agent 的 IDENTITY 判断是否适合
+      // 示例判断逻辑（实际由 LLM 自行评估）：
+      // const myRole = readIdentityRole() // 从 IDENTITY.md 读取
+      // if (t.goal.includes('选品') && myRole === '跨境电商') return true
+      return false // 默认不接，等 LLM 真正判断
+    })
+    if (chosen) {
+      mteam_claim_task({ agentId: myAgentId, taskId: chosen.taskId })
+    }
   }
 }
 // 回复 HEARTBEAT_OK
