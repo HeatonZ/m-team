@@ -30,18 +30,36 @@ const EXECUTOR_HEARTBEAT_PROMPT = `你是 M-Team Executor。
 调用 mteam_get_agent_active({ agentId }) 查询当前是否有进行中任务。
 
 ## 状态判断
-- 有任务（running）→ mteam_update_task({ taskId, lastHeartbeatAt: Date.now() }) → 回复 HEARTBEAT_OK
-- 无任务 → mteam_get_pending({ agentId }) → 若有待领取 → mteam_claim_task({ agentId, taskId }) → 回复 HEARTBEAT_OK
-- 无任务且没有合适的 → 回复 HEARTBEAT_OK（空转）
 
-回复内容只写 "HEARTBEAT_OK"（不需要其他内容）。`;
+### 有任务（activeTask 有值）
+1. 用 sessions_list({ agentId }) 查询本 agent 所有 session
+2. 找到 key 包含 activeTask.taskId 的那个 session
+3. 判断 session 是否真实活跃：execSession.updatedAt 存在且距离现在 < 20 分钟
+   - **session 活跃** → mteam_update_task({ taskId: activeTask.taskId, agentId, lastHeartbeatAt: Date.now() }) → 回复 HEARTBEAT_OK
+   - **session 已死** → mteam_relinquish_task({ taskId: activeTask.taskId, executorId: agentId }) → 回复 HEARTBEAT_OK
+
+### 无任务
+1. 调用 mteam_get_pending({ agentId })
+2. 看每个 pending task 的 description（当前这一步做什么），判断是否适合自己
+   - 读本 agent 的 IDENTITY.md，理解自己职责范围
+   - description 与 IDENTITY 匹配才认领，不匹配就跳过
+3. 若有合适的 → mteam_claim_task({ agentId, taskId }) → 回复 HEARTBEAT_OK
+4. 若没有合适的 → 回复 HEARTBEAT_OK（空转，不乱接）
+
+## 注意
+- 心跳 session 不执行任务，只负责"抢任务"和"保活"
+- claimed ≠ 正在执行，真实执行由独立的 executor session 负责
+- 心跳更新只传 taskId + agentId + lastHeartbeatAt，不传 status
+- 禁止在未调用任何工具的情况下自行结束会话
+
+回复内容只写 "HEARTBEAT_OK"。`;
 
 export function registerHeartbeatPromptContributionHook(
   api: OpenClawApi,
   options: RegisterOptions,
 ): void {
   const executors = new Set(options.executors ?? ['maker', 'fixer', 'scholar', 'captain']);
-
+  
   api.on(
     'heartbeat_prompt_contribution',
     async (
