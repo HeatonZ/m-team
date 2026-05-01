@@ -162,13 +162,22 @@ export function registerTools(api: OpenClawApi, config: PluginConfig): void {
         // Plugin 内部直接创建 executor session
         const sessionKey = `mteam:${taskId}:${agentId}:${Date.now()}`;
         const systemPrompt = `
-|【任务规范 — M-Team 执行者】
-|你正在执行一个多步骤任务。当前任务信息：
-|- 任务ID: ${taskId}
-|- 任务描述: ${task.description ?? ''}
-|- 核心目标: ${task.goal ?? ''}
+【任务规范 — M-Team 执行者】
+你正在执行一个多步骤任务。在调用任何工具之前，你必须先用结构化推理分析当前任务：
 
-|【工具使用规范】
+1. **理解任务**：用自己的话复述任务目标，确认理解正确
+2. **分析步骤**：拆解完成该任务需要哪些子步骤或决策点
+3. **制定计划**：确定先做什么、后做什么
+4. **执行并验证**：调用工具执行，完成后检查结果是否符合预期
+
+只有在完成上述推理后，才能按计划调用工具。
+
+当前任务信息：
+- 任务ID: ${taskId}
+- 任务描述: ${task.description ?? ''}
+- 核心目标: ${task.goal ?? ''}
+
+【工具使用规范】
 |1. 完成任务（最终完成）→ 调用 mteam_complete_task
 |   - 当你认为任务目标已全部达成，不需要再交接给其他 agent 时使用
 |   - contextStep 描述你具体做了什么，contextOutput.summary 包含可验证的结果摘要
@@ -184,24 +193,21 @@ export function registerTools(api: OpenClawApi, config: PluginConfig): void {
 |- 在未调用任何工具的情况下自行结束会话，任务将永久卡在 running 状态
 |`;
 
-        let runId = null;
-        try {
-          const runResult = await api.runtime!.subagent!.run({
-            sessionKey,
-            message: `[M-Team Task #${taskId}] ${task.description ?? ''}${systemPrompt}`
-          });
-          runId = runResult.runId;
-        } catch (runErr) {
-          // subagent spawn 失败，回滚 claim 状态
-          api.logger?.error('[m-team] subagent.run 失败，回滚任务状态', {
+        // Fire-and-forget: 不等待 executor 完成，让 heartbeat session 能立刻回复 HEARTBEAT_OK
+        // executor 的结果由 subagent_ended hook 统一处理（completeTask / failTask）
+        api.runtime!.subagent!.run({
+          sessionKey,
+          message: `[M-Team Task #${taskId}] ${task.description ?? ''}${systemPrompt}`
+        }).catch((runErr) => {
+          // 异步启动失败，回滚 claim 状态
+          api.logger?.error('[m-team] subagent.run 异步启动失败，回滚任务状态', {
             taskId,
             error: (runErr as Error)?.message ?? String(runErr)
           });
           relinquishTask(taskId, agentId);
-          return { ok: false, error: (runErr as Error)?.message ?? String(runErr) };
-        }
+        });
 
-        return jsonResult({ ...result, runId, sessionKey });
+        return jsonResult({ ...result, sessionKey });
       } catch (e) {
         return { ok: false, error: (e as Error)?.message ?? String(e) };
       }
