@@ -163,33 +163,45 @@ export function registerTools(api: OpenClawApi, config: PluginConfig): void {
         const sessionKey = `mteam:${taskId}:${agentId}:${Date.now()}`;
         const systemPrompt = `
 |【任务规范 — M-Team 执行者】
-你正在执行一个多步骤任务。当前任务信息：
-- 任务ID: ${taskId}
-- 任务描述: ${task.description ?? ''}
-- 核心目标: ${task.goal ?? ''}
+|你正在执行一个多步骤任务。当前任务信息：
+|- 任务ID: ${taskId}
+|- 任务描述: ${task.description ?? ''}
+|- 核心目标: ${task.goal ?? ''}
 
-【工具使用规范】
-1. 完成任务（最终完成）→ 调用 mteam_complete_task
-   - 当你认为任务目标已全部达成，不需要再交接给其他 agent 时使用
-   - contextStep 描述你具体做了什么，contextOutput.summary 包含可验证的结果摘要
+|【工具使用规范】
+|1. 完成任务（最终完成）→ 调用 mteam_complete_task
+|   - 当你认为任务目标已全部达成，不需要再交接给其他 agent 时使用
+|   - contextStep 描述你具体做了什么，contextOutput.summary 包含可验证的结果摘要
 
-2. 完成任务并交接（交给下一个 agent 继续）→ 调用 mteam_relay_task
-   - 当任务未完成，还有后续步骤需要其他 agent 继续执行时使用
-   - relay 后任务回到待认领状态，下一个 agent 会接手
+|2. 完成任务并交接（交给下一个 agent 继续）→ 调用 mteam_relay_task
+|   - 当任务未完成，还有后续步骤需要其他 agent 继续执行时使用
+|   - relay 后任务回到待认领状态，下一个 agent 会接手
 
-3. 主动放弃（放回 pending 不追加 context）→ 调用 mteam_relinquish_task
-   - 当你无法继续执行，需要暂时放弃时使用
+|3. 主动放弃（放回 pending 不追加 context）→ 调用 mteam_relinquish_task
+|   - 当你无法继续执行，需要暂时放弃时使用
 
-【禁止】
-- 在未调用任何工具的情况下自行结束会话，任务将永久卡在 running 状态
-`;
+|【禁止】
+|- 在未调用任何工具的情况下自行结束会话，任务将永久卡在 running 状态
+|`;
 
-        const runResult = await api.runtime!.subagent!.run({
-          sessionKey,
-          message: `[M-Team Task #${taskId}] ${task.description ?? ''}${systemPrompt}`
-        });
+        let runId = null;
+        try {
+          const runResult = await api.runtime!.subagent!.run({
+            sessionKey,
+            message: `[M-Team Task #${taskId}] ${task.description ?? ''}${systemPrompt}`
+          });
+          runId = runResult.runId;
+        } catch (runErr) {
+          // subagent spawn 失败，回滚 claim 状态
+          api.logger?.error('[m-team] subagent.run 失败，回滚任务状态', {
+            taskId,
+            error: (runErr as Error)?.message ?? String(runErr)
+          });
+          relinquishTask(taskId, agentId);
+          return { ok: false, error: (runErr as Error)?.message ?? String(runErr) };
+        }
 
-        return jsonResult({ ...result, runId: runResult.runId, sessionKey });
+        return jsonResult({ ...result, runId, sessionKey });
       } catch (e) {
         return { ok: false, error: (e as Error)?.message ?? String(e) };
       }

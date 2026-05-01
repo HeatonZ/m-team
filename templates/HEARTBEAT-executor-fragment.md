@@ -19,46 +19,54 @@ Executor 心跳 session 和执行 session 是**两个独立 session**：
 // 从 workspace 目录名动态获取 agentId（如 workspace-maker → maker）
 const myAgentId = workspace.split('/').pop().replace('workspace-', '')
 
-// 1. 查询本 agent 是否有进行中任务
-const { activeTask } = mteam_get_agent_active({ agentId: myAgentId })
+try {
+  // 1. 查询本 agent 是否有进行中任务
+  const { activeTask } = mteam_get_agent_active({ agentId: myAgentId })
 
-if (activeTask) {
-  // 2. 检查执行 session 是否真实活跃（通过 sessions_list + updatedAt）
-  const { sessions } = sessions_list({ agentId: myAgentId })
-  const execSession = sessions.find(s => s.key.includes(activeTask.taskId))
-  const now = Date.now()
-  const isSessionAlive = execSession && (now - execSession.updatedAt < 20 * 60 * 1000)
+  if (activeTask) {
+    // 2. 检查执行 session 是否真实活跃（通过 sessions_list + updatedAt）
+    const { sessions } = sessions_list({ agentId: myAgentId })
+    const execSession = Array.isArray(sessions)
+      ? sessions.find(s => s?.key?.includes(activeTask.taskId))
+      : null
+    const now = Date.now()
+    // execSession 存在、且 updatedAt 存在、且未超过 20 分钟 → 活跃
+    const isSessionAlive = execSession?.updatedAt && (now - execSession.updatedAt < 20 * 60 * 1000)
 
-  if (isSessionAlive) {
-    // session 还活着，只更新心跳
-    mteam_update_task({
-      taskId: activeTask.taskId,
-      agentId: myAgentId,
-      lastHeartbeatAt: now
-    })
+    if (isSessionAlive) {
+      // session 还活着，只更新心跳
+      mteam_update_task({
+        taskId: activeTask.taskId,
+        agentId: myAgentId,
+        lastHeartbeatAt: now
+      })
+    } else {
+      // session 已死或任务无 session 记录，释放任务
+      mteam_relinquish_task({ taskId: activeTask.taskId, executorId: myAgentId })
+    }
   } else {
-    // session 已死，释放任务
-    mteam_relinquish_task({ taskId: activeTask.taskId, executorId: myAgentId })
-  }
-} else {
-  // 无进行中，去拿一个
-  const { pending } = mteam_get_pending({ agentId: myAgentId })
-  if (pending.length > 0) {
-    // 自己判断：看每个 pending 的 description（当前这一步做什么，判断是否适合自己）
-    // - 读取本 agent 的 IDENTITY.md，理解自己的职责范围
-    // - description 与 IDENTITY 匹配才 claim，不匹配就跳过
-    // - 若所有任务都不匹配，空转退出，不乱接
-    const chosen = pending.find(t => {
-      // TODO: 根据 description 内容和本 agent 的 IDENTITY 判断是否适合
-      // 示例判断逻辑（实际由 LLM 自行评估）：
-      // const myRole = readIdentityRole() // 从 IDENTITY.md 读取
-      // if (t.description.includes('选品') && myRole === '跨境电商') return true
-      return false // 默认不接，等 LLM 真正判断
-    })
-    if (chosen) {
-      mteam_claim_task({ agentId: myAgentId, taskId: chosen.taskId })
+    // 无进行中，去拿一个
+    const { pending } = mteam_get_pending({ agentId: myAgentId })
+    if (pending && pending.length > 0) {
+      // 自己判断：看每个 pending 的 description（当前这一步做什么，判断是否适合自己）
+      // - 读取本 agent 的 IDENTITY.md，理解自己的职责范围
+      // - description 与 IDENTITY 匹配才 claim，不匹配就跳过
+      // - 若所有任务都不匹配，空转退出，不乱接
+      const chosen = pending.find(t => {
+        // TODO: 根据 description 内容和本 agent 的 IDENTITY 判断是否适合
+        // 示例判断逻辑（实际由 LLM 自行评估）：
+        // const myRole = readIdentityRole() // 从 IDENTITY.md 读取
+        // if (t.description.includes('选品') && myRole === '跨境电商') return true
+        return false // 默认不接，等 LLM 真正判断
+      })
+      if (chosen) {
+        mteam_claim_task({ agentId: myAgentId, taskId: chosen.taskId })
+      }
     }
   }
+} catch (err) {
+  // 心跳出错不抛异常，记录后回复 HEARTBEAT_OK 避免卡死
+  console.error('[heartbeat] error:', err?.message ?? err)
 }
 // 回复 HEARTBEAT_OK
 ```
