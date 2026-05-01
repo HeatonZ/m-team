@@ -15,6 +15,7 @@ import path from 'node:path';
 import { setNotifications, formatTaskNotifications } from './notifications.js';
 import { registerTools } from './tools/index.js';
 import { registerSubagentEndedHook } from './hooks/subagentEnded.js';
+import { registerHeartbeatPromptContributionHook } from './hooks/heartbeatPromptContribution.js';
 import {
   setWorkspaceRoot,
   publishTask,
@@ -48,6 +49,7 @@ interface Logger {
 
 interface PluginConfig {
   workspaceRoot?: string;
+  executors?: string[];
   notifications?: NotificationConfig[];
 }
 
@@ -97,6 +99,9 @@ const plugin = definePluginEntry({
     registerTools(api as unknown as import('./tools/index.js').OpenClawApi, config);
 
     registerSubagentEndedHook(api as unknown as import('./hooks/subagentEnded.js').OpenClawApi);
+    registerHeartbeatPromptContributionHook(api as unknown as OpenClawApi, {
+      executors: config.executors ?? ['maker', 'fixer', 'scholar', 'captain'],
+    });
 
     api.logger?.info('[m-team] 插件加载完成', {
       workspaceRoot,

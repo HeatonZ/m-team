@@ -50,6 +50,7 @@ openclaw config set plugins.allow --array-add m-team
   "enabled": true,
   "config": {
     "workspaceRoot": "~/.openclaw/m-team",
+    "executors": ["maker", "fixer", "scholar", "captain"],
     "notifications": [
       {
         "provider": "feishu",
@@ -69,24 +70,7 @@ openclaw config set plugins.allow --array-add m-team
 }
 ```
 
-### 6. 配置 HEARTBEAT.md（必须）
-
-运行安装脚本，自动将心跳模板追加到各 agent workspace：
-
-```bash
-bash ~/code/m-team/scripts/install-heartbeat.sh
-```
-
-脚本会把 m-team 的心跳模板追加到以下 HEARTBEAT.md：
-- `~/.openclaw/workspace-manager/HEARTBEAT.md`（Publisher 循环）
-- `~/.openclaw/workspace-maker/HEARTBEAT.md`（Executor 循环）
-- `~/.openclaw/workspace-fixer/HEARTBEAT.md`（Executor 循环）
-- `~/.openclaw/workspace-scholar/HEARTBEAT.md`（Executor 循环）
-- `~/.openclaw/workspace-captain/HEARTBEAT.md`（Executor 循环）
-
-> 不会替换原有内容，只追加。重复运行会追加多次，可加 `--dry-run` 先预览。
-
-### 7. 重启 Gateway
+### 6. 重启 Gateway
 
 ```bash
 openclaw gateway restart
@@ -123,7 +107,6 @@ openclaw plugins list | grep m-team
 │   ├── tasks/
 │   └── queue/
 │       └── m-team.db
-```
 ~/code/m-team/            # 插件源码
 ├── dist/                 # 构建产物
 ├── src/                  # 源码
@@ -132,11 +115,6 @@ openclaw plugins list | grep m-team
 │   │   └── SKILL.md     # AI 执行手册
 │   └── m-team-publisher/
 │       └── SKILL.md     # AI 发布手册
-├── templates/            # HEARTBEAT 模板（安装时追加到 workspace）
-│   ├── HEARTBEAT-executor-fragment.md
-│   └── HEARTBEAT-publisher-fragment.md
-├── scripts/
-│   └── install-heartbeat.sh  # HEARTBEAT 安装脚本
 └── node_modules/         # 依赖
 ```
 
@@ -149,8 +127,8 @@ openclaw plugins list | grep m-team
 cd ~/code/m-team && npm install && openclaw gateway restart
 ```
 
-**Executor agent 不抢任务**
-确认对应 workspace 的 HEARTBEAT.md 已追加 m-team 心跳循环，`mteam_claim_task` 和 `mteam_update_task` 工具已注册成功。
+**Executor 不抢任务**
+确认 `plugins.entries` 中 `executors` 列表包含了对应 agentId，且 `mteam_*` 工具已注册。
 
 **通知没收到**
 - 确认 `notifications[].agents` 列表包含执行者的 agentId
