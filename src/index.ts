@@ -16,6 +16,7 @@ import { setNotifications, formatTaskNotifications } from './notifications.js';
 import { registerTools } from './tools/index.js';
 import { registerSubagentEndedHook } from './hooks/subagentEnded.js';
 import { registerHeartbeatPromptContributionHook } from './hooks/heartbeatPromptContribution.js';
+import { registerSessionGuardHook } from './hooks/sessionGuard.js';
 import {
   setWorkspaceRoot,
   publishTask,
@@ -100,6 +101,7 @@ const plugin = definePluginEntry({
     registerHeartbeatPromptContributionHook(api as unknown as OpenClawApi, {
       executors: config.executors ?? ['maker', 'fixer', 'scholar', 'captain'],
     });
+    registerSessionGuardHook(api as unknown as import('./hooks/sessionGuard.js').OpenClawApi);
 
     api.logger?.info('[m-team] 插件加载完成', {
       workspaceRoot,
