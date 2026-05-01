@@ -107,7 +107,7 @@ export function validateTask(task: unknown): ValidationResult {
   const t = task as Record<string, unknown>;
 
   if (!t.taskId || !String(t.taskId).startsWith('task_')) {
-    errors.push('taskId 格式无效，应为 task_{timestamp}_{random}');
+    errors.push('taskId 格式无效，应为 task_{unix_timestamp}');
   }
   if (!t.description || typeof t.description !== 'string') {
     errors.push('description 必填且为字符串');
@@ -168,7 +168,7 @@ export function createTask(input: CreateTaskInput): Task {
   } = input;
 
   return {
-    taskId: `task_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+    taskId: `task_${Math.floor(Date.now() / 1000)}`,
     description: String(description),
     goal: String(goal),
     context: [

@@ -9,7 +9,7 @@
 
 ```json
 {
-  "taskId": "task_1745620000000_abc123",
+  "taskId": "task_1745620000",
   "description": "联系供应商确认价格",
   "goal": "找到收纳箱类目下评分高的1688供应商",
   "context": [
@@ -32,7 +32,7 @@
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
-| `taskId` | string | 唯一标识，格式 `task_{timestamp}_{random}` |
+| `taskId` | string | 唯一标识，格式 `task_{unix_timestamp}`（秒级） |
 | `description` | string | **当前步骤描述**，每次 relay 后更新 |
 | `goal` | string | **核心目标**，创建后不可更改 |
 | `context` | array | 步骤历史，数组末尾是最新的可执行状态 |
@@ -99,7 +99,7 @@ mteam_publish_task({
   publisher: "user",                          // 发布者身份
   priority: "high"                            // high / normal / low
 })
-// 返回: { taskId: "task_1745740800000_abc123" }
+// 返回: { taskId: "task_1745740800" }
 ```
 
 ---
@@ -110,17 +110,17 @@ mteam_publish_task({
 
 ```javascript
 mteam_claim_task({
-  taskId: "task_1745740800000_abc123",
+  taskId: "task_1745740800",
   agentId: "my-agent-id"
 })
 /**
  * 返回:
  * {
  *   success: true,
- *   taskId: "task_1745740800000_abc123",
+ *   taskId: "task_1745740800",
  *   task: { ... },
  *   runId: "run_xxx",
- *   sessionKey: "mteam:task1745740800000_abc123:my-agent-id:1745740801234"
+ *   sessionKey: "mteam:task1745740800:my-agent-id:1745740800"
  * }
  *
  * SQLite 事务:
