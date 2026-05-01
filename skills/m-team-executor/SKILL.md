@@ -1,7 +1,7 @@
 ---
 name: m-team-executor
-description: "Use when: (1) you just called mteam_claim_task and got { success: true, taskId }, OR (2) your heartbeat found you have a running task. This skill is the playbook for executing one step, deciding outcome, and updating the pool."
-version: 1.2.0
+description: "Use when: (1) you just called mteam_claim_task and got { success: true, taskId }, OR (2) your heartbeat found you have a running task. This skill is the executor's tool reference — how to call complete/relay/relinquish correctly."
+version: 1.3.0
 author: Hermes Agent
 license: MIT
 metadata:
@@ -10,63 +10,19 @@ metadata:
     related_skills: [m-team-publisher, skill-triggering, task-delegation]
 ---
 
-# M-Team Executor Playbook
+# M-Team Executor — Tool Reference
 
-## How This Skill Is Used
+> Heartbeat handles task discovery and keep-alive. This skill covers the three outcomes.
 
-```
-YOU received a task via mteam_claim_task
-    ↓
-Read this skill → Follow the playbook
-    ↓
-Execute ONE step → Make a decision → Call the right tool
-    ↓
-Exit. Next agent picks up if needed.
-```
+## Context Before Starting
 
-## Decision Tree
-
-```
-Step 1: mteam_get_task({ taskId })
-        ↓
-   context non-empty?
-    ├─ YES → Resume from last executor's output (do NOT redo completed steps)
-    └─ NO  → Start from scratch
-        ↓
-Step 2: Do exactly ONE logical step — what description says NOW
-        ↓
-   After execution:
-   ┌─ Goal achieved? ─────────────→ mteam_complete_task()
-   ├─ Step done, goal not met? ──→ mteam_relay_task()   [description 写下一步做什么]
-   └─ No progress at all? ───────→ mteam_relinquish_task()
-```
-
-**description 是"当前这一步"，不是完整方案。** relay 时，下一个 agent 的 description 就是上一步 relay 时写的 contextStep。
-
-## Tool Reference
-
-### Step 1: Read Task
-
-```javascript
-mteam_get_task({ taskId: "xxx" })
-```
-
-Returns `task` with fields: `taskId`, `description`, `goal`, `input`, `context`, `status`, `executor`, `createdAt`.
-
-**If `context` is non-empty** → relay case:
-
-```json
-"context": [
-  { "type": "input", "data": { "keyword": "收纳箱" } },
-  { "executor": "maker", "step": "搜索供应商", "output": { "summary": "找到10家" }, "completedAt": 1745621000 }
-]
-```
-
-→ Resume from where it stopped. Do NOT redo completed steps.
+Read `context` from `mteam_get_task({ taskId })`:
+- **empty** → start from scratch
+- **non-empty** → resume from last `executor`'s `contextStep`. Do NOT redo completed steps.
 
 ---
 
-### Outcome A: Goal Achieved → mteam_complete_task
+## Outcome A: Goal Achieved → mteam_complete_task
 
 ```javascript
 mteam_complete_task({
@@ -76,18 +32,16 @@ mteam_complete_task({
 })
 ```
 
-**Parameters:**
-
-| Param | Required | Description |
-|-------|----------|-------------|
-| `taskId` | yes | 任务ID |
-| `contextStep` | yes | 这一步做了什么（描述具体动作） |
+| Param | Required | Notes |
+|-------|----------|-------|
+| `taskId` | yes | |
+| `contextStep` | yes | 这一步做了什么（具体动作） |
 | `contextOutput.summary` | no | 可验证的结果摘要 |
 | `contextOutput.files` | no | 任务文件夹内的相对路径数组 |
 
 ---
 
-### Outcome B: Useful Work Done, Goal Not Met → mteam_relay_task
+## Outcome B: Goal Not Met → mteam_relay_task
 
 ```javascript
 mteam_relay_task({
@@ -98,21 +52,19 @@ mteam_relay_task({
 })
 ```
 
-**Parameters:**
-
-| Param | Required | Description |
-|-------|----------|-------------|
-| `taskId` | yes | 任务ID |
+| Param | Required | Notes |
+|-------|----------|-------|
+| `taskId` | yes | |
 | `agentId` | yes | 当前执行者 agentId |
 | `contextStep` | yes | 这一步做了什么 |
 | `contextOutput.summary` | no | 结果摘要 |
 | `contextOutput.files` | no | 产出文件路径 |
 
-→ Plugin 会自动把 `executor` 设为 `null`，任务变回 `pending`，下一个 agent 认领
+Plugin 会自动把 `executor` 设为 `null`，任务变回 `pending`。
 
 ---
 
-### Outcome C: No Progress → mteam_relinquish_task
+## Outcome C: No Progress → mteam_relinquish_task
 
 ```javascript
 mteam_relinquish_task({
@@ -121,51 +73,12 @@ mteam_relinquish_task({
 })
 ```
 
-**Parameters:**
-
-| Param | Required | Description |
-|-------|----------|-------------|
-| `taskId` | yes | 任务ID |
-| `executorId` | yes | 当前执行者 agentId（注意是 `executorId` 不是 `agentId`）|
+| Param | Required | Notes |
+|-------|----------|-------|
+| `taskId` | yes | |
+| `executorId` | yes | 当前执行者 ID（**不是 agentId**） |
 
 → **Do NOT add contextStep.** That corrupts the audit trail.
-
----
-
-## Heartbeat While Working
-
-If the task takes more than 5 minutes, update heartbeat via mteam_update_task:
-
-```javascript
-mteam_update_task({
-  taskId: "xxx",
-  agentId: "maker",
-  lastHeartbeatAt: Date.now()
-})
-```
-
-Only these three fields — do NOT change status.
-
-| Threshold | Meaning | Action |
-|-----------|---------|--------|
-| > 20 min no heartbeat | Possibly stuck | Monitor |
-| > 40 min no heartbeat | Likely dead | `mteam_relay_task` |
-
-**Heartbeat ≠ progress.** Progress means `contextStep` was added.
-
----
-
-## Output File Convention
-
-Write outputs to task folder, store relative paths in `contextOutput.files`:
-
-```
-{workspaceRoot}/tasks/{taskId}/
-├── task.json
-└── data/
-    ├── suppliers.json
-    └── contact_log.md
-```
 
 ---
 
@@ -178,16 +91,17 @@ Write outputs to task folder, store relative paths in `contextOutput.files`:
 | `mteam_relinquish_task({ taskId, agentId })` | `mteam_relinquish_task({ taskId, executorId })` |
 | Write fake contextStep on relinquish | Relinquish = no contextStep |
 | Expand scope beyond description | Do one step, not the whole goal |
-| Forget heartbeat during long tasks | Update every 5 min |
+| `contextStep` empty or vague | Be specific about what was done |
 
 ---
 
-## Checklist Before Exiting
+## Output File Convention
 
-- [ ] Read `context` before starting (know relay history)
-- [ ] Executed exactly what `description` asked
-- [ ] Called correct tool (complete / relay / relinquish)
-- [ ] Relay called `mteam_relay_task` with `contextStep` + `contextOutput`
-- [ ] Relinquish called `mteam_relinquish_task` with NO contextStep
-- [ ] Heartbeat updated if task took > 5 min
-- [ ] Output files use correct relative path convention
+Write to task folder, store relative paths in `contextOutput.files`:
+
+```
+{workspaceRoot}/tasks/{taskId}/
+├── task.json
+└── data/
+    └── results.json
+```
