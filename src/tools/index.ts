@@ -160,7 +160,9 @@ export function registerTools(api: OpenClawApi, config: PluginConfig): void {
         }
 
         // Plugin 内部直接创建 executor session
+        // 注意：任务已由心跳 session 认领，subagent 不需要重复 claim
         const sessionKey = `mteam:${taskId}:${agentId}:${Date.now()}`;
+        const executorAgentId = agentId; // 任务指定的执行者（而非 subagent 的 session agentId）
         const systemPrompt = `
 【任务规范 — M-Team 执行者】
 你正在执行一个多步骤任务。在调用任何工具之前，你必须先用结构化推理分析当前任务：
@@ -176,8 +178,16 @@ export function registerTools(api: OpenClawApi, config: PluginConfig): void {
 - 任务ID: ${taskId}
 - 任务描述: ${task.description ?? ''}
 - 核心目标: ${task.goal ?? ''}
+- 执行者 agentId: ${executorAgentId}
+
+【重要】任务认领状态：
+任务已被心跳 session（${executorAgentId}）认领，处于 RUNNING 状态。
+**禁止调用 mteam_claim_task**——任务不在 PENDING 状态，claim 会失败。
+直接执行任务即可。
 
 【工具使用规范】
+所有工具调用必须传入正确的 executorAgentId（${executorAgentId}），不能用 subagent 自己的 session agentId。
+
 |1. 完成任务（最终完成）→ 调用 mteam_complete_task
 |   - 当你认为任务目标已全部达成，不需要再交接给其他 agent 时使用
 |   - contextStep 描述你具体做了什么，contextOutput.summary 包含可验证的结果摘要
@@ -190,15 +200,20 @@ export function registerTools(api: OpenClawApi, config: PluginConfig): void {
 |   - 当你无法继续执行，需要暂时放弃时使用
 
 |【禁止】
+|- 调用 mteam_claim_task——任务已被认领，claim 会返回 NOT_PENDING
 |- 认领任务后不要立刻调用 mteam_complete_task，先用 mteam_get_task 读取 context，再实际执行任务
 |- 在未调用任何工具的情况下自行结束会话，任务将永久卡在 running 状态
+|- 在 tool call 的 agentId 参数中传入 subagent 自己的 session agentId，必须传入 ${executorAgentId}
 |`;
 
         // Fire-and-forget: 不等待 executor 完成，让 heartbeat session 能立刻回复 HEARTBEAT_OK
         // executor 的结果由 subagent_ended hook 统一处理（completeTask / failTask）
         api.runtime!.subagent!.run({
           sessionKey,
-          message: `[M-Team Task #${taskId}] ${task.description ?? ''}${systemPrompt}`
+          message: `[M-Team Task #${taskId}] ${task.description ?? ''}
+
+[系统信息] executorAgentId=${executorAgentId}
+${systemPrompt}`
         }).catch((runErr) => {
           // 异步启动失败，回滚 claim 状态
           api.logger?.error('[m-team] subagent.run 异步启动失败，回滚任务状态', {
