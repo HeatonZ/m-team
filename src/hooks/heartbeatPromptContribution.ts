@@ -100,6 +100,9 @@ export function registerHeartbeatPromptContributionHook(
         sessionKey,
       });
 
+      // TODO: 临时调试日志，executor 重复 claim 问题时删除
+      console.error('[DEBUG heartbeat] agentId=' + agentId + ' sessionKey=' + sessionKey);
+
       return {
         appendContext: EXECUTOR_HEARTBEAT_PROMPT,
       };
