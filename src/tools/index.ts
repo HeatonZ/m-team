@@ -210,6 +210,7 @@ export function registerTools(api: OpenClawApi, config: PluginConfig): void {
         // executor 的结果由 subagent_ended hook 统一处理（completeTask / failTask）
         api.runtime!.subagent!.run({
           sessionKey,
+          agentId,  // subagent 以心跳 session 的身份运行
           message: `[M-Team Task #${taskId}] ${task.description ?? ''}
 
 [系统信息] executorAgentId=${executorAgentId}
