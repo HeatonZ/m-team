@@ -91,10 +91,8 @@ const plugin = definePluginEntry({
     setNotifications(config.notifications ?? []);
 
     // — 启动 dashboard UI（在插件进程内 spawn，随插件卸载而停止）—
-    const cleanupApi = { registerHook: (event: string, handler: () => void) => api.on(event, handler as (event: Record<string, unknown>) => Promise<void>) };
-    (globalThis as Record<string, unknown>).__openclaw_lifecycle_api__ = cleanupApi;
     startDashboard(workspaceRoot);
-    registerDashboardCleanup(stopDashboard);
+    registerDashboardCleanup(api, stopDashboard);
 
     registerTools(api as unknown as import('./tools/index.js').OpenClawApi, config);
 

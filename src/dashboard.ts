@@ -81,29 +81,23 @@ export function stopDashboard(): void {
 }
 
 /**
- * 注册 OpenClaw 官方生命周期钩子 + hard-kill兜底信号。
+ * 注册 OpenClaw 生命周期钩子 + hard-kill 兜底信号。
  *
- * @param stopDashboard  回调，gateway shutdown/pre-restart 时调用
+ * @param api           OpenClaw 插件 API（含 .on() 方法）
+ * @param stopDashboard 回调，gateway shutdown 时调用
  */
-export function registerDashboardCleanup(stopDashboard: () => void): void {
+export function registerDashboardCleanup(
+  api: { on(event: string, handler: () => void | Promise<void>): void },
+  stopDashboard: () => void,
+): void {
   // 清理函数（幂等）
   const cleanup = () => {
     stopDashboard();
     setTimeout(() => process.exit(0), 100);
   };
 
-  // OpenClaw 官方钩子优先
-  try {
-    const api = globalThis.__openclaw_lifecycle_api__ as {
-      registerHook(event: string, handler: () => void): void;
-    } | undefined;
-    if (api?.registerHook) {
-      api.registerHook('gateway:shutdown', cleanup);
-      api.registerHook('gateway:pre-restart', cleanup);
-    }
-  } catch {
-    // 钩子不存在（老版本 OpenClaw），fallback 到 signal
-  }
+  // OpenClaw 官方钩子
+  api.on('gateway_stop', cleanup);
 
   // Hard-kill 兜底（nssm restart 等场景）
   for (const sig of ['SIGTERM', 'SIGINT', 'SIGHUP'] as const) {
