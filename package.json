@@ -50,7 +50,7 @@
     }
   },
   "scripts": {
-    "build": "npm run build:plugin && npm run build:dashboard",
+    "build": "npm run build:plugin",
     "build:plugin": "esbuild ./src/index.ts --bundle --platform=node --outdir=dist --format=cjs --external:node:* --external:openclaw --external:openclaw/plugin-sdk --external:better-sqlite3",
     "build:dashboard": "npm run build --prefix dashboard && node scripts/bundle-dashboard-server.mjs",
     "postinstall": "npm run build",
