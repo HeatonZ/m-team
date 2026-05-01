@@ -34,6 +34,7 @@ const EXECUTOR_ONLY_TOOLS = new Set([
   'mteam_complete_task',
   'mteam_relay_task',
   'mteam_cancel_task',
+  'mteam_update_task',  // 允许传任意字段，heartbeat session 禁止
 ]);
 
 export function registerSessionGuardHook(api: OpenClawApi): void {
