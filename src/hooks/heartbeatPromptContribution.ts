@@ -41,9 +41,6 @@ mteam_relinquish_task({ taskId, executorId })
 只用于：session 已死（updatedAt > 20min）且无法恢复
 禁止传入：contextStep（会污染审计链）
 
-### mteam_complete_task / mteam_relay_task / mteam_cancel_task
-禁止调用。这些是 executor session 的职责，不是心跳的职责。
-
 ### 认领任务后
 认领任务（claim_task）后，不要在自己（heartbeat session）里调用 complete_task。
 任务由 plugin 启动的独立 executor session 执行，heartbeat 只负责认领和保活。
