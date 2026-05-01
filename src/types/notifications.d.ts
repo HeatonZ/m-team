@@ -13,7 +13,11 @@ declare module '../notifications' {
   export function getNotifications(): Notification[];
   export function formatTaskNotifications(task: unknown, notifications: Notification[]): Notification[];
   export function formatRelinquishNotifications(task: unknown, notifications: Notification[]): Notification[];
-  export async function sendNotifications(notifications: Notification[], api: unknown): Promise<void>;
+  export function formatRelayNotifications(task: unknown, notifications: Notification[]): Notification[];
+  export function formatPublishNotifications(task: unknown, notifications: Notification[]): Notification[];
+  export function formatClaimNotifications(task: unknown, notifications: Notification[]): Notification[];
+  export function formatCancelNotifications(task: unknown, notifications: Notification[]): Notification[];
+  export async function sendNotifications(notifications: Notification[], logger?: unknown): Promise<void>;
 }
 
 declare module '../hooks/subagentEnded.js' {

@@ -134,11 +134,14 @@ npm run test:run # 单次运行
             {
               "provider": "feishu",
               "groupId": "oc_xxxxx",
+              "appId": "cli_xxxx",
+              "appSecret": "xxxx",
               "agents": ["agent_1", "agent_2"]
             },
             {
               "provider": "discord",
               "channelId": "123456",
+              "discordToken": "Bot xxxx",
               "agents": ["agent_1", "agent_2"]
             }
           ]
@@ -152,8 +155,11 @@ npm run test:run # 单次运行
 | 配置项 | 说明 |
 |--------|------|
 | `workspaceRoot` | 工作区根目录，tasks/ 和 queue/ 建在此下 |
-| `notifications` | 任务完成时通知（可选，支持 feishu / discord）|
-| `notifications[].agents` | 限定特定 agent 完成时触发通知 |
+| `notifications` | 任务状态变更时通知（publish / claim / complete / relay / relinquish / cancel）|
+| `notifications[].agents` | 限定特定 agent 触发通知（publisher/executor 匹配才发）。通常填入所有需要接收通知的 agentId，如 `["manager", "maker", "executor1"]`，配置一个账号即可覆盖全队 |
+| `notifications[].appId` | Feishu 机器人的 app_id（provider=feishu 时必填） |
+| `notifications[].appSecret` | Feishu 机器人的 app_secret（provider=feishu 时必填） |
+| `notifications[].discordToken` | Discord 机器人的 bot token（provider=discord 时必填） |
 
 ---
 

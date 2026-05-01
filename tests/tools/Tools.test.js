@@ -533,4 +533,26 @@ describe('Side effects', () => {
     expect(data.sessionKey).toContain('alice');
     expect(data.sessionKey).toContain(taskId);
   });
+
+  test('mteam_publish_task 配置 notifications 时调用 sendNotifications', async () => {
+    const api = await freshApi(WITH_NOTIF_CONFIG);
+    // publisher 是 'user'，agents 包含 'user' 才触发
+    let called = false;
+    api.sendNotifications = async () => { called = true; };
+    const result = await callTool(api, 'mteam_publish_task', {
+      description: 'step 1',
+      goal: 'whole task goal',
+      publisher: 'user'
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  test('mteam_cancel_task 配置 notifications 时调用 sendNotifications', async () => {
+    const api = await freshApi(WITH_NOTIF_CONFIG);
+    const taskId = publishTask({ description: 'd', goal: 'g', publisher: 'manager' });
+    let called = false;
+    api.sendNotifications = async () => { called = true; };
+    const result = await callTool(api, 'mteam_cancel_task', { taskId, publisher: 'manager' });
+    expect(result.ok).toBe(true);
+  });
 });

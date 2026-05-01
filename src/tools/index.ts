@@ -22,6 +22,9 @@ import {
   formatTaskNotifications,
   formatRelinquishNotifications,
   formatRelayNotifications,
+  formatPublishNotifications,
+  formatClaimNotifications,
+  formatCancelNotifications,
   sendNotifications,
   type NotificationConfig
 } from '../notifications.js';
@@ -56,12 +59,15 @@ interface RuntimeSubagent {
   run(opts: { sessionKey: string; message: string }): Promise<{ runId: string }>;
 }
 
-interface ChannelOutboundAdapter {
-  sendText(opts: { text: string }): Promise<void>;
-}
-
-interface ChannelOutbound {
-  loadAdapter(opts: { channelId: string; accountId?: string }): Promise<ChannelOutboundAdapter>;
+export interface OpenClawApi {
+  logger?: Logger;
+  config?: {
+    accounts?: Array<{ type?: string; provider?: string; id?: string; accountId?: string }>;
+  };
+  pluginConfig?: PluginConfig;
+  runtime?: { subagent?: RuntimeSubagent };
+  registerTool(tool: ToolDefinition): void;
+  on(event: string, handler: (event: Record<string, unknown>) => Promise<void>): void;
 }
 
 interface Logger {
@@ -73,18 +79,6 @@ interface Logger {
 interface PluginConfig {
   workspaceRoot?: string;
   notifications?: NotificationConfig[];
-}
-
-export interface OpenClawApi {
-  logger?: Logger;
-  config?: {
-    accounts?: Array<{ type?: string; provider?: string; id?: string; accountId?: string }>;
-  };
-  pluginConfig?: PluginConfig;
-  channel?: { outbound?: ChannelOutbound };
-  runtime?: { subagent?: RuntimeSubagent };
-  registerTool(tool: ToolDefinition): void;
-  on(event: string, handler: (event: Record<string, unknown>) => Promise<void>): void;
 }
 
 // ============================================================
@@ -115,6 +109,17 @@ export function registerTools(api: OpenClawApi, config: PluginConfig): void {
         const publisher = readStr(rawParams, 'publisher') ?? 'user';
         const priority = readStr(rawParams, 'priority') ?? undefined;
         const taskId = publishTask({ description: description!, goal: goal!, input: rawParams.input as Record<string, unknown> | undefined, publisher, priority: priority ?? undefined });
+        const task = getTask(taskId);
+
+        if (task && config.notifications?.length) {
+          try {
+            const notifications = formatPublishNotifications(task, config.notifications);
+            await sendNotifications(notifications, api.logger);
+          } catch (e) {
+            api.logger?.warn('[m-team] 通知发送失败', { error: (e as Error)?.message });
+          }
+        }
+
         return jsonResult({ taskId });
       } catch (e) {
         return { ok: false, error: (e as Error)?.message ?? String(e) };
@@ -144,6 +149,15 @@ export function registerTools(api: OpenClawApi, config: PluginConfig): void {
 
         // claim 后重新读，拿 relay 后最新的 description（claim 返回的 result.task 是事务快照）
         const task = getTask(taskId) ?? result.task;
+
+        if (task && config.notifications?.length) {
+          try {
+            const notifications = formatClaimNotifications(task, config.notifications);
+            await sendNotifications(notifications, api.logger);
+          } catch (e) {
+            api.logger?.warn('[m-team] 通知发送失败', { error: (e as Error)?.message });
+          }
+        }
 
         // Plugin 内部直接创建 executor session
         const sessionKey = `mteam:${taskId}:${agentId}:${Date.now()}`;
@@ -253,6 +267,16 @@ export function registerTools(api: OpenClawApi, config: PluginConfig): void {
         const reason = readStr(rawParams, 'reason');
         const result = cancelTask(taskId, publisher, reason);
         if (!result.success) return { ok: false, data: result };
+
+        if (result.task && config.notifications?.length) {
+          try {
+            const notifications = formatCancelNotifications(result.task, config.notifications);
+            await sendNotifications(notifications, api.logger);
+          } catch (e) {
+            api.logger?.warn('[m-team] 通知发送失败', { error: (e as Error)?.message });
+          }
+        }
+
         return jsonResult({ success: result.success, task: result.task });
       } catch (e) {
         return { ok: false, error: (e as Error)?.message ?? String(e) };
@@ -293,7 +317,7 @@ export function registerTools(api: OpenClawApi, config: PluginConfig): void {
         if (result.task && config.notifications?.length) {
           try {
             const notifications = formatTaskNotifications(result.task, config.notifications);
-            await sendNotifications(notifications, api);
+            await sendNotifications(notifications, api.logger);
           } catch (e) {
             api.logger?.warn('[m-team] 通知发送失败', { error: (e as Error)?.message });
           }
@@ -343,7 +367,7 @@ export function registerTools(api: OpenClawApi, config: PluginConfig): void {
         if (result.task && config.notifications?.length) {
           try {
             const notifications = formatRelayNotifications(result.task, config.notifications);
-            await sendNotifications(notifications, api);
+            await sendNotifications(notifications, api.logger);
           } catch (e) {
             api.logger?.warn('[m-team] 通知发送失败', { error: (e as Error)?.message });
           }
@@ -380,7 +404,7 @@ export function registerTools(api: OpenClawApi, config: PluginConfig): void {
         if (result.success && result.task && config.notifications?.length) {
           try {
             const notifications = formatRelinquishNotifications(result.task, config.notifications);
-            await sendNotifications(notifications, api);
+            await sendNotifications(notifications, api.logger);
           } catch (e) {
             api.logger?.warn('[m-team] 通知发送失败', { error: (e as Error)?.message });
           }

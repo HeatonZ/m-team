@@ -54,7 +54,7 @@ export function registerSubagentEndedHook(api: OpenClawApi): void {
       if (result.success) {
         api.logger?.info(`[m-team] subagent_ended: 任务 ${taskId} 标记完成 (outcome=${outcome})`);
         const notifications = formatTaskNotifications(result.task!, getNotifications());
-        await sendNotifications(notifications, api);
+        await sendNotifications(notifications, api.logger);
       } else {
         api.logger?.info(`[m-team] subagent_ended: 任务 ${taskId} 无操作 (${result.reason})`);
       }

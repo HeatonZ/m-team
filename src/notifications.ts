@@ -6,15 +6,27 @@
 export interface NotificationConfig {
   provider: 'feishu' | 'discord';
   agents: string[];
+  /** Feishu: 机器人的 app_id */
+  appId?: string;
+  /** Feishu: 机器人的 app_secret */
+  appSecret?: string;
+  /** Feishu: 接收消息的 groupId（openid 形式） */
   groupId?: string;
+  /** Discord: 接收消息的 channelId */
   channelId?: string;
+  /** Discord: 机器人的 bot token */
+  discordToken?: string;
 }
 
 interface FormattedNotification {
   provider: 'feishu' | 'discord';
-  chatId?: string;
-  channelId?: string;
+  chatId?: string;       // Feishu groupId / open_id
+  channelId?: string;    // Discord channelId
   message: string;
+  // Credentials（由 formatters 从 NotificationConfig 复制过来）
+  appId?: string;
+  appSecret?: string;
+  discordToken?: string;
 }
 
 let _notifications: NotificationConfig[] = [];
@@ -51,37 +63,140 @@ interface OpenClawApi {
 
 /**
  * 发送格式化后的通知（Feishu / Discord）
+ * 不依赖 OpenClaw channel adapter，直接调 Web API
  */
 export async function sendNotifications(
   notifications: FormattedNotification[],
-  api: OpenClawApi
+  logger?: { error(msg: string, meta?: Record<string, unknown>): void }
 ): Promise<void> {
   if (!notifications || notifications.length === 0) return;
 
   for (const notif of notifications) {
     try {
-      if (notif.provider === 'feishu' && notif.chatId) {
-        const accountId = await resolveFeishuAccountId(api);
-        const adapter = await api.channel!.outbound!.loadAdapter({ channelId: notif.chatId, accountId: accountId ?? undefined });
-        await adapter.sendText({ text: notif.message });
-      } else if (notif.provider === 'discord' && notif.channelId) {
-        const adapter = await api.channel!.outbound!.loadAdapter({ channelId: notif.channelId });
-        await adapter.sendText({ text: notif.message });
+      if (notif.provider === 'feishu' && notif.chatId && notif.appId && notif.appSecret) {
+        await sendFeishuGroupMessage(notif.chatId, notif.message, notif.appId, notif.appSecret, logger);
+      } else if (notif.provider === 'discord' && notif.channelId && notif.discordToken) {
+        await sendDiscordDirect(notif.channelId, notif.message, notif.discordToken, logger);
       }
     } catch (err) {
-      api.logger?.error(`[m-team] sendNotifications 失败: ${(err as Error).message}`, { notif });
+      logger?.error(`[m-team] sendNotifications 失败: ${(err as Error).message}`, { notif });
     }
   }
 }
 
-/**
- * 从 api.config.accounts 里找到第一个 feishu 类型的 accountId
- */
-async function resolveFeishuAccountId(api: OpenClawApi): Promise<string | null> {
-  const accounts = api.config?.accounts ?? [];
-  const feishuAccount = accounts.find(a => a.type === 'feishu' || a.provider === 'feishu');
-  return feishuAccount?.id ?? feishuAccount?.accountId ?? null;
+// ── Feishu 发送 ────────────────────────────────────────────────
+
+interface FeishuTokenCache {
+  token: string;
+  expireAt: number; // ms
 }
+
+let _feishuTokenCache: FeishuTokenCache | null = null;
+
+/**
+ * 获取 Feishu tenant_access_token（带内存缓存，20分钟有效期）
+ */
+async function getFeishuToken(
+  appId: string,
+  appSecret: string,
+  logger?: { error(msg: string, meta?: Record<string, unknown>): void }
+): Promise<string> {
+  // 缓存命中且未过期
+  if (_feishuTokenCache && Date.now() < _feishuTokenCache.expireAt) {
+    return _feishuTokenCache.token;
+  }
+
+  const res = await fetch('https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ app_id: appId, app_secret: appSecret })
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Feishu auth failed: ${res.status} ${text}`);
+  }
+
+  const json = await res.json() as { code: number; msg: string; tenant_access_token: string };
+
+  if (json.code !== 0) {
+    throw new Error(`Feishu auth error: ${json.code} ${json.msg}`);
+  }
+
+  // 提前 5 分钟过期，留 buffer
+  _feishuTokenCache = {
+    token: json.tenant_access_token,
+    expireAt: Date.now() + (25 * 60 * 1000) // 缓存 25 分钟（官方 2 小时）
+  };
+
+  return json.tenant_access_token;
+}
+
+/**
+ * 直接调 Feishu 消息发送 API（支持 group）
+ * https://open.feishu.cn/document/server-endpoints/im-v1/message/create
+ */
+export async function sendFeishuGroupMessage(
+  chatId: string,
+  message: string,
+  appId: string,
+  appSecret: string,
+  logger: { error: (msg: string) => void; info?: (msg: string) => void }
+): Promise<void> {
+  const token = await getFeishuToken(appId, appSecret, logger);
+
+  const body = {
+    receive_id: chatId,
+    msg_type: 'text',
+    content: JSON.stringify({ text: message })
+  };
+
+  const res = await fetch(
+    'https://open.feishu.cn/open-apis/im/v1/messages?receive_id_type=chat_id',
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify(body)
+    }
+  );
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Feishu send failed: ${res.status} ${text}`);
+  }
+}
+
+/**
+ * 直接调 Discord 消息发送 API
+ * https://discord.com/developers/docs/resources/channel#create-message
+ */
+async function sendDiscordDirect(
+  channelId: string,
+  message: string,
+  discordToken: string,
+  logger?: { error(msg: string, meta?: Record<string, unknown>): void }
+): Promise<void> {
+  const res = await fetch(
+    `https://discord.com/api/v10/channels/${channelId}/messages`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bot ${discordToken}`
+      },
+      body: JSON.stringify({ content: message })
+    }
+  );
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Discord send failed: ${res.status} ${text}`);
+  }
+}
+
 
 // ============================================================
 // 通知格式化
@@ -111,6 +226,8 @@ export function formatTaskNotifications(task: Task, notifications: NotificationC
       result.push({
         provider: 'feishu',
         chatId: cfg.groupId,
+        appId: cfg.appId,
+        appSecret: cfg.appSecret,
         message: [
           `✅ 任务完成`,
           ``,
@@ -126,6 +243,7 @@ export function formatTaskNotifications(task: Task, notifications: NotificationC
       result.push({
         provider: 'discord',
         channelId: cfg.channelId,
+        discordToken: cfg.discordToken,
         message: [
           `✅ **${task.description}**`,
           summary ? `_${summary}_` : null,
@@ -193,9 +311,104 @@ function formatRelayOrRelinquishNotifications(
     const message = lines.join('\n');
 
     if (cfg.provider === 'feishu') {
-      result.push({ provider: 'feishu', chatId: cfg.groupId, message });
+      result.push({ provider: 'feishu', chatId: cfg.groupId, appId: cfg.appId, appSecret: cfg.appSecret, message });
     } else if (cfg.provider === 'discord') {
-      result.push({ provider: 'discord', channelId: cfg.channelId, message });
+      result.push({ provider: 'discord', channelId: cfg.channelId, discordToken: cfg.discordToken, message });
+    }
+  }
+
+  return result;
+}
+
+// ============================================================
+// 通知格式化 — publish / claim / cancel
+// ============================================================
+
+export function formatPublishNotifications(
+  task: Task,
+  notifications: NotificationConfig[]
+): FormattedNotification[] {
+  if (!notifications || notifications.length === 0) return [];
+  if (!task) return [];
+
+  const result: FormattedNotification[] = [];
+  for (const cfg of notifications) {
+    if (!cfg.agents.includes(task.publisher)) continue;
+
+    const lines = [
+      `📋 任务已发布`,
+      ``,
+      `🎯 ${task.goal}`,
+      `📝 ${task.description}`,
+      `优先级: ${task.priority ?? 'normal'}`
+    ].filter(Boolean);
+
+    const message = lines.join('\n');
+
+    if (cfg.provider === 'feishu') {
+      result.push({ provider: 'feishu', chatId: cfg.groupId, appId: cfg.appId, appSecret: cfg.appSecret, message });
+    } else if (cfg.provider === 'discord') {
+      result.push({ provider: 'discord', channelId: cfg.channelId, discordToken: cfg.discordToken, message });
+    }
+  }
+
+  return result;
+}
+
+export function formatClaimNotifications(
+  task: Task,
+  notifications: NotificationConfig[]
+): FormattedNotification[] {
+  if (!notifications || notifications.length === 0) return [];
+  if (!task) return [];
+
+  const result: FormattedNotification[] = [];
+  for (const cfg of notifications) {
+    if (!cfg.agents.includes(task.executor ?? 'unknown')) continue;
+
+    const lines = [
+      `🏃 任务已被认领`,
+      ``,
+      `🎯 ${task.goal}`,
+      `认领者: ${task.executor}`
+    ].filter(Boolean);
+
+    const message = lines.join('\n');
+
+    if (cfg.provider === 'feishu') {
+      result.push({ provider: 'feishu', chatId: cfg.groupId, appId: cfg.appId, appSecret: cfg.appSecret, message });
+    } else if (cfg.provider === 'discord') {
+      result.push({ provider: 'discord', channelId: cfg.channelId, discordToken: cfg.discordToken, message });
+    }
+  }
+
+  return result;
+}
+
+export function formatCancelNotifications(
+  task: Task,
+  notifications: NotificationConfig[]
+): FormattedNotification[] {
+  if (!notifications || notifications.length === 0) return [];
+  if (!task) return [];
+
+  const result: FormattedNotification[] = [];
+  for (const cfg of notifications) {
+    if (!cfg.agents.includes(task.publisher)) continue;
+
+    const lines = [
+      `🚫 任务已取消`,
+      ``,
+      `🎯 ${task.goal}`,
+      `取消者: ${task.publisher}`
+    ].filter(Boolean);
+
+    const message = lines.join('\n');
+
+    if (cfg.provider === 'feishu') {
+      result.push({ provider: 'feishu', chatId: cfg.groupId, appId: cfg.appId, appSecret: cfg.appSecret, message });
+    } else if (cfg.provider === 'discord') {
+      result.push({ provider: 'discord', channelId: cfg.channelId, discordToken: cfg.discordToken, message });
     }
   }
 

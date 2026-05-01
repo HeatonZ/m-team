@@ -54,12 +54,15 @@ openclaw config set plugins.allow --array-add m-team
       {
         "provider": "feishu",
         "groupId": "oc_xxxxx",
-        "agents": ["manager", "maker", "fixer"]
+        "appId": "cli_xxxx",
+        "appSecret": "xxxx",
+        "agents": ["manager", "maker", "fixer", "executor1", "executor2"]
       },
       {
         "provider": "discord",
         "channelId": "123456789",
-        "agents": ["manager", "maker", "fixer"]
+        "discordToken": "Bot xxxx",
+        "agents": ["manager", "maker", "fixer", "executor1", "executor2"]
       }
     ]
   }

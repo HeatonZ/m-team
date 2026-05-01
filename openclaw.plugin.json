@@ -1,7 +1,7 @@
 {
   "id": "m-team",
   "name": "M-Team 去中心化任务池",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "去中心化任务池协作插件 — 多Agent任务分发与执行",
   "activation": {
     "onStartup": true
@@ -29,13 +29,21 @@
               ],
               "description": "通知渠道"
             },
+            "appId": {
+              "type": "string",
+              "description": "飞书机器人的 app_id（provider=feishu 时使用）"
+            },
+            "appSecret": {
+              "type": "string",
+              "description": "飞书机器人的 app_secret（provider=feishu 时使用）"
+            },
             "groupId": {
               "type": "string",
-              "description": "飞书群 ID（provider=feishu 时使用）"
+              "description": "飞书群 ID (chat_id)"
             },
             "channelId": {
               "type": "string",
-              "description": "Discord 频道 ID（provider=discord 时使用）"
+              "description": "Discord 频道 ID (provider=discord 时使用)"
             },
             "agents": {
               "type": "array",
