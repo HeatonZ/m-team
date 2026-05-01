@@ -190,6 +190,7 @@ export function registerTools(api: OpenClawApi, config: PluginConfig): void {
 |   - 当你无法继续执行，需要暂时放弃时使用
 
 |【禁止】
+|- 认领任务后不要立刻调用 mteam_complete_task，先用 mteam_get_task 读取 context，再实际执行任务
 |- 在未调用任何工具的情况下自行结束会话，任务将永久卡在 running 状态
 |`;
 
