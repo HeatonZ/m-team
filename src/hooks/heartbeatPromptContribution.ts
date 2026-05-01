@@ -83,15 +83,21 @@ export function registerHeartbeatPromptContributionHook(
     async (
       event: PluginHeartbeatPromptContributionEvent,
     ): Promise<PluginHeartbeatPromptContributionResult | undefined> => {
-      const { agentId } = event;
+      const { agentId, sessionKey } = event;
+
+      console.error('[m-team] heartbeat_prompt_contribution hook FIRED', JSON.stringify({ agentId, sessionKey }));
 
       // 不在配置名单内，不注入
       if (!agentId || !executors.has(agentId)) {
+        api.logger?.info('[m-team] heartbeat_prompt_contribution 跳过: agentId不在executors名单', {
+          agentId, executors: [...executors]
+        });
         return undefined;
       }
 
       api.logger?.info('[m-team] heartbeat_prompt_contribution 注入 executor 指令', {
         agentId,
+        sessionKey,
       });
 
       return {
