@@ -224,9 +224,9 @@ export function formatTaskNotifications(task: Task, notifications: NotificationC
 
   const result: FormattedNotification[] = [];
   for (const cfg of notifications) {
-    // 完成后 executor/lastExecutor 都被清空，从最后一步 context entry 取执行者
+    // executor（当前执行者）> lastExecutor（relay 场景）> context 兜底 > unknown
     const lastEntry = task.context[task.context.length - 1] as { executor?: string } | undefined;
-    const effectiveExecutor = task.lastExecutor ?? task.executor ?? lastEntry?.executor ?? 'unknown';
+    const effectiveExecutor = task.executor ?? task.lastExecutor ?? lastEntry?.executor ?? 'unknown';
     if (!cfg.agents.includes(effectiveExecutor)) continue;
 
     if (cfg.provider === 'feishu') {
