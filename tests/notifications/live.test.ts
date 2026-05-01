@@ -26,12 +26,18 @@ import {
   setNotifications,
 } from '../../src/notifications.js';
 
-// ─── 常量 ───────────────────────────────────────────────────
-const FEISHU_APP_ID = process.env.MTEAM_TEST_FEISHU_APP_ID ?? 'cli_test_app_id';
-const FEISHU_APP_SECRET = process.env.MTEAM_TEST_FEISHU_APP_SECRET ?? 'cli_test_app_secret';
-const FEISHU_CHAT_ID = process.env.MTEAM_TEST_FEISHU_CHAT_ID ?? 'oc_test_chat';
-const DISCORD_CHANNEL_ID = process.env.MTEAM_TEST_DISCORD_CHANNEL_ID ?? '123456789';
-const DISCORD_TOKEN = process.env.MTEAM_TEST_DISCORD_TOKEN ?? 'Bot test_token';
+// ─── 常量（从环境变量读取，测试时需在 .env 或 CI 设置） ────────────────────────
+// MTEAM_TEST_FEISHU_APP_ID=cli_xxx
+// MTEAM_TEST_FEISHU_APP_SECRET=xxx
+// MTEAM_TEST_FEISHU_CHAT_ID=oc_xxx
+// MTEAM_TEST_DISCORD_CHANNEL_ID=123456
+// MTEAM_TEST_DISCORD_TOKEN=Bot xxx
+
+const FEISHU_APP_ID = process.env.MTEAM_TEST_FEISHU_APP_ID ?? '';
+const FEISHU_APP_SECRET = process.env.MTEAM_TEST_FEISHU_APP_SECRET ?? '';
+const FEISHU_CHAT_ID = process.env.MTEAM_TEST_FEISHU_CHAT_ID ?? '';
+const DISCORD_CHANNEL_ID = process.env.MTEAM_TEST_DISCORD_CHANNEL_ID ?? '';
+const DISCORD_TOKEN = process.env.MTEAM_TEST_DISCORD_TOKEN ?? '';
 
 // ─── Fetch mock factory ────────────────────────────────────
 

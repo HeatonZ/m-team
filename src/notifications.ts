@@ -79,7 +79,11 @@ export async function sendNotifications(
         await sendDiscordDirect(notif.channelId, notif.message, notif.discordToken, logger);
       }
     } catch (err) {
-      logger?.error(`[m-team] sendNotifications 失败: ${(err as Error).message}`, { notif });
+      logger?.error(`[m-team] sendNotifications 失败: ${(err as Error).message}`, {
+        provider: notif.provider,
+        chatId: notif.chatId ?? notif.channelId,
+        hasCredentials: !!(notif.appId && notif.appSecret) || !!notif.discordToken
+      });
     }
   }
 }
