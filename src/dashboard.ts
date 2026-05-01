@@ -75,7 +75,6 @@ export function stopDashboard(): void {
   }
   _cleanedUp = true;
   const pid = _dashboardProc.pid;
-  _dashboardProc.terminate();
   _dashboardProc.kill('SIGTERM');
   _dashboardProc = null;
   console.log(`[m-team] dashboard stopped (was pid=${pid})`);
