@@ -55,6 +55,12 @@
 │  mteam_update_task({ status, contextStep })              │
 │       ├─ pending  → 放回池子，下一个 executor 接上       │
 │       └─ completed → subagent_ended hook 自动标记完成   │
+│                                                        │
+│  Publisher 心跳                                         │
+│  mteam_update_task({ status, contextStep })  ← 驳回     │
+│       ├─ pending  → 打回重做                           │
+│  mteam_close_task({ taskId, publisher })   ← 验收通过   │
+│       └─ closed（终态）                               │
 └──────────────────────────────────────────────────────────┘
        ↑
        │relay

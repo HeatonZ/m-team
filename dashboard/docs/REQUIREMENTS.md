@@ -27,10 +27,11 @@
 | 区块 | 展示内容 | 数据源 |
 |------|----------|--------|
 | 完成（completed） | goal、完成时间、最终摘要 | `GET /api/tasks/history?status=completed` |
+| 已验收（closed） | goal、验收时间、最终摘要 | `GET /api/tasks/history?status=closed` |
 | 失败（failed） | goal、完成时间 | `GET /api/tasks/history?status=failed` |
 | 已取消（cancelled） | goal、取消时间 | `GET /api/tasks/history?status=cancelled` |
 
-- Tab 切换：✅完成 / ❌失败 / 🚫已取消
+- Tab 切换：✅完成 / 🔒已验收 / ❌失败 / 🚫已取消
 - 每条记录显示完成时间（`completedAt` 格式化为本地时间）
 
 ### 2.3 任务详情
@@ -41,7 +42,7 @@
 - `taskId` — 任务唯一 ID
 - `goal` — 核心目标
 - `description` — 当前步骤描述
-- `status` — 状态（pending/running/completed/failed/cancelled）
+- `status` — 状态（pending/running/completed/closed/failed/cancelled）
 - `priority` — 优先级（high/normal/low）
 - `publisher` — 发布者
 - `executor` — 当前执行者（running 任务有值）
@@ -65,7 +66,7 @@
 │  [卡片列表...]    │   [卡片列表...]              │
 ├─────────────────────────────────────────────────┤
 │  📜 历史记录                                     │
-│  [✅完成] [❌失败] [🚫已取消]                      │
+│  [✅完成] [🔒已验收] [❌失败] [🚫已取消]            │
 │  [卡片列表...]                                   │
 └─────────────────────────────────────────────────┘
 ```
@@ -101,7 +102,7 @@ fetch('/api/tasks/pending')  ──►  Node.js server.js (REST API)
 |------|------|------|
 | `/api/tasks/pending` | GET | `{ tasks: Task[] }` |
 | `/api/tasks/running` | GET | `{ tasks: Task[] }` |
-| `/api/tasks/history?status=completed\|failed\|cancelled` | GET | `{ tasks: Task[] }` |
+| `/api/tasks/history?status=completed\|closed\|failed\|cancelled` | GET | `{ tasks: Task[] }` |
 | `/api/tasks/:taskId` | GET | `Task` 完整对象（含 context） |
 
 ### 3.3 Task 数据模型（前端视角）
@@ -113,7 +114,7 @@ interface Task {
   description: string;      // 当前步骤描述
   context: ContextEntry[];   // 执行上下文
   priority: 'high' | 'normal' | 'low';
-  status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
+  status: 'pending' | 'running' | 'completed' | 'closed' | 'failed' | 'cancelled';
   publisher: string;
   executor: string | null;   // 当前执行者
   lastExecutor: string | null;

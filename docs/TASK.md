@@ -38,7 +38,7 @@
 | `context` | array | 步骤历史，数组末尾是最新的可执行状态 |
 | `priority` | string | `high` / `normal` / `low` |
 | `publisher` | string | 发布者身份（不做权限控制）|
-| `status` | string | `pending` / `running` / `completed` / `failed` / `cancelled` |
+| `status` | string | `pending` / `running` / `completed` / `closed` / `failed` / `cancelled` |
 | `executor` | string\|null | 当前持有任务的 agentId |
 | `lastExecutor` | string\|null | 上一个 executor（relay 时传承）|
 | `createdAt` | number | 创建时间戳（毫秒）|
@@ -60,14 +60,14 @@
 ### 状态流转
 
 ```
-pending → running → completed
+pending → running → completed → closed（验收通过，终态）
                         ↘ failed
                         ↘ pending（需接力，taskId 不变）
 ```
 
 ---
 
-## Tool API（11 个）
+## Tool API（12 个）
 
 | Tool | 调用者 | 说明 |
 |------|--------|------|
@@ -81,6 +81,7 @@ pending → running → completed
 | `mteam_get_pending` | 执行者 | 获取待认领任务（agent 有任务时返回空） |
 | `mteam_get_agent_active` | 执行者 | 获取 agent 当前进行中任务 |
 | `mteam_get_task` | 执行者 | 获取任务详情 |
+| `mteam_close_task` | Publisher | Publisher 验收通过，关闭任务（终态） |
 | `mteam_get_all_tasks` | 执行者 | 获取所有任务 |
 
 ---
@@ -254,6 +255,26 @@ mteam_get_all_tasks({})
 ```
 
 ---
+
+### mteam_close_task
+
+Publisher 验收 Executor 完成的任务。通过后任务进入 `closed` 终态。
+
+```javascript
+mteam_close_task({
+  taskId: "task_xxx",
+  publisher: "user"    // 必须与创建时 publisher 一致
+})
+// 返回: { success: true, task: { ..., status: "closed" } }
+```
+
+**验收流程**：
+1. Executor 完成任务 → `completed`
+2. Publisher 心跳检测到 COMPLETED 任务 → 注入验收 prompt
+3. Publisher 判断通过 → `mteam_close_task` → `closed`
+4. Publisher 判断驳回 → `mteam_update_task({ status: pending, contextStep: "驳回原因", description: "下一步要求" })` → `pending`
+
+**注意**：`closed` 是终态，不可逆。
 
 ## 并发竞态保护
 
