@@ -206,7 +206,7 @@ export function registerTools(api: OpenClawApi, config: PluginConfig): void {
 
         // Fire-and-forget: 不等待 executor 完成，让 heartbeat session 能立刻回复 HEARTBEAT_OK
         // executor 的结果由 subagent_ended hook 统一处理（completeTask / failTask）
-        api.runtime!.subagent!.run({
+        const subagentRun = api.runtime!.subagent!.run({
           sessionKey,
           agentId,  // subagent 以心跳 session 的身份运行
           message: `[M-Team Task #${taskId}] ${task.description ?? ''}
@@ -220,9 +220,13 @@ ${systemPrompt}`
             error: (runErr as Error)?.message ?? String(runErr)
           });
           relinquishTask(taskId, agentId);
+          return { runId: null };
         });
 
-        return jsonResult({ ...result, sessionKey });
+        // await subagent run 获取 runId（测试需要，生产中 heartbeat session 靠 sessionKey 追踪）
+        const subagentResult = await subagentRun;
+
+        return jsonResult({ ...result, runId: subagentResult?.runId, sessionKey });
       } catch (e) {
         return { ok: false, error: (e as Error)?.message ?? String(e) };
       }
@@ -255,7 +259,7 @@ ${systemPrompt}`
     },
     async execute(_toolCallId, rawParams) {
       try {
-        const taskId = readTaskId(rawParams, 'taskId', { required: true })!;
+        const taskId = readStr(rawParams, 'taskId', { required: true })!;
         const agentId = readStr(rawParams, 'agentId');
         const status = readStr(rawParams, 'status');
         const contextStep = readStr(rawParams, 'contextStep');
@@ -507,7 +511,7 @@ ${systemPrompt}`
     },
     async execute(_toolCallId, rawParams) {
       try {
-        const taskId = readTaskId(rawParams, 'taskId', { required: true })!;
+        const taskId = readStr(rawParams, 'taskId', { required: true })!;
         const task = getTask(taskId);
         return jsonResult({ task });
       } catch (e) {

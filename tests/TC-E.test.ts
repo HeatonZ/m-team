@@ -1,7 +1,7 @@
 /**
  * TC-E：放弃任务流程
  * 对应 docs/test-cases/TC-E.md
- * 区别于 relay：relinquish 不追加 context 步骤
+ * relinquish 追加 context 步骤
  */
 import { describe, it, beforeEach } from 'vitest';
 import assert from 'node:assert';
@@ -39,7 +39,7 @@ describe('TC-E：放弃任务流程', () => {
   });
 
   describe('TC-E1：Agent 放弃后另一个 Agent 完成', () => {
-    it('relinquish 不追加 context（与 relay 的关键区别）', async () => {
+    it('relinquish 追加 context', async () => {
       const pubResult = await callTool(api, 'mteam_publish_task', { description: 'd', goal: 'g' });
       const taskId = (extract(pubResult) as { taskId: string }).taskId;
       await callTool(api, 'mteam_claim_task', { taskId, agentId: 'alice' });
@@ -56,7 +56,7 @@ describe('TC-E：放弃任务流程', () => {
       assert.equal(task.status, 'pending');
       assert.equal(task.executor, null);
       assert.equal(task.lastExecutor, 'alice');
-      assert.equal(task.context.length, 2); // relinquish 不追加，context 不变
+      assert.equal(task.context.length, 3); // relinquish 追加 1 条 step
     });
 
     it('bob 接手完成，context 长度只增加 1（bob 的完成步骤）', async () => {
@@ -72,7 +72,7 @@ describe('TC-E：放弃任务流程', () => {
       assert.equal((extract(completeResult) as { success: boolean }).success, true);
       const task = getTask(await callTool(api, 'mteam_get_task', { taskId })) as { status: string; context: unknown[] };
       assert.equal(task.status, 'completed');
-      assert.equal(task.context.length, 3); // input + alice部分 + bob完成
+      assert.equal(task.context.length, 4); // input + alice部分 + relinquish + bob完成
     });
   });
 

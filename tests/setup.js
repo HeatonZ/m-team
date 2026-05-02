@@ -5,8 +5,8 @@
 import { openDb, closeDb, getDb } from '../src/pool/db.js';
 import { setWorkspaceRoot, completeTask, claimTask, getDb as opsGetDb } from '../src/pool/operations.js';
 import { TaskStatus } from '../src/schema/task.js';
-import path from 'node:path';
 import { beforeEach, afterEach } from 'vitest';
+import 'dotenv/config';
 
 // 全局测试工作空间
 export const TEST_WORKSPACE = '/tmp/m-team-test-' + process.pid;
