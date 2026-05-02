@@ -59,6 +59,11 @@ export function getCancelledTasks() {
   return getTaskRowsByStatus(TaskStatus.CANCELLED);
 }
 
+export function getClosedTasks() {
+  ensureInit();
+  return getTaskRowsByStatus(TaskStatus.CLOSED);
+}
+
 export function getAgentActiveTask(agentId: string) {
   ensureInit();
   return getTaskRowByExecutor(agentId);

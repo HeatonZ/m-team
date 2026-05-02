@@ -91,6 +91,7 @@ h2 {
 .status-completed{ color: var(--accent-green); }
 .status-failed   { color: var(--accent-red); }
 .status-cancelled{ color: var(--text-muted); }
+.status-closed   { color: var(--accent-green); }
 
 .heartbeat-stale { color: var(--accent-red) !important; }
 

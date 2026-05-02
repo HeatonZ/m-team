@@ -2,7 +2,7 @@ import type { FC } from 'react';
 import type { Task } from '../types/task';
 import { TaskCard } from './TaskCard';
 
-type HistoryStatus = 'completed' | 'failed' | 'cancelled';
+type HistoryStatus = 'completed' | 'closed' | 'failed' | 'cancelled';
 
 interface HistoryTasksProps {
   tasks: Task[];

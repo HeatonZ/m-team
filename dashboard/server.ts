@@ -7,7 +7,7 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { setWorkspaceRoot, getAllTasks, getPendingTasks, getRunningTasks, getCompletedTasks, getFailedTasks, getCancelledTasks, getTask as getTaskById, STATUS_LABELS, PRIORITY_LABELS } from './src/db.ts';
+import { setWorkspaceRoot, getAllTasks, getPendingTasks, getRunningTasks, getCompletedTasks, getFailedTasks, getCancelledTasks, getClosedTasks, getTask as getTaskById, STATUS_LABELS, PRIORITY_LABELS } from './src/db.ts';
 
 const _scriptPath = import.meta.url
   ? fileURLToPath(import.meta.url)
@@ -74,6 +74,7 @@ async function handle(req, res) {
         const status = url.searchParams.get('status') || 'completed';
         let tasks;
         if (status === 'completed') tasks = getCompletedTasks();
+        else if (status === 'closed') tasks = getClosedTasks();
         else if (status === 'failed') tasks = getFailedTasks();
         else if (status === 'cancelled') tasks = getCancelledTasks();
         else tasks = [];

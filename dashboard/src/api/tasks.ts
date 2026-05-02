@@ -14,7 +14,7 @@ export async function fetchRunningTasks(): Promise<Task[]> {
   return data.tasks as Task[];
 }
 
-export async function fetchHistoryTasks(status: 'completed' | 'failed' | 'cancelled'): Promise<Task[]> {
+export async function fetchHistoryTasks(status: 'completed' | 'closed' | 'failed' | 'cancelled'): Promise<Task[]> {
   const res = await fetch(`${API}/tasks/history?status=${status}`);
   const data = await res.json();
   return data.tasks as Task[];

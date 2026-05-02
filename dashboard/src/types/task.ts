@@ -1,4 +1,4 @@
-export type TaskStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
+export type TaskStatus = 'pending' | 'running' | 'completed' | 'closed' | 'failed' | 'cancelled';
 export type TaskPriority = 'high' | 'normal' | 'low';
 
 export interface ContextInputEntry {
@@ -38,7 +38,8 @@ export interface Task {
 export const STATUS_LABELS: Record<TaskStatus, string> = {
   pending: '⏳ 待认领',
   running: '⚙️ 执行中',
-  completed: '✅ 完成',
+  completed: '✅ 完成（待验收）',
+  closed: '🔒 已验收',
   failed: '❌ 失败',
   cancelled: '🚫 已取消',
 };
@@ -49,4 +50,4 @@ export const PRIORITY_LABELS: Record<TaskPriority, string> = {
   low: '🟢 低',
 };
 
-export const HISTORY_STATUSES: TaskStatus[] = ['completed', 'failed', 'cancelled'];
+export const HISTORY_STATUSES: TaskStatus[] = ['completed', 'closed', 'failed', 'cancelled'];
