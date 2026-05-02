@@ -65,7 +65,8 @@
     "esbuild": "^0.24.0",
     "nock": "^14.0.14",
     "typescript": "^6.0.3",
-    "vitest": "^4.1.5"
+    "vitest": "^4.1.5",
+    "openclaw": "^2026.4.29"
   },
   "dependencies": {
     "better-sqlite3": "^12.9.0",

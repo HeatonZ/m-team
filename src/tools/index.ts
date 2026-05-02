@@ -1,7 +1,20 @@
 /**
  * M-Team Tools — 全部工具注册
+ *
+ * 类型来源：
+ *   AnyAgentTool / OpenClawPluginApi / PluginLogger → openclaw/plugin-sdk/core
+ *   jsonResult / readStringParam / ToolInputError  → openclaw/plugin-sdk/core
+ *   业务逻辑（pool / notifications）                 → ../pool, ../notifications
  */
 
+import type { AnyAgentTool, OpenClawPluginApi } from 'openclaw/plugin-sdk/core';
+import {
+  jsonResult,
+  readStringParam as readStr,
+  readNumberParam as readNum,
+  ToolInputError,
+} from 'openclaw/plugin-sdk/core';
+import type { PluginLogger } from 'openclaw/plugin-sdk/core';
 
 import {
   publishTask,
@@ -14,78 +27,63 @@ import {
   getTask,
   getAllTasks,
   cancelTask,
-  relinquishTask
+  relinquishTask,
 } from '../pool/index.js';
 import { TaskStatus } from '../schema/task.js';
-import { readStr, readNum, readTaskId, jsonResult } from './helpers.js';
-import {
-  formatTaskNotifications,
-  formatRelinquishNotifications,
-  formatRelayNotifications,
-  formatPublishNotifications,
-  formatClaimNotifications,
-  formatCancelNotifications,
-  sendNotifications,
-  type NotificationConfig
-} from '../notifications.js';
+import { formatTaskNotifications, formatRelinquishNotifications, formatRelayNotifications, formatPublishNotifications, formatClaimNotifications, formatCancelNotifications, sendNotifications } from '../notifications.js';
+import type { NotificationConfig } from '../notifications.js';
 
-// ============================================================
-// OpenClaw Plugin API 类型（内联，无外部依赖）
-// ============================================================
+// ─── SDK 类型兼容别名 ────────────────────────────────────────────────────────
 
-interface ToolParameterProperty {
-  type?: string;
-  description?: string;
-  enum?: string[];
-  additionalProperties?: boolean | ToolParameterProperty;
-  items?: ToolParameterProperty;
-  properties?: Record<string, ToolParameterProperty>;
+/** readStringParam 的 m-team 别名 */
+export const readStringParam = readStr;
+
+/** readNumberParam 的 m-team 别名 */
+export const readNumberParam = readNum;
+
+/** 保留给外部调用者的别名（向后兼容） */
+export { ToolInputError };
+
+// ─── taskId 格式校验（m-team 私有） ─────────────────────────────────────────
+
+/**
+ * 读取 taskId 参数（带格式校验）
+ * taskId 格式: task_{unix_timestamp}，必须包含前缀
+ * LLM 可能截断只取数字部分，此函数显式拒绝并给出完整格式示例
+ */
+export function readTaskId(
+  rawParams: Record<string, unknown> | undefined,
+  name: string,
+  opts?: { required?: boolean }
+): string | undefined {
+  const raw = readStr(rawParams ?? {}, name, opts);
+  if (raw === undefined) return undefined;
+
+  if (/^\d+$/.test(raw)) {
+    throw new ToolInputError(
+      `taskId 不能只写纯数字，需要完整格式 task_1234567890，而非 ${raw}。` +
+      `请从任务信息中复制完整的 taskId（含 task_ 前缀）。`
+    );
+  }
+
+  if (!raw.startsWith('task_')) {
+    throw new ToolInputError(
+      `taskId "${raw}" 格式无效，必须以 task_ 开头（如 task_1234567890）。` +
+      `请从任务信息中复制完整的 taskId。`
+    );
+  }
+
+  return raw;
 }
 
-interface ToolParameter {
-  type: 'object';
-  properties: Record<string, ToolParameterProperty>;
-  required?: string[];
-}
+// ─── registerTools ───────────────────────────────────────────────────────────
 
-interface ToolDefinition {
-  name: string;
-  description: string;
-  parameters: ToolParameter;
-  execute(toolCallId: string, rawParams: Record<string, unknown>): Promise<unknown> | unknown;
-}
-
-interface RuntimeSubagent {
-  run(opts: { sessionKey: string; message: string }): Promise<{ runId: string }>;
-}
-
-export interface OpenClawApi {
-  logger?: Logger;
-  config?: {
-    accounts?: Array<{ type?: string; provider?: string; id?: string; accountId?: string }>;
-  };
-  pluginConfig?: PluginConfig;
-  runtime?: { subagent?: RuntimeSubagent };
-  registerTool(tool: ToolDefinition): void;
-  on(event: string, handler: (event: Record<string, unknown>) => Promise<void>): void;
-}
-
-interface Logger {
-  error(msg: string, meta?: Record<string, unknown>): void;
-  warn(msg: string, meta?: Record<string, unknown>): void;
-  info(msg: string, meta?: Record<string, unknown>): void;
-}
-
-interface PluginConfig {
+export interface MTeamPluginConfig {
   workspaceRoot?: string;
   notifications?: NotificationConfig[];
 }
 
-// ============================================================
-// 工具注册
-// ============================================================
-
-export function registerTools(api: OpenClawApi, config: PluginConfig): void {
+export function registerTools(api: OpenClawPluginApi, config: MTeamPluginConfig): void {
 
   // === mteam_publish_task ===
   api.registerTool({
@@ -98,10 +96,10 @@ export function registerTools(api: OpenClawApi, config: PluginConfig): void {
         description: { type: 'string', description: '当前这一步做什么（每次只写一步，relay 时由上一个 executor 填写下一步）' },
         input: { type: 'object', description: '初始输入数据', additionalProperties: true },
         publisher: { type: 'string', description: '发布者，默认 "user"' },
-        priority: { type: 'string', description: '优先级 high/normal/low，默认 normal', enum: ['high', 'normal', 'low'] }
+        priority: { type: 'string', description: '优先级 high/normal/low，默认 normal', enum: ['high', 'normal', 'low'] },
       },
-      required: ['goal', 'description']
-    },
+      required: ['goal', 'description'],
+    } as AnyAgentTool['parameters'],
     async execute(_toolCallId, rawParams) {
       try {
         const description = readStr(rawParams, 'description', { required: true });
@@ -114,9 +112,9 @@ export function registerTools(api: OpenClawApi, config: PluginConfig): void {
         if (task && config.notifications?.length) {
           try {
             const notifications = formatPublishNotifications(task, config.notifications);
-            await sendNotifications(notifications, api.logger);
+            await sendNotifications(notifications, api.logger as PluginLogger);
           } catch (e) {
-            api.logger?.warn('[m-team] 通知发送失败', { error: (e as Error)?.message });
+            (api.logger as PluginLogger)?.warn('[m-team] 通知发送失败', { error: (e as Error)?.message });
           }
         }
 
@@ -124,8 +122,8 @@ export function registerTools(api: OpenClawApi, config: PluginConfig): void {
       } catch (e) {
         return { ok: false, error: (e as Error)?.message ?? String(e) };
       }
-    }
-  });
+    },
+  } as unknown as AnyAgentTool);
 
   // === mteam_claim_task ===
   api.registerTool({
@@ -135,10 +133,10 @@ export function registerTools(api: OpenClawApi, config: PluginConfig): void {
       type: 'object',
       properties: {
         taskId: { type: 'string', description: '任务ID' },
-        agentId: { type: 'string', description: '认领者 agentId' }
+        agentId: { type: 'string', description: '认领者 agentId' },
       },
-      required: ['taskId', 'agentId']
-    },
+      required: ['taskId', 'agentId'],
+    } as AnyAgentTool['parameters'],
     async execute(_toolCallId, rawParams) {
       try {
         const taskId = readTaskId(rawParams, 'taskId', { required: true })!;
@@ -147,22 +145,18 @@ export function registerTools(api: OpenClawApi, config: PluginConfig): void {
         const result = claimTask(taskId, agentId);
         if (!result.success) return { ok: false, data: result };
 
-        // claim 后重新读，拿 relay 后最新的 description（claim 返回的 result.task 是事务快照）
         const task = getTask(taskId) ?? result.task;
 
         if (task && config.notifications?.length) {
           try {
             const notifications = formatClaimNotifications(task, config.notifications);
-            await sendNotifications(notifications, api.logger);
+            await sendNotifications(notifications, api.logger as PluginLogger);
           } catch (e) {
-            api.logger?.warn('[m-team] 通知发送失败', { error: (e as Error)?.message });
+            (api.logger as PluginLogger)?.warn('[m-team] 通知发送失败', { error: (e as Error)?.message });
           }
         }
 
-        // Plugin 内部直接创建 executor session
-        // 注意：任务已由心跳 session 认领，subagent 不需要重复 claim
         const sessionKey = `agent:${agentId}:m-team:${taskId}`;
-        const executorAgentId = agentId; // 任务指定的执行者（而非 subagent 的 session agentId）
         const systemPrompt = `
 【任务规范 — M-Team 执行者】
 你正在执行一个多步骤任务。在调用任何工具之前，你必须先用结构化推理分析当前任务：
@@ -176,12 +170,12 @@ export function registerTools(api: OpenClawApi, config: PluginConfig): void {
 
 当前任务信息：
 - 任务ID: ${taskId}
-- 任务描述: ${task.description ?? ''}
-- 核心目标: ${task.goal ?? ''}
-- 执行者 agentId: ${executorAgentId}
+- 任务描述: ${task?.description ?? ''}
+- 核心目标: ${task?.goal ?? ''}
+- 执行者 agentId: ${agentId}
 
 【重要】任务认领状态：
-任务已被心跳 session（${executorAgentId}）认领，处于 RUNNING 状态。
+任务已被心跳 session（${agentId}）认领，处于 RUNNING 状态。
 **禁止调用 mteam_claim_task**——任务不在 PENDING 状态，claim 会失败。
 直接执行任务即可。
 
@@ -201,37 +195,33 @@ export function registerTools(api: OpenClawApi, config: PluginConfig): void {
 |【禁止】
 |- 调用 mteam_claim_task——任务已被认领，claim 会返回 NOT_PENDING
 |- 在未调用任何工具的情况下自行结束会话，任务将永久卡在 running 状态
-|- 在 tool call 的 agentId 参数中传入 subagent 自己的 session agentId，必须传入 ${executorAgentId}
+|- 在 tool call 的 agentId 参数中传入 subagent 自己的 session agentId，必须传入 ${agentId}
 |`;
 
-        // Fire-and-forget: 不等待 executor 完成，让 heartbeat session 能立刻回复 HEARTBEAT_OK
-        // executor 的结果由 subagent_ended hook 统一处理（completeTask / failTask）
-        const subagentRun = api.runtime!.subagent!.run({
+        const subagentRun = (api.runtime as Record<string, unknown>)?.subagent?.run({
           sessionKey,
-          agentId,  // subagent 以心跳 session 的身份运行
-          message: `[M-Team Task #${taskId}] ${task.description ?? ''}
+          agentId,
+          message: `[M-Team Task #${taskId}] ${task?.description ?? ''}
 
-[系统信息] executorAgentId=${executorAgentId}
-${systemPrompt}`
+[系统信息] executorAgentId=${agentId}
+${systemPrompt}`,
         }).catch((runErr) => {
-          // 异步启动失败，回滚 claim 状态
-          api.logger?.error('[m-team] subagent.run 异步启动失败，回滚任务状态', {
+          (api.logger as PluginLogger)?.error('[m-team] subagent.run 异步启动失败，回滚任务状态', {
             taskId,
-            error: (runErr as Error)?.message ?? String(runErr)
+            error: (runErr as Error)?.message ?? String(runErr),
           });
           relinquishTask(taskId, agentId);
           return { runId: null };
         });
 
-        // await subagent run 获取 runId（测试需要，生产中 heartbeat session 靠 sessionKey 追踪）
         const subagentResult = await subagentRun;
 
         return jsonResult({ ...result, runId: subagentResult?.runId, sessionKey });
       } catch (e) {
         return { ok: false, error: (e as Error)?.message ?? String(e) };
       }
-    }
-  });
+    },
+  } as unknown as AnyAgentTool);
 
   // === mteam_update_task ===
   api.registerTool({
@@ -249,14 +239,14 @@ ${systemPrompt}`
           description: '步骤输出',
           properties: {
             summary: { type: 'string', description: '步骤摘要' },
-            files: { type: 'array', items: { type: 'string' }, description: '任务文件夹内的相对路径' }
-          }
+            files: { type: 'array', items: { type: 'string' }, description: '任务文件夹内的相对路径' },
+          },
         },
         description: { type: 'string', description: '更新当前步骤描述（下一步做什么）' },
-        lastHeartbeatAt: { type: 'number', description: '心跳时间戳（毫秒）' }
+        lastHeartbeatAt: { type: 'number', description: '心跳时间戳（毫秒）' },
       },
-      required: ['taskId']
-    },
+      required: ['taskId'],
+    } as AnyAgentTool['parameters'],
     async execute(_toolCallId, rawParams) {
       try {
         const taskId = readStr(rawParams, 'taskId', { required: true })!;
@@ -268,7 +258,7 @@ ${systemPrompt}`
         const lastHeartbeatAt = readNum(rawParams, 'lastHeartbeatAt');
 
         if (status !== undefined && !Object.values(TaskStatus).includes(status as TaskStatus)) {
-          return { ok: false, error: `Invalid status '${status}', must be one of: ${Object.values(TaskStatus).join(', ')}` };
+          throw new ToolInputError(`Invalid status '${status}', must be one of: ${Object.values(TaskStatus).join(', ')}`);
         }
 
         let contextEntry = null;
@@ -281,8 +271,8 @@ ${systemPrompt}`
       } catch (e) {
         return { ok: false, error: (e as Error)?.message ?? String(e) };
       }
-    }
-  });
+    },
+  } as unknown as AnyAgentTool);
 
   // === mteam_cancel_task ===
   api.registerTool({
@@ -293,10 +283,10 @@ ${systemPrompt}`
       properties: {
         taskId: { type: 'string', description: '任务ID' },
         publisher: { type: 'string', description: '发布者（需与创建时 publisher 一致）' },
-        reason: { type: 'string', description: '取消原因' }
+        reason: { type: 'string', description: '取消原因' },
       },
-      required: ['taskId', 'publisher']
-    },
+      required: ['taskId', 'publisher'],
+    } as AnyAgentTool['parameters'],
     async execute(_toolCallId, rawParams) {
       try {
         const taskId = readTaskId(rawParams, 'taskId', { required: true })!;
@@ -308,9 +298,9 @@ ${systemPrompt}`
         if (result.task && config.notifications?.length) {
           try {
             const notifications = formatCancelNotifications(result.task, config.notifications);
-            await sendNotifications(notifications, api.logger);
+            await sendNotifications(notifications, api.logger as PluginLogger);
           } catch (e) {
-            api.logger?.warn('[m-team] 通知发送失败', { error: (e as Error)?.message });
+            (api.logger as PluginLogger)?.warn('[m-team] 通知发送失败', { error: (e as Error)?.message });
           }
         }
 
@@ -318,8 +308,8 @@ ${systemPrompt}`
       } catch (e) {
         return { ok: false, error: (e as Error)?.message ?? String(e) };
       }
-    }
-  });
+    },
+  } as unknown as AnyAgentTool);
 
   // === mteam_complete_task ===
   api.registerTool({
@@ -335,12 +325,12 @@ ${systemPrompt}`
           description: '步骤输出',
           properties: {
             summary: { type: 'string', description: '步骤摘要' },
-            files: { type: 'array', items: { type: 'string' }, description: '任务文件夹内的相对路径' }
-          }
-        }
+            files: { type: 'array', items: { type: 'string' }, description: '任务文件夹内的相对路径' },
+          },
+        },
       },
-      required: ['taskId', 'contextStep']
-    },
+      required: ['taskId', 'contextStep'],
+    } as AnyAgentTool['parameters'],
     async execute(_toolCallId, rawParams) {
       try {
         const taskId = readTaskId(rawParams, 'taskId', { required: true })!;
@@ -354,9 +344,9 @@ ${systemPrompt}`
         if (result.task && config.notifications?.length) {
           try {
             const notifications = formatTaskNotifications(result.task, config.notifications);
-            await sendNotifications(notifications, api.logger);
+            await sendNotifications(notifications, api.logger as PluginLogger);
           } catch (e) {
-            api.logger?.warn('[m-team] 通知发送失败', { error: (e as Error)?.message });
+            (api.logger as PluginLogger)?.warn('[m-team] 通知发送失败', { error: (e as Error)?.message });
           }
         }
 
@@ -364,8 +354,8 @@ ${systemPrompt}`
       } catch (e) {
         return { ok: false, error: (e as Error)?.message ?? String(e) };
       }
-    }
-  });
+    },
+  } as unknown as AnyAgentTool);
 
   // === mteam_relay_task ===
   api.registerTool({
@@ -382,13 +372,13 @@ ${systemPrompt}`
           description: '步骤输出',
           properties: {
             summary: { type: 'string', description: '步骤摘要' },
-            files: { type: 'array', items: { type: 'string' }, description: '任务文件夹内的相对路径' }
-          }
+            files: { type: 'array', items: { type: 'string' }, description: '任务文件夹内的相对路径' },
+          },
         },
-        lastHeartbeatAt: { type: 'number', description: '心跳时间戳（毫秒），relay 时携带以便追踪' }
+        lastHeartbeatAt: { type: 'number', description: '心跳时间戳（毫秒），relay 时携带以便追踪' },
       },
-      required: ['taskId', 'agentId', 'contextStep']
-    },
+      required: ['taskId', 'agentId', 'contextStep'],
+    } as AnyAgentTool['parameters'],
     async execute(_toolCallId, rawParams) {
       try {
         const taskId = readTaskId(rawParams, 'taskId', { required: true })!;
@@ -404,9 +394,9 @@ ${systemPrompt}`
         if (result.task && config.notifications?.length) {
           try {
             const notifications = formatRelayNotifications(result.task, config.notifications);
-            await sendNotifications(notifications, api.logger);
+            await sendNotifications(notifications, api.logger as PluginLogger);
           } catch (e) {
-            api.logger?.warn('[m-team] 通知发送失败', { error: (e as Error)?.message });
+            (api.logger as PluginLogger)?.warn('[m-team] 通知发送失败', { error: (e as Error)?.message });
           }
         }
 
@@ -414,8 +404,8 @@ ${systemPrompt}`
       } catch (e) {
         return { ok: false, error: (e as Error)?.message ?? String(e) };
       }
-    }
-  });
+    },
+  } as unknown as AnyAgentTool);
 
   // === mteam_relinquish_task ===
   api.registerTool({
@@ -426,10 +416,10 @@ ${systemPrompt}`
       properties: {
         taskId: { type: 'string', description: '任务ID' },
         executorId: { type: 'string', description: '执行者 agentId' },
-        reason: { type: 'string', description: '放弃原因（会在 context step 中记录）' }
+        reason: { type: 'string', description: '放弃原因（会在 context step 中记录）' },
       },
-      required: ['taskId', 'executorId']
-    },
+      required: ['taskId', 'executorId'],
+    } as AnyAgentTool['parameters'],
     async execute(_toolCallId, rawParams) {
       try {
         const taskId = readTaskId(rawParams, 'taskId', { required: true })!;
@@ -441,9 +431,9 @@ ${systemPrompt}`
         if (result.success && result.task && config.notifications?.length) {
           try {
             const notifications = formatRelinquishNotifications(result.task, config.notifications);
-            await sendNotifications(notifications, api.logger);
+            await sendNotifications(notifications, api.logger as PluginLogger);
           } catch (e) {
-            api.logger?.warn('[m-team] 通知发送失败', { error: (e as Error)?.message });
+            (api.logger as PluginLogger)?.warn('[m-team] 通知发送失败', { error: (e as Error)?.message });
           }
         }
 
@@ -451,8 +441,8 @@ ${systemPrompt}`
       } catch (e) {
         return { ok: false, error: (e as Error)?.message ?? String(e) };
       }
-    }
-  });
+    },
+  } as unknown as AnyAgentTool);
 
   // === mteam_get_pending ===
   api.registerTool({
@@ -461,10 +451,10 @@ ${systemPrompt}`
     parameters: {
       type: 'object',
       properties: {
-        agentId: { type: 'string', description: 'agentId' }
+        agentId: { type: 'string', description: 'agentId' },
       },
-      required: ['agentId']
-    },
+      required: ['agentId'],
+    } as AnyAgentTool['parameters'],
     async execute(_toolCallId, rawParams) {
       try {
         const agentId = readStr(rawParams, 'agentId', { required: true })!;
@@ -473,8 +463,8 @@ ${systemPrompt}`
       } catch (e) {
         return { ok: false, error: (e as Error)?.message ?? String(e) };
       }
-    }
-  });
+    },
+  } as unknown as AnyAgentTool);
 
   // === mteam_get_agent_active ===
   api.registerTool({
@@ -483,10 +473,10 @@ ${systemPrompt}`
     parameters: {
       type: 'object',
       properties: {
-        agentId: { type: 'string', description: 'agentId' }
+        agentId: { type: 'string', description: 'agentId' },
       },
-      required: ['agentId']
-    },
+      required: ['agentId'],
+    } as AnyAgentTool['parameters'],
     async execute(_toolCallId, rawParams) {
       try {
         const agentId = readStr(rawParams, 'agentId', { required: true })!;
@@ -495,8 +485,8 @@ ${systemPrompt}`
       } catch (e) {
         return { ok: false, error: (e as Error)?.message ?? String(e) };
       }
-    }
-  });
+    },
+  } as unknown as AnyAgentTool);
 
   // === mteam_get_task ===
   api.registerTool({
@@ -505,10 +495,10 @@ ${systemPrompt}`
     parameters: {
       type: 'object',
       properties: {
-        taskId: { type: 'string', description: '任务ID' }
+        taskId: { type: 'string', description: '任务ID' },
       },
-      required: ['taskId']
-    },
+      required: ['taskId'],
+    } as AnyAgentTool['parameters'],
     async execute(_toolCallId, rawParams) {
       try {
         const taskId = readStr(rawParams, 'taskId', { required: true })!;
@@ -517,14 +507,14 @@ ${systemPrompt}`
       } catch (e) {
         return { ok: false, error: (e as Error)?.message ?? String(e) };
       }
-    }
-  });
+    },
+  } as unknown as AnyAgentTool);
 
   // === mteam_get_all_tasks ===
   api.registerTool({
     name: 'mteam_get_all_tasks',
     description: '获取所有任务',
-    parameters: { type: 'object', properties: {} },
+    parameters: { type: 'object', properties: {} } as AnyAgentTool['parameters'],
     async execute(_toolCallId) {
       try {
         const tasks = getAllTasks();
@@ -532,6 +522,6 @@ ${systemPrompt}`
       } catch (e) {
         return { ok: false, error: (e as Error)?.message ?? String(e) };
       }
-    }
-  });
+    },
+  } as unknown as AnyAgentTool);
 }

@@ -12,25 +12,17 @@ export default defineConfig({
     include: ['tests/**/*.test.{js,ts}'],
     alias: [
       {
-        // SDK helpers 指向 testApi.js（mock 实现）
-        find: /^openclaw\/agents\/tools\/common$/,
-        replacement: path.resolve(__dirname, 'tests/helpers/testApi.js'),
-      },
-      {
-        // SDK core 也指向 testApi.js
+        // helpers.ts 和 src/tools/index.ts 中的 SDK helpers（jsonResult/readStringParam/
+        // ToolInputError 等）→ testApi.js 本地 mock，与 SDK 签名兼容
         find: /^openclaw\/plugin-sdk\/core$/,
         replacement: path.resolve(__dirname, 'tests/helpers/testApi.js'),
       },
       {
-        // plugin-test-api
-        find: /^openclaw\/plugin-sdk\/plugin-test-api$/,
+        // 同上，openclaw/agents/tools/common 也 alias 到同一文件
+        find: /^openclaw\/agents\/tools\/common$/,
         replacement: path.resolve(__dirname, 'tests/helpers/testApi.js'),
       },
-      {
-        // bare openclaw
-        find: /^openclaw$/,
-        replacement: path.resolve(__dirname, 'tests/helpers/testApi.js'),
-      },
+      // openclaw/plugin-sdk/plugin-test-api 保持走官方 SDK
     ],
     coverage: {
       provider: 'v8',
