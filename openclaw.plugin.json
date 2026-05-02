@@ -20,7 +20,12 @@
         "items": {
           "type": "string"
         },
-        "default": ["maker", "fixer", "scholar", "captain"]
+        "default": [
+          "maker",
+          "fixer",
+          "scholar",
+          "captain"
+        ]
       },
       "notifications": {
         "type": "array",
@@ -65,6 +70,13 @@
             "provider",
             "agents"
           ]
+        }
+      },
+      "publishers": {
+        "type": "array",
+        "description": "Publisher agent 列表（会收到心跳注入的验收指令）",
+        "items": {
+          "type": "string"
         }
       }
     }
