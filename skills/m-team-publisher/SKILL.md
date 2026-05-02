@@ -60,6 +60,11 @@ Executor picks it up via heartbeat → executes → notifies on complete
 - 关键约束（costPrice < 5 RMB、数量、截止时间）
 - 验收标准摘要（输出什么文件/字段）
 - 项目路径
+- **客观视角**：描述"要达成什么"，不描述"谁让我做"或"为谁做"
+  - ❌ "帮我调研供应商"
+  - ❌ "Agent 自我介绍任务：体现 Manager 的风格"
+  - ✅ "在飞书单聊中发送一条300字以内的自我介绍，包含角色定位和风格描述" 
+  - ✅ "从1688筛选3个costPrice<5RMB的宠物玩具商品"
 
 **Description 填写规范：**
 - 只写当前 executor 要做的这一件事
