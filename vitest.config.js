@@ -8,17 +8,26 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'node',
-    // setup-sdk-mock.js 已删除 — SDK helpers 和 createTestPluginApi 移至 helpers/testApi.js
     setupFiles: ['./tests/setup.js'],
     include: ['tests/**/*.test.{js,ts}'],
     alias: [
       {
-        // 匹配 import from 'openclaw/plugin-sdk/core'
+        // SDK helpers 指向 testApi.js（mock 实现）
+        find: /^openclaw\/agents\/tools\/common$/,
+        replacement: path.resolve(__dirname, 'tests/helpers/testApi.js'),
+      },
+      {
+        // SDK core 也指向 testApi.js
         find: /^openclaw\/plugin-sdk\/core$/,
         replacement: path.resolve(__dirname, 'tests/helpers/testApi.js'),
       },
       {
-        // 匹配 import from 'openclaw' (bare specifier)
+        // plugin-test-api
+        find: /^openclaw\/plugin-sdk\/plugin-test-api$/,
+        replacement: path.resolve(__dirname, 'tests/helpers/testApi.js'),
+      },
+      {
+        // bare openclaw
         find: /^openclaw$/,
         replacement: path.resolve(__dirname, 'tests/helpers/testApi.js'),
       },

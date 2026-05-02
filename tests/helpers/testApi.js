@@ -4,11 +4,13 @@
  * 职责：
  * 1. createTestPluginApi — 来自 openclaw/plugin-sdk/plugin-test-api.ts
  * 2. createMockApi — 兼容 TC 测试的 mock，包含 tool tracking
- * 3. SDK helpers — jsonResult, readStringParam, readNumberParam,
- *    readStringArrayParam, ToolInputError（来自 openclaw/plugin-sdk/core）
+ * 3. SDK helpers — 本文件自包含实现（与 openclaw/agents/tools/common 同签名）
+ *
+ * 注意：不要从本文件 re-export openclaw/agents/tools/common，会触发循环 alias。
+ * 生产代码请直接 import from '../../src/tools/helpers.js'。
  */
 
-// ─── SDK helpers（来自 openclaw/plugin-sdk/core）───────────────────────────────
+// ─── SDK helpers（自包含实现，与 openclaw/agents/tools/common 签名兼容）────────────
 
 export function jsonResult(data) {
   return { ok: true, data };

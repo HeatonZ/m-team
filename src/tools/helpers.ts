@@ -1,43 +1,36 @@
 /**
  * M-Team Tools — 参数读取与结果构建工具函数
+ *
+ * jsonResult / readStringParam / readNumberParam / readStringArrayParam / ToolInputError
+ * 来自 openclaw/plugin-sdk/core，与 SDK 保持一致。
+ * readTaskId 是 m-team 私有格式校验。
  */
 
-export interface JsonOk<T> {
-  ok: true;
-  data: T;
-}
+import {
+  jsonResult as _jsonResult,
+  readStringParam as _readStringParam,
+  readNumberParam as _readNumberParam,
+  readStringArrayParam as _readStringArrayParam,
+  ToolInputError as _ToolInputError,
+} from 'openclaw/plugin-sdk/core';
 
-export interface JsonErr {
-  ok: false;
-  error: string;
-}
+// ─── SDK helpers（保持 SDK 原名） ─────────────────────────────────────────
 
-export type JsonResult<T> = JsonOk<T> | JsonErr;
+export { _jsonResult as jsonResult };
+export { _readStringParam as readStringParam };
+export { _readNumberParam as readNumberParam };
+export { _readStringArrayParam as readStringArrayParam };
+export { _ToolInputError as ToolInputError };
 
-/** 构建工具调用结果（jsonResult 包装） */
-export function jsonResult<T>(data: T): { ok: true; data: T } {
-  return { ok: true, data };
-}
+// ─── m-team 兼容别名 ─────────────────────────────────────────────────────
 
-/**
- * 读取字符串参数
- */
-export function readStr(
-  rawParams: Record<string, unknown> | undefined,
-  name: string,
-  opts?: { required?: boolean; trim?: boolean }
-): string | undefined {
-  const value = rawParams?.[name];
-  if (value === undefined || value === null) {
-    if (opts?.required) throw new Error(`Parameter '${name}' is required`);
-    return undefined;
-  }
-  if (typeof value !== 'string') {
-    if (opts?.required) throw new Error(`Parameter '${name}' must be a string`);
-    return undefined;
-  }
-  return opts?.trim ? value.trim() : value;
-}
+/** readStringParam 的 m-team 别名 */
+export const readStr = _readStringParam;
+
+/** readNumberParam 的 m-team 别名 */
+export const readNum = _readNumberParam;
+
+// ─── m-team 私有格式校验 ──────────────────────────────────────────────────
 
 /**
  * 读取 taskId 参数（带格式校验）
@@ -49,7 +42,7 @@ export function readTaskId(
   name: string,
   opts?: { required?: boolean }
 ): string | undefined {
-  const raw = readStr(rawParams, name, opts);
+  const raw = _readStringParam(rawParams ?? {}, name, opts);
   if (raw === undefined) return undefined;
 
   // 纯数字 → 无效
@@ -69,17 +62,4 @@ export function readTaskId(
   }
 
   return raw;
-}
-
-/**
- * 读取数字参数
- */
-export function readNum(
-  rawParams: Record<string, unknown> | undefined,
-  name: string
-): number | undefined {
-  const value = rawParams?.[name];
-  if (value === undefined || value === null) return undefined;
-  const n = typeof value === 'number' ? value : Number(value);
-  return Number.isNaN(n) ? undefined : n;
 }
