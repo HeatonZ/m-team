@@ -14,11 +14,13 @@ import {
   cancelTask,
   completeTask,
   failTask,
+  closeTask,
   type ClaimResult,
   type CancelResult,
   type RelinquishResult,
   type RelayResult,
   type CompleteResult,
+  type CloseResult,
   type ContextEntryInput
 } from './operations';
 
@@ -27,8 +29,8 @@ import {
 // ============================================================
 
 export { setWorkspaceRoot, DB_PATH };
-export { publishTask, claimTask, updateTask, relinquishTask, relayTask, cancelTask, completeTask, failTask };
-export type { ClaimResult, CancelResult, RelinquishResult, RelayResult, CompleteResult, ContextEntryInput };
+export { publishTask, claimTask, updateTask, relinquishTask, relayTask, cancelTask, completeTask, failTask, closeTask };
+export type { ClaimResult, CancelResult, RelinquishResult, RelayResult, CompleteResult, CloseResult, ContextEntryInput };
 
 // ============================================================
 // 只读查询

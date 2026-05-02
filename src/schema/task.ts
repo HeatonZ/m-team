@@ -10,6 +10,7 @@ export const TaskStatus = {
   PENDING: 'pending',
   RUNNING: 'running',
   COMPLETED: 'completed',
+  CLOSED: 'closed',
   FAILED: 'failed',
   CANCELLED: 'cancelled'
 } as const;
@@ -20,6 +21,7 @@ export const TASK_STATUSES: TaskStatus[] = [
   TaskStatus.PENDING,
   TaskStatus.RUNNING,
   TaskStatus.COMPLETED,
+  TaskStatus.CLOSED,
   TaskStatus.FAILED,
   TaskStatus.CANCELLED
 ];
@@ -196,7 +198,8 @@ export function createTask(input: CreateTaskInput): Task {
 const STATUS_LABELS: Record<TaskStatus, string> = {
   [TaskStatus.PENDING]: '⏳ 待认领',
   [TaskStatus.RUNNING]: '⚙️ 执行中',
-  [TaskStatus.COMPLETED]: '✅ 完成',
+  [TaskStatus.COMPLETED]: '✅ 完成（待验收）',
+  [TaskStatus.CLOSED]: '🔒 已验收',
   [TaskStatus.FAILED]: '❌ 失败',
   [TaskStatus.CANCELLED]: '🚫 已取消'
 };

@@ -60,7 +60,7 @@ test('注册了所有 11 个 tools', async () => {
   expect(names).toContain('mteam_get_agent_active');
   expect(names).toContain('mteam_get_task');
   expect(names).toContain('mteam_get_all_tasks');
-  expect(names).toHaveLength(11);
+  expect(names).toHaveLength(12);
 });
 
 // ============================================================

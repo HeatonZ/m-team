@@ -46,6 +46,7 @@ import type { OpenClawPluginApi } from 'openclaw/plugin-sdk/core';
 interface PluginConfig {
   workspaceRoot?: string;
   executors?: string[];
+  publishers?: string[];
   notifications?: NotificationConfig[];
 }
 
@@ -73,6 +74,7 @@ const plugin = definePluginEntry({
     registerSubagentEndedHook(api);
     registerHeartbeatPromptContributionHook(api, {
       executors: config.executors ?? ['maker', 'fixer', 'scholar', 'captain'],
+      publishers: config.publishers ?? [],
     });
     registerSessionGuardHook(api);
 

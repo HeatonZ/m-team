@@ -408,3 +408,44 @@ export function formatCancelNotifications(
 
   return result;
 }
+
+export function formatCloseNotifications(
+  task: Task,
+  notifications: NotificationConfig[]
+): FormattedNotification[] {
+  if (!notifications || notifications.length === 0) return [];
+  if (!task || task.status !== 'closed') return [];
+
+  const lastEntry = task.context[task.context.length - 1];
+  const summary = (lastEntry as { output?: { summary?: string } })?.output?.summary ?? null;
+
+  const duration =
+    task.completedAt && task.createdAt
+      ? `${Math.round((task.completedAt - task.createdAt) / 1000)}秒`
+      : null;
+
+  const result: FormattedNotification[] = [];
+  for (const cfg of notifications) {
+    if (!cfg.agents.includes(task.publisher)) continue;
+
+    const lines = [
+      `🔒 任务已验收通过`,
+      ``,
+      `📋 ${task.description}`,
+      `验收者: ${task.publisher}`,
+      summary ? `结果: ${summary}` : null,
+      duration ? `总耗时: ${duration}` : null
+    ].filter(Boolean);
+
+    const message = lines.join('\n');
+
+    if (cfg.provider === 'feishu') {
+      result.push({ provider: 'feishu', chatId: cfg.groupId, appId: cfg.appId, appSecret: cfg.appSecret, message });
+    } else if (cfg.provider === 'discord') {
+      result.push({ provider: 'discord', channelId: cfg.channelId, discordToken: cfg.discordToken, message });
+    }
+  }
+
+  return result;
+}
+

@@ -28,9 +28,10 @@ import {
   getAllTasks,
   cancelTask,
   relinquishTask,
+  closeTask,
 } from '../pool/index.js';
 import { TaskStatus } from '../schema/task.js';
-import { formatTaskNotifications, formatRelinquishNotifications, formatRelayNotifications, formatPublishNotifications, formatClaimNotifications, formatCancelNotifications, sendNotifications } from '../notifications.js';
+import { formatTaskNotifications, formatRelinquishNotifications, formatRelayNotifications, formatPublishNotifications, formatClaimNotifications, formatCancelNotifications, formatCloseNotifications, sendNotifications } from '../notifications.js';
 import type { NotificationConfig } from '../notifications.js';
 
 // ─── SDK 类型兼容别名 ────────────────────────────────────────────────────────
@@ -516,6 +517,41 @@ ${systemPrompt}`,
       try {
         const tasks = getAllTasks();
         return jsonResult({ tasks });
+      } catch (e) {
+        return { ok: false, error: (e as Error)?.message ?? String(e) };
+      }
+    },
+  } as unknown as AnyAgentTool);
+
+  // === mteam_close_task ===
+  api.registerTool({
+    name: 'mteam_close_task',
+    description: 'Publisher 验收通过，关闭任务（终态）',
+    parameters: {
+      type: 'object',
+      properties: {
+        taskId: { type: 'string', description: '任务ID' },
+        publisher: { type: 'string', description: '发布者（需与创建时 publisher 一致）' },
+      },
+      required: ['taskId', 'publisher'],
+    } as AnyAgentTool['parameters'],
+    async execute(_toolCallId: string, rawParams: Record<string, unknown>) {
+      try {
+        const taskId = readTaskId(rawParams, 'taskId', { required: true })!;
+        const publisher = readStr(rawParams, 'publisher', { required: true })!;
+        const result = closeTask(taskId, publisher);
+        if (!result.success) return { ok: false, data: result };
+
+        if (result.task && config.notifications?.length) {
+          try {
+            const notifications = formatCloseNotifications(result.task, config.notifications);
+            await sendNotifications(notifications, api.logger as PluginLogger);
+          } catch (e) {
+            (api.logger as PluginLogger)?.warn('[m-team] 通知发送失败');
+          }
+        }
+
+        return jsonResult({ success: result.success, task: result.task });
       } catch (e) {
         return { ok: false, error: (e as Error)?.message ?? String(e) };
       }

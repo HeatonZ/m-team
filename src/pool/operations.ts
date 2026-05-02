@@ -493,3 +493,42 @@ export function failTask(
 
   return result as CompleteResult;
 }
+
+// ============================================================
+// closeTask（Publisher 验收通过，终态）
+// ============================================================
+
+export interface CloseResult {
+  success: boolean;
+  task?: Task | null;
+  reason?: string;
+}
+
+export function closeTask(taskId: string, publisher: string): CloseResult {
+  init();
+  const db = getDb();
+
+  const result = db.transaction(() => {
+    const task = getTaskRow(taskId);
+    if (!task) return { success: false, task: null, reason: 'TASK_NOT_FOUND' };
+    if (task.status !== TaskStatus.COMPLETED) {
+      return { success: false, task, reason: `NOT_COMPLETED_${task.status}` };
+    }
+    if (task.publisher !== publisher) {
+      return { success: false, task, reason: 'NOT_PUBLISHER' };
+    }
+
+    const patch: Record<string, unknown> = {
+      status: TaskStatus.CLOSED,
+      completedAt: Date.now(),
+      executor: null
+    };
+    updateTaskRow(taskId, patch);
+    const updated = getTaskRow(taskId)!;
+    syncTaskJson(updated);
+    console.log(`[m-team-pool] 任务 ${taskId} 被 ${publisher} 验收关闭`);
+    return { success: true, task: updated };
+  })();
+
+  return result as CloseResult;
+}
