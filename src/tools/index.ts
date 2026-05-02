@@ -161,7 +161,7 @@ export function registerTools(api: OpenClawApi, config: PluginConfig): void {
 
         // Plugin 内部直接创建 executor session
         // 注意：任务已由心跳 session 认领，subagent 不需要重复 claim
-        const sessionKey = `mteam:${taskId}:${agentId}:${Date.now()}`;
+        const sessionKey = `agent:${agentId}:m-team:${taskId}`;
         const executorAgentId = agentId; // 任务指定的执行者（而非 subagent 的 session agentId）
         const systemPrompt = `
 【任务规范 — M-Team 执行者】
@@ -186,7 +186,6 @@ export function registerTools(api: OpenClawApi, config: PluginConfig): void {
 直接执行任务即可。
 
 【工具使用规范】
-所有工具调用必须传入正确的 executorAgentId（${executorAgentId}），不能用 subagent 自己的 session agentId。
 
 |1. 完成任务（最终完成）→ 调用 mteam_complete_task
 |   - 当你认为任务目标已全部达成，不需要再交接给其他 agent 时使用
@@ -201,7 +200,6 @@ export function registerTools(api: OpenClawApi, config: PluginConfig): void {
 
 |【禁止】
 |- 调用 mteam_claim_task——任务已被认领，claim 会返回 NOT_PENDING
-|- 认领任务后不要立刻调用 mteam_complete_task，先用 mteam_get_task 读取 context，再实际执行任务
 |- 在未调用任何工具的情况下自行结束会话，任务将永久卡在 running 状态
 |- 在 tool call 的 agentId 参数中传入 subagent 自己的 session agentId，必须传入 ${executorAgentId}
 |`;

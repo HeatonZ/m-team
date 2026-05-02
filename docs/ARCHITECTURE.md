@@ -45,7 +45,7 @@
 │  mteam_claim_task                                       │
 │    ├─ claimTask()（SQLite 事务，原子操作）              │
 │    └─ api.runtime.subagent.run() ──→ Executor Session    │
-│         sessionKey: mteam:{taskId}:{agentId}:{ts}      │
+│         sessionKey: agent:{agentId}:m-team:{taskId}  │
 └──────────────────────────────────────────────────────────┘
      │
      ▼

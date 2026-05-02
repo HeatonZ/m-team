@@ -35,12 +35,14 @@ export function registerSubagentEndedHook(api: OpenClawApi): void {
   api.on('subagent_ended', async (event: SubagentEndedEvent) => {
     const { targetSessionKey, outcome, reason, error } = event;
 
-    // 只处理 mteam: 前缀的 session
-    if (!targetSessionKey?.startsWith('mteam:')) return;
+    // 只处理 agent:<agentId>:m-team:<taskId> 格式的 session
+    if (!targetSessionKey?.startsWith('agent:')) return;
+    if (!targetSessionKey?.includes(':m-team:')) return;
 
-    // sessionKey 格式: mteam:{taskId}:{agentId}:{timestamp}
+    // sessionKey 格式: agent:{agentId}:m-team:{taskId}
     const parts = targetSessionKey.split(':');
-    const taskId = parts[1];
+    // parts[0]=agent, parts[1]=agentId, parts[2]=m-team, parts[3]=taskId
+    const taskId = parts[3];
     if (!taskId) {
       api.logger?.warn('[m-team] subagent_ended 解析 taskId 失败', { targetSessionKey });
       return;

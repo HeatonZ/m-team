@@ -120,7 +120,7 @@ mteam_claim_task({
  *   taskId: "task_1745740800",
  *   task: { ... },
  *   runId: "run_xxx",
- *   sessionKey: "mteam:task1745740800:my-agent-id:1745740800"
+ *   sessionKey: "agent:my-agent-id:m-team:task1745740800"
  * }
  *
  * SQLite 事务:
