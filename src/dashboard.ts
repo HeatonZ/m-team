@@ -7,7 +7,6 @@
 
 import { spawn, type ChildProcess } from 'node:child_process';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 let _dashboardProc: ChildProcess | null = null;
 let _cleanedUp = false; // 防止 double cleanup

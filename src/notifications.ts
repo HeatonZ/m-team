@@ -43,22 +43,10 @@ export function getNotifications(): NotificationConfig[] {
 // 通知发送
 // ============================================================
 
-interface OpenClawApi {
-  logger?: {
-    error(msg: string, meta?: Record<string, unknown>): void;
-    warn(msg: string, meta?: Record<string, unknown>): void;
-    info(msg: string, meta?: Record<string, unknown>): void;
-  };
-  config?: {
-    accounts?: Array<{ type?: string; provider?: string; id?: string; accountId?: string }>;
-  };
-  channel?: {
-    outbound?: {
-      loadAdapter(opts: { channelId: string; accountId?: string }): Promise<{
-        sendText(opts: { text: string }): Promise<void>;
-      }>;
-    };
-  };
+interface PluginLoggerLike {
+  error(msg: string): void;
+  info?(msg: string): void;
+  warn?(msg: string): void;
 }
 
 /**
@@ -67,7 +55,7 @@ interface OpenClawApi {
  */
 export async function sendNotifications(
   notifications: FormattedNotification[],
-  logger?: { error(msg: string, meta?: Record<string, unknown>): void }
+  logger?: PluginLoggerLike
 ): Promise<void> {
   if (!notifications || notifications.length === 0) return;
 
@@ -79,11 +67,7 @@ export async function sendNotifications(
         await sendDiscordDirect(notif.channelId, notif.message, notif.discordToken, logger);
       }
     } catch (err) {
-      logger?.error(`[m-team] sendNotifications 失败: ${(err as Error).message}`, {
-        provider: notif.provider,
-        chatId: notif.chatId ?? notif.channelId,
-        hasCredentials: !!(notif.appId && notif.appSecret) || !!notif.discordToken
-      });
+      logger?.error(`[m-team] sendNotifications 失败: ${(err as Error).message}`);
     }
   }
 }
@@ -103,8 +87,9 @@ let _feishuTokenCache: FeishuTokenCache | null = null;
 async function getFeishuToken(
   appId: string,
   appSecret: string,
-  logger?: { error(msg: string, meta?: Record<string, unknown>): void }
+  _logger?: { error: (msg: string) => void; info?: (msg: string) => void }
 ): Promise<string> {
+  void _logger; // logger param reserved for future use
   // 缓存命中且未过期
   if (_feishuTokenCache && Date.now() < _feishuTokenCache.expireAt) {
     return _feishuTokenCache.token;
@@ -145,8 +130,9 @@ export async function sendFeishuGroupMessage(
   message: string,
   appId: string,
   appSecret: string,
-  logger: { error: (msg: string) => void; info?: (msg: string) => void }
+  logger?: { error: (msg: string) => void; info?: (msg: string) => void }
 ): Promise<void> {
+  if (!logger) return;
   const token = await getFeishuToken(appId, appSecret, logger);
 
   const body = {
@@ -181,8 +167,9 @@ async function sendDiscordDirect(
   channelId: string,
   message: string,
   discordToken: string,
-  logger?: { error(msg: string, meta?: Record<string, unknown>): void }
+  logger?: { error: (msg: string) => void; info?: (msg: string) => void }
 ): Promise<void> {
+    if (!logger) return;
   const res = await fetch(
     `https://discord.com/api/v10/channels/${channelId}/messages`,
     {

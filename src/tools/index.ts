@@ -12,9 +12,9 @@ import {
   jsonResult,
   readStringParam as readStr,
   readNumberParam as readNum,
-  ToolInputError,
 } from 'openclaw/plugin-sdk/core';
 import type { PluginLogger } from 'openclaw/plugin-sdk/core';
+import { ToolInputError } from './helpers.js';
 
 import {
   publishTask,
@@ -100,7 +100,7 @@ export function registerTools(api: OpenClawPluginApi, config: MTeamPluginConfig)
       },
       required: ['goal', 'description'],
     } as AnyAgentTool['parameters'],
-    async execute(_toolCallId, rawParams) {
+    async execute(_toolCallId: string, rawParams: Record<string, unknown>) {
       try {
         const description = readStr(rawParams, 'description', { required: true });
         const goal = readStr(rawParams, 'goal', { required: true });
@@ -114,7 +114,7 @@ export function registerTools(api: OpenClawPluginApi, config: MTeamPluginConfig)
             const notifications = formatPublishNotifications(task, config.notifications);
             await sendNotifications(notifications, api.logger as PluginLogger);
           } catch (e) {
-            (api.logger as PluginLogger)?.warn('[m-team] 通知发送失败', { error: (e as Error)?.message });
+            (api.logger as PluginLogger)?.warn('[m-team] 通知发送失败');
           }
         }
 
@@ -137,7 +137,7 @@ export function registerTools(api: OpenClawPluginApi, config: MTeamPluginConfig)
       },
       required: ['taskId', 'agentId'],
     } as AnyAgentTool['parameters'],
-    async execute(_toolCallId, rawParams) {
+    async execute(_toolCallId: string, rawParams: Record<string, unknown>) {
       try {
         const taskId = readTaskId(rawParams, 'taskId', { required: true })!;
         const agentId = readStr(rawParams, 'agentId', { required: true })!;
@@ -152,7 +152,7 @@ export function registerTools(api: OpenClawPluginApi, config: MTeamPluginConfig)
             const notifications = formatClaimNotifications(task, config.notifications);
             await sendNotifications(notifications, api.logger as PluginLogger);
           } catch (e) {
-            (api.logger as PluginLogger)?.warn('[m-team] 通知发送失败', { error: (e as Error)?.message });
+            (api.logger as PluginLogger)?.warn('[m-team] 通知发送失败');
           }
         }
 
@@ -198,18 +198,15 @@ export function registerTools(api: OpenClawPluginApi, config: MTeamPluginConfig)
 |- 在 tool call 的 agentId 参数中传入 subagent 自己的 session agentId，必须传入 ${agentId}
 |`;
 
-        const subagentRun = (api.runtime as Record<string, unknown>)?.subagent?.run({
+        const subagentRun = (api.runtime as any)?.subagent?.run({
           sessionKey,
           agentId,
           message: `[M-Team Task #${taskId}] ${task?.description ?? ''}
 
 [系统信息] executorAgentId=${agentId}
 ${systemPrompt}`,
-        }).catch((runErr) => {
-          (api.logger as PluginLogger)?.error('[m-team] subagent.run 异步启动失败，回滚任务状态', {
-            taskId,
-            error: (runErr as Error)?.message ?? String(runErr),
-          });
+        }).catch((_runErr: Error) => {
+          (api.logger as PluginLogger)?.error('[m-team] subagent.run 异步启动失败，回滚任务状态');
           relinquishTask(taskId, agentId);
           return { runId: null };
         });
@@ -247,7 +244,7 @@ ${systemPrompt}`,
       },
       required: ['taskId'],
     } as AnyAgentTool['parameters'],
-    async execute(_toolCallId, rawParams) {
+    async execute(_toolCallId: string, rawParams: Record<string, unknown>) {
       try {
         const taskId = readStr(rawParams, 'taskId', { required: true })!;
         const agentId = readStr(rawParams, 'agentId');
@@ -287,7 +284,7 @@ ${systemPrompt}`,
       },
       required: ['taskId', 'publisher'],
     } as AnyAgentTool['parameters'],
-    async execute(_toolCallId, rawParams) {
+    async execute(_toolCallId: string, rawParams: Record<string, unknown>) {
       try {
         const taskId = readTaskId(rawParams, 'taskId', { required: true })!;
         const publisher = readStr(rawParams, 'publisher', { required: true })!;
@@ -300,7 +297,7 @@ ${systemPrompt}`,
             const notifications = formatCancelNotifications(result.task, config.notifications);
             await sendNotifications(notifications, api.logger as PluginLogger);
           } catch (e) {
-            (api.logger as PluginLogger)?.warn('[m-team] 通知发送失败', { error: (e as Error)?.message });
+            (api.logger as PluginLogger)?.warn('[m-team] 通知发送失败');
           }
         }
 
@@ -331,7 +328,7 @@ ${systemPrompt}`,
       },
       required: ['taskId', 'contextStep'],
     } as AnyAgentTool['parameters'],
-    async execute(_toolCallId, rawParams) {
+    async execute(_toolCallId: string, rawParams: Record<string, unknown>) {
       try {
         const taskId = readTaskId(rawParams, 'taskId', { required: true })!;
         const contextStep = readStr(rawParams, 'contextStep', { required: true })!;
@@ -346,7 +343,7 @@ ${systemPrompt}`,
             const notifications = formatTaskNotifications(result.task, config.notifications);
             await sendNotifications(notifications, api.logger as PluginLogger);
           } catch (e) {
-            (api.logger as PluginLogger)?.warn('[m-team] 通知发送失败', { error: (e as Error)?.message });
+            (api.logger as PluginLogger)?.warn('[m-team] 通知发送失败');
           }
         }
 
@@ -379,7 +376,7 @@ ${systemPrompt}`,
       },
       required: ['taskId', 'agentId', 'contextStep'],
     } as AnyAgentTool['parameters'],
-    async execute(_toolCallId, rawParams) {
+    async execute(_toolCallId: string, rawParams: Record<string, unknown>) {
       try {
         const taskId = readTaskId(rawParams, 'taskId', { required: true })!;
         const agentId = readStr(rawParams, 'agentId', { required: true })!;
@@ -396,7 +393,7 @@ ${systemPrompt}`,
             const notifications = formatRelayNotifications(result.task, config.notifications);
             await sendNotifications(notifications, api.logger as PluginLogger);
           } catch (e) {
-            (api.logger as PluginLogger)?.warn('[m-team] 通知发送失败', { error: (e as Error)?.message });
+            (api.logger as PluginLogger)?.warn('[m-team] 通知发送失败');
           }
         }
 
@@ -420,7 +417,7 @@ ${systemPrompt}`,
       },
       required: ['taskId', 'executorId'],
     } as AnyAgentTool['parameters'],
-    async execute(_toolCallId, rawParams) {
+    async execute(_toolCallId: string, rawParams: Record<string, unknown>) {
       try {
         const taskId = readTaskId(rawParams, 'taskId', { required: true })!;
         const executorId = readStr(rawParams, 'executorId', { required: true })!;
@@ -433,7 +430,7 @@ ${systemPrompt}`,
             const notifications = formatRelinquishNotifications(result.task, config.notifications);
             await sendNotifications(notifications, api.logger as PluginLogger);
           } catch (e) {
-            (api.logger as PluginLogger)?.warn('[m-team] 通知发送失败', { error: (e as Error)?.message });
+            (api.logger as PluginLogger)?.warn('[m-team] 通知发送失败');
           }
         }
 
@@ -455,7 +452,7 @@ ${systemPrompt}`,
       },
       required: ['agentId'],
     } as AnyAgentTool['parameters'],
-    async execute(_toolCallId, rawParams) {
+    async execute(_toolCallId: string, rawParams: Record<string, unknown>) {
       try {
         const agentId = readStr(rawParams, 'agentId', { required: true })!;
         const pending = getPendingTasks(agentId);
@@ -477,7 +474,7 @@ ${systemPrompt}`,
       },
       required: ['agentId'],
     } as AnyAgentTool['parameters'],
-    async execute(_toolCallId, rawParams) {
+    async execute(_toolCallId: string, rawParams: Record<string, unknown>) {
       try {
         const agentId = readStr(rawParams, 'agentId', { required: true })!;
         const activeTask = getAgentActiveTask(agentId);
@@ -499,7 +496,7 @@ ${systemPrompt}`,
       },
       required: ['taskId'],
     } as AnyAgentTool['parameters'],
-    async execute(_toolCallId, rawParams) {
+    async execute(_toolCallId: string, rawParams: Record<string, unknown>) {
       try {
         const taskId = readStr(rawParams, 'taskId', { required: true })!;
         const task = getTask(taskId);
@@ -515,7 +512,7 @@ ${systemPrompt}`,
     name: 'mteam_get_all_tasks',
     description: '获取所有任务',
     parameters: { type: 'object', properties: {} } as AnyAgentTool['parameters'],
-    async execute(_toolCallId) {
+    async execute(_toolCallId: string) {
       try {
         const tasks = getAllTasks();
         return jsonResult({ tasks });

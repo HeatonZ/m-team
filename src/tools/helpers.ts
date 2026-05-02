@@ -11,8 +11,15 @@ import {
   readStringParam as _readStringParam,
   readNumberParam as _readNumberParam,
   readStringArrayParam as _readStringArrayParam,
-  ToolInputError as _ToolInputError,
 } from 'openclaw/plugin-sdk/core';
+
+// ToolInputError 在 SDK 非导出路径 'agents/tools/common'，生产代码需本地定义
+export class ToolInputError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ToolInputError';
+  }
+}
 
 // ─── SDK helpers（保持 SDK 原名） ─────────────────────────────────────────
 
@@ -20,7 +27,7 @@ export { _jsonResult as jsonResult };
 export { _readStringParam as readStringParam };
 export { _readNumberParam as readNumberParam };
 export { _readStringArrayParam as readStringArrayParam };
-export { _ToolInputError as ToolInputError };
+
 
 // ─── m-team 兼容别名 ─────────────────────────────────────────────────────
 

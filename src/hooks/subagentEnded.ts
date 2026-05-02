@@ -4,24 +4,16 @@
  * executor session 正常/异常结束时自动触发，标记任务完成/失败并发送通知。
  */
 
+import type { OpenClawPluginApi } from 'openclaw/plugin-sdk/core';
 import { completeTask, failTask } from '../pool/operations.js';
 import { getNotifications, formatTaskNotifications, sendNotifications } from '../notifications.js';
 
-// ============================================================
-// OpenClaw Plugin API 子集（内联，无外部依赖）
-// ============================================================
+// Re-export for backward compatibility with index.ts casts
+export {};
 
-interface Logger {
-  error(msg: string, meta?: Record<string, unknown>): void;
-  warn(msg: string, meta?: Record<string, unknown>): void;
-  info(msg: string, meta?: Record<string, unknown>): void;
-}
+/** SDK 类型：OpenClawPluginApi (registerTools 参数) */
 
-export interface OpenClawApi {
-  logger?: Logger;
-  on(event: string, handler: (event: SubagentEndedEvent) => Promise<void>): void;
-}
-
+// Local event type — mirrors SDK PluginHookSubagentEndedEvent shape (not in SDK public export)
 interface SubagentEndedEvent {
   targetSessionKey: string;
   outcome: string;
@@ -31,9 +23,9 @@ interface SubagentEndedEvent {
 
 // ============================================================
 
-export function registerSubagentEndedHook(api: OpenClawApi): void {
-  api.on('subagent_ended', async (event: SubagentEndedEvent) => {
-    const { targetSessionKey, outcome, reason, error } = event;
+export function registerSubagentEndedHook(api: OpenClawPluginApi): void {
+  api.on('subagent_ended', async (event: unknown) => {
+    const { targetSessionKey, outcome, reason, error } = event as SubagentEndedEvent;
 
     // 只处理 agent:<agentId>:m-team:<taskId> 格式的 session
     if (!targetSessionKey?.startsWith('agent:')) return;
@@ -44,7 +36,7 @@ export function registerSubagentEndedHook(api: OpenClawApi): void {
     // parts[0]=agent, parts[1]=agentId, parts[2]=m-team, parts[3]=taskId
     const taskId = parts[3];
     if (!taskId) {
-      api.logger?.warn('[m-team] subagent_ended 解析 taskId 失败', { targetSessionKey });
+      api.logger?.warn('[m-team] subagent_ended 解析 taskId 失败');
       return;
     }
 

@@ -12,7 +12,7 @@
 
 import { homedir } from 'node:os';
 import path from 'node:path';
-import { setNotifications, formatTaskNotifications } from './notifications.js';
+import { setNotifications } from './notifications.js';
 import { registerTools } from './tools/index.js';
 import { registerSubagentEndedHook } from './hooks/subagentEnded.js';
 import { registerHeartbeatPromptContributionHook } from './hooks/heartbeatPromptContribution.js';
@@ -41,39 +41,12 @@ import type { NotificationConfig } from './notifications.js';
 
 import { startDashboard, registerDashboardCleanup, stopDashboard } from './dashboard.js';
 import { definePluginEntry } from 'openclaw/plugin-sdk/plugin-entry';
-
-interface Logger {
-  error(msg: string, meta?: Record<string, unknown>): void;
-  warn(msg: string, meta?: Record<string, unknown>): void;
-  info(msg: string, meta?: Record<string, unknown>): void;
-}
+import type { OpenClawPluginApi } from 'openclaw/plugin-sdk/core';
 
 interface PluginConfig {
   workspaceRoot?: string;
   executors?: string[];
   notifications?: NotificationConfig[];
-}
-
-interface OpenClawPluginApi {
-  logger?: Logger;
-  pluginConfig?: PluginConfig;
-  registerTool(tool: unknown): void;
-  on(event: string, handler: (event: Record<string, unknown>) => Promise<void>): void;
-  runtime?: {
-    subagent?: {
-      run(opts: { sessionKey: string; message: string }): Promise<{ runId: string }>;
-    };
-  };
-  config?: {
-    accounts?: Array<{ type?: string; provider?: string; id?: string; accountId?: string }>;
-  };
-  channel?: {
-    outbound?: {
-      loadAdapter(opts: { channelId: string; accountId?: string }): Promise<{
-        sendText(opts: { text: string }): Promise<void>;
-      }>;
-    };
-  };
 }
 
 const plugin = definePluginEntry({
@@ -82,7 +55,7 @@ const plugin = definePluginEntry({
   description: '去中心化任务池协作插件 — 多Agent任务分发与执行',
 
   register(api: OpenClawPluginApi) {
-    const config = api.pluginConfig ?? {};
+    const config = (api.pluginConfig ?? {}) as PluginConfig;
     let workspaceRoot = config.workspaceRoot ?? '/mnt/d/code/m-team';
     if (workspaceRoot.startsWith('~')) {
       workspaceRoot = path.join(homedir(), workspaceRoot.slice(1));
@@ -95,30 +68,15 @@ const plugin = definePluginEntry({
     startDashboard(workspaceRoot);
     registerDashboardCleanup(api, stopDashboard);
 
-    registerTools(api as unknown as import('./tools/index.js').OpenClawApi, config);
+    registerTools(api, config);
 
-    registerSubagentEndedHook(api as unknown as import('./hooks/subagentEnded.js').OpenClawApi);
-    registerHeartbeatPromptContributionHook(api as unknown as OpenClawApi, {
+    registerSubagentEndedHook(api);
+    registerHeartbeatPromptContributionHook(api, {
       executors: config.executors ?? ['maker', 'fixer', 'scholar', 'captain'],
     });
-    registerSessionGuardHook(api as unknown as import('./hooks/sessionGuard.js').OpenClawApi);
+    registerSessionGuardHook(api);
 
-    api.logger?.info('[m-team] 插件加载完成', {
-      workspaceRoot,
-      tools: [
-        'mteam_publish_task',
-        'mteam_claim_task',
-        'mteam_update_task',
-        'mteam_complete_task',
-        'mteam_cancel_task',
-        'mteam_relay_task',
-        'mteam_relinquish_task',
-        'mteam_get_pending',
-        'mteam_get_agent_active',
-        'mteam_get_task',
-        'mteam_get_all_tasks'
-      ]
-    });
+    api.logger?.info('[m-team] 插件加载完成');
   }
 });
 

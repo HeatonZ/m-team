@@ -5,19 +5,13 @@
  * 无需修改任何 workspace 的 HEARTBEAT.md。
  */
 
-import type {
-  PluginHeartbeatPromptContributionEvent,
-  PluginHeartbeatPromptContributionResult,
-} from 'openclaw/plugins/host-hook-turn-types';
+import type { OpenClawPluginApi } from 'openclaw/plugin-sdk/core';
 
-interface Logger {
-  error(msg: string, meta?: Record<string, unknown>): void;
-  warn(msg: string, meta?: Record<string, unknown>): void;
-  info(msg: string, meta?: Record<string, unknown>): void;
-}
-
-export interface OpenClawApi {
-  logger?: Logger;
+// M-Team local event type — mirrors the SDK shape (not in SDK public export)
+interface HeartbeatPromptContributionEvent {
+  sessionKey?: string;
+  agentId?: string;
+  heartbeatName?: string;
 }
 
 interface RegisterOptions {
@@ -73,32 +67,29 @@ mteam_relinquish_task({ taskId, executorId })
 回复内容只写 "HEARTBEAT_OK"。`;
 
 export function registerHeartbeatPromptContributionHook(
-  api: OpenClawApi,
+  api: OpenClawPluginApi,
   options: RegisterOptions,
 ): void {
   const executors = new Set(options.executors ?? ['maker', 'fixer', 'scholar', 'captain']);
   
-  api.on(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (api.on as (hook: string, handler: unknown) => void)(
     'heartbeat_prompt_contribution',
     async (
-      event: PluginHeartbeatPromptContributionEvent,
-    ): Promise<PluginHeartbeatPromptContributionResult | undefined> => {
-      const { agentId, sessionKey } = event;
+      event: HeartbeatPromptContributionEvent,
+      _ctx: unknown,
+    ): Promise<unknown> => {
+      const { agentId, sessionKey } = event as HeartbeatPromptContributionEvent;
 
       console.error('[m-team] heartbeat_prompt_contribution hook FIRED', JSON.stringify({ agentId, sessionKey }));
 
       // 不在配置名单内，不注入
       if (!agentId || !executors.has(agentId)) {
-        api.logger?.info('[m-team] heartbeat_prompt_contribution 跳过: agentId不在executors名单', {
-          agentId, executors: [...executors]
-        });
+        api.logger?.info('[m-team] heartbeat_prompt_contribution 跳过: agentId不在executors名单');
         return undefined;
       }
 
-      api.logger?.info('[m-team] heartbeat_prompt_contribution 注入 executor 指令', {
-        agentId,
-        sessionKey,
-      });
+      api.logger?.info('[m-team] heartbeat_prompt_contribution 注入 executor 指令');
 
       // TODO: 临时调试日志，executor 重复 claim 问题时删除
       console.error('[DEBUG heartbeat] agentId=' + agentId + ' sessionKey=' + sessionKey);
