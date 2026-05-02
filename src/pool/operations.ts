@@ -410,7 +410,8 @@ export function completeTask(
 
     const patch: Record<string, unknown> = {
       status: TaskStatus.COMPLETED,
-      completedAt: Date.now()
+      completedAt: Date.now(),
+      executor: null
     };
 
     const entryToAdd = contextEntry ?? fallbackEntry;
