@@ -126,6 +126,9 @@ The Executor handles execution. When done, the plugin sends notifications per `n
 | Wrong | Correct |
 |-------|---------|
 | description = "完成供应商调研" | description = concrete first step, ≤2 sentences |
+| description 出现 publisher 身份、角色定位、
+"帮我做xxx"、"体现xx的风格" | description 只写客观执行指令，不出现
+"谁让我做"或"为谁做"的信息 |
 | goal = description | Means task is one-step, doesn't need the pool |
 | Missing input parameters | Always include `{ keyword, count, file }` as needed |
 | publisher = agentId instead of "user" | Use "user" unless explicitly assigning to specific agent |
