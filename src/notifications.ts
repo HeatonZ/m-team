@@ -213,7 +213,7 @@ export function formatTaskNotifications(task: Task, notifications: NotificationC
   for (const cfg of notifications) {
     // executor（当前执行者）> lastExecutor（relay 场景）> context 兜底 > unknown
     const lastEntry = task.context[task.context.length - 1] as { executor?: string } | undefined;
-    const effectiveExecutor = (task.executor ?? task.lastExecutor ?? lastEntry?.executor ?? 'unknown') || 'unknown';
+    const effectiveExecutor = (task.executor || task.lastExecutor || lastEntry?.executor || 'unknown');
     if (!cfg.agents.includes(effectiveExecutor)) continue;
 
     if (cfg.provider === 'feishu') {
