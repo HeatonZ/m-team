@@ -64,6 +64,11 @@ Executor picks it up via heartbeat → executes → notifies on complete
 **Description 填写规范：**
 - 只写当前 executor 要做的这一件事
 - 格式：`动词 + 关键词 + 筛选条件 + 输出路径`
+- **客观视角**：描述"要做什么"，不描述"谁让我做"或"为谁做"
+  - ❌ "帮我搜索宠物玩具" / "用户要选品"
+  - ✅ "搜索宠物玩具关键词，筛选 costPrice < 5 RMB"
+  - ❌ "publisher=manager 要做调研报告"
+  - ✅ "抓取商品详情页，输出到 {projectId}/{taskId}/detail.json"
 
 **Goal vs Description 示例：**
 
