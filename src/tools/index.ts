@@ -141,7 +141,7 @@ export function registerTools(api: OpenClawApi, config: PluginConfig): void {
     },
     async execute(_toolCallId, rawParams) {
       try {
-        const taskId = readTaskId(rawParams, 'taskId', { required: true }))!;
+        const taskId = readTaskId(rawParams, 'taskId', { required: true })!;
         const agentId = readStr(rawParams, 'agentId', { required: true })!;
 
         const result = claimTask(taskId, agentId);
@@ -255,7 +255,7 @@ ${systemPrompt}`
     },
     async execute(_toolCallId, rawParams) {
       try {
-        const taskId = readTaskId(rawParams, 'taskId', { required: true }))!;
+        const taskId = readTaskId(rawParams, 'taskId', { required: true })!;
         const agentId = readStr(rawParams, 'agentId');
         const status = readStr(rawParams, 'status');
         const contextStep = readStr(rawParams, 'contextStep');
@@ -295,7 +295,7 @@ ${systemPrompt}`
     },
     async execute(_toolCallId, rawParams) {
       try {
-        const taskId = readTaskId(rawParams, 'taskId', { required: true }))!;
+        const taskId = readTaskId(rawParams, 'taskId', { required: true })!;
         const publisher = readStr(rawParams, 'publisher', { required: true })!;
         const reason = readStr(rawParams, 'reason');
         const result = cancelTask(taskId, publisher, reason);
@@ -339,7 +339,7 @@ ${systemPrompt}`
     },
     async execute(_toolCallId, rawParams) {
       try {
-        const taskId = readTaskId(rawParams, 'taskId', { required: true }))!;
+        const taskId = readTaskId(rawParams, 'taskId', { required: true })!;
         const contextStep = readStr(rawParams, 'contextStep', { required: true })!;
         const contextOutput = rawParams.contextOutput as { summary?: string; files?: string[] } | undefined;
 
@@ -387,7 +387,7 @@ ${systemPrompt}`
     },
     async execute(_toolCallId, rawParams) {
       try {
-        const taskId = readTaskId(rawParams, 'taskId', { required: true }))!;
+        const taskId = readTaskId(rawParams, 'taskId', { required: true })!;
         const agentId = readStr(rawParams, 'agentId', { required: true })!;
         const contextStep = readStr(rawParams, 'contextStep', { required: true })!;
         const contextOutput = rawParams.contextOutput as { summary?: string; files?: string[] } | undefined;
@@ -428,7 +428,7 @@ ${systemPrompt}`
     },
     async execute(_toolCallId, rawParams) {
       try {
-        const taskId = readTaskId(rawParams, 'taskId', { required: true }))!;
+        const taskId = readTaskId(rawParams, 'taskId', { required: true })!;
         const executorId = readStr(rawParams, 'executorId', { required: true })!;
         const reason = readStr(rawParams, 'reason') ?? 'executor_relinquish';
         const result = relinquishTask(taskId, executorId, reason);
@@ -507,7 +507,7 @@ ${systemPrompt}`
     },
     async execute(_toolCallId, rawParams) {
       try {
-        const taskId = readTaskId(rawParams, 'taskId', { required: true }))!;
+        const taskId = readTaskId(rawParams, 'taskId', { required: true })!;
         const task = getTask(taskId);
         return jsonResult({ task });
       } catch (e) {
