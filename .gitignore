@@ -3,3 +3,4 @@ dist
 *.local
 queue/
 .env
+package-lock.json
