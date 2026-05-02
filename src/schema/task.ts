@@ -168,7 +168,7 @@ export function createTask(input: CreateTaskInput): Task {
   } = input;
 
   return {
-    taskId: `task_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+    taskId: `task_${Math.floor(Date.now() / 1000)}`,
     description: String(description),
     goal: String(goal),
     context: [
