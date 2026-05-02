@@ -14,11 +14,32 @@ metadata:
 
 > Heartbeat handles task discovery and keep-alive. This skill covers the three outcomes.
 
+## Critical Scope Rule — description ≠ goal
+
+**The executor MUST only do what `description` says. `goal` is off-limits.**
+
+| Field | Who writes it | Executor should |
+|-------|---------------|----------------|
+| `goal` | Publisher | **Never touch**. It's the destination, not the current task. |
+| `description` | Publisher | **Only do this**. It's the current step boundary. |
+| `contextStep` (input) | Publisher input | The same as description. |
+| `contextStep` (output) | Executor writes | What you actually did this turn. |
+
+**Wrong mental model:** "goal says finish the whole task, I'll do it all"
+**Correct mental model:** "description says do ONE step. I do ONE step. Then relay."
+
+If a task has `goal = "选品10个商品"`, you might see:
+- `description = "搜索收纳箱，筛选 top 5"`
+- After relay: `description = "抓取 top 5 商品详情"`
+- After relay: `description = "生成 top 5 英文 Listing"`
+
+You only do the step described in `description`. You do NOT do the steps after it.
+
 ## Context Before Starting
 
 Read `context` from `mteam_get_task({ taskId })`:
-- **empty** → start from scratch
-- **non-empty** → resume from last `executor`'s `contextStep`. Do NOT redo completed steps.
+- **empty** → start from scratch (this is the first step)
+- **non-empty** → resume from last executor's `contextStep`. Do NOT redo completed steps.
 
 ---
 
