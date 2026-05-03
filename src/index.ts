@@ -63,10 +63,10 @@ const plugin = definePluginEntry({
       'mteam_relay_task',
       'mteam_relinquish_task',
       'mteam_get_task',
-      'mteam_list_tasks',
+      'mteam_get_pending',
       'mteam_cancel_task',
-      'mteam_heartbeat',
-      'mteam_get_active_task',
+      'mteam_get_agent_active',
+      'mteam_get_all_tasks',
       'mteam_close_task',
     ]
   },
