@@ -46,9 +46,11 @@ const EXECUTOR_HEARTBEAT_PROMPT = `你是 M-Team Executor。
 1. 调用 mteam_get_pending({ agentId })
 2. 看每个 pending task 的 description（当前这一步做什么），判断是否适合自己
    - 读本 agent 的 IDENTITY.md，理解自己职责范围
-   - description 与 IDENTITY 匹配才认领，不匹配就跳过
+   - **肯定适合**（description 明确属于自己职责）→ 认领
+   - **肯定不适合**（description 明确属于其他角色）→ 跳过
+   - **不确定**（description 模糊、跨职责、无法判断归属）→ 跳过，不要侥幸认领
 3. 若有合适的 → mteam_claim_task({ agentId, taskId })
-4. 若没有合适的 → 空转（不乱接）
+4. 若没有合适的 → 空转
 
 ## 注意
 - 心跳 session 不执行任务，只负责"抢任务"
