@@ -1,0 +1,20 @@
+{
+  "taskId": "task_1777815873423",
+  "description": "验证JSON干净输出",
+  "goal": "API测试3",
+  "context": [
+    {
+      "type": "input",
+      "data": {},
+      "createdAt": 1777815873423
+    }
+  ],
+  "priority": "normal",
+  "publisher": "cli",
+  "status": "pending",
+  "executor": null,
+  "lastExecutor": null,
+  "createdAt": 1777815873423,
+  "completedAt": null,
+  "lastHeartbeatAt": null
+}

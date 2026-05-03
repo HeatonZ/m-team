@@ -195,7 +195,7 @@ export function createTask(input: CreateTaskInput): Task {
 // 格式化（对外展示）
 // ============================================================
 
-const STATUS_LABELS: Record<TaskStatus, string> = {
+export const STATUS_LABELS: Record<TaskStatus, string> = {
   [TaskStatus.PENDING]: '⏳ 待认领',
   [TaskStatus.RUNNING]: '⚙️ 执行中',
   [TaskStatus.COMPLETED]: '✅ 完成（待验收）',
@@ -204,15 +204,15 @@ const STATUS_LABELS: Record<TaskStatus, string> = {
   [TaskStatus.CANCELLED]: '🚫 已取消'
 };
 
-export function getStatusLabel(status: TaskStatus): string {
-  return STATUS_LABELS[status] ?? status;
-}
-
-const PRIORITY_LABELS: Record<TaskPriority, string> = {
+export const PRIORITY_LABELS: Record<TaskPriority, string> = {
   [TaskPriority.HIGH]: '🔴 高',
   [TaskPriority.NORMAL]: '🟡 中',
   [TaskPriority.LOW]: '🟢 低'
 };
+
+export function getStatusLabel(status: TaskStatus): string {
+  return STATUS_LABELS[status] ?? status;
+}
 
 export function formatTaskForHuman(task: Task): string {
   const lines: string[] = [

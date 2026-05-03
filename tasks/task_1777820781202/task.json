@@ -1,0 +1,27 @@
+{
+  "taskId": "task_1777820781202",
+  "description": "交付验证",
+  "goal": "最终验证",
+  "context": [
+    {
+      "type": "input",
+      "data": {},
+      "createdAt": 1777820781202
+    },
+    {
+      "type": "step",
+      "executor": "test-agent",
+      "step": "done",
+      "output": {},
+      "completedAt": 1777820800307
+    }
+  ],
+  "priority": "high",
+  "publisher": "cli",
+  "status": "closed",
+  "executor": null,
+  "lastExecutor": null,
+  "createdAt": 1777820781202,
+  "completedAt": 1777820828986,
+  "lastHeartbeatAt": 1777820793363
+}

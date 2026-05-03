@@ -1,0 +1,30 @@
+{
+  "taskId": "task_1777816531982",
+  "description": "测试完整CRUD",
+  "goal": "API测试完整流程",
+  "context": [
+    {
+      "type": "input",
+      "data": {},
+      "createdAt": 1777816531982
+    },
+    {
+      "type": "step",
+      "executor": "api-test-agent",
+      "step": "通过API完成任务",
+      "output": {
+        "summary": "测试摘要",
+        "files": []
+      },
+      "completedAt": 1777816605802
+    }
+  ],
+  "priority": "normal",
+  "publisher": "cli",
+  "status": "closed",
+  "executor": null,
+  "lastExecutor": null,
+  "createdAt": 1777816531982,
+  "completedAt": 1777816607087,
+  "lastHeartbeatAt": 1777816604735
+}

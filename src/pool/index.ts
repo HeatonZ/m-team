@@ -61,6 +61,31 @@ export function getAllTasks(): Task[] {
   return getAllTaskRows();
 }
 
+export function getRunningTasks(): Task[] {
+  init();
+  return getTaskRowsByStatus(TaskStatus.RUNNING);
+}
+
+export function getCompletedTasks(): Task[] {
+  init();
+  return getTaskRowsByStatus(TaskStatus.COMPLETED);
+}
+
+export function getFailedTasks(): Task[] {
+  init();
+  return getTaskRowsByStatus(TaskStatus.FAILED);
+}
+
+export function getCancelledTasks(): Task[] {
+  init();
+  return getTaskRowsByStatus(TaskStatus.CANCELLED);
+}
+
+export function getClosedTasks(): Task[] {
+  init();
+  return getTaskRowsByStatus(TaskStatus.CLOSED);
+}
+
 export function getTasksByExecutor(agentId: string): Task[] {
   init();
   return getAllTaskRows().filter(t => {
