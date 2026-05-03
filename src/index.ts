@@ -54,6 +54,22 @@ const plugin = definePluginEntry({
   id: 'm-team',
   name: 'M-Team 去中心化任务池',
   description: '去中心化任务池协作插件 — 多Agent任务分发与执行',
+  contracts: {
+    tools: [
+      'mteam_publish_task',
+      'mteam_claim_task',
+      'mteam_update_task',
+      'mteam_complete_task',
+      'mteam_relay_task',
+      'mteam_relinquish_task',
+      'mteam_get_task',
+      'mteam_list_tasks',
+      'mteam_cancel_task',
+      'mteam_heartbeat',
+      'mteam_get_active_task',
+      'mteam_close_task',
+    ]
+  },
 
   register(api: OpenClawPluginApi) {
     const config = (api.pluginConfig ?? {}) as PluginConfig;

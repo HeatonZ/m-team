@@ -85,8 +85,11 @@ export interface MTeamPluginConfig {
 }
 
 export function registerTools(api: OpenClawPluginApi, config: MTeamPluginConfig): void {
+  try {
+  (api.logger as any)?.info('[m-team] registerTools start');
 
   // === mteam_publish_task ===
+  (api.logger as any)?.info("[m-team] about to register mteam_publish_task");
   api.registerTool({
     name: 'mteam_publish_task',
     description: '发布任务到 M-Team 任务池',
@@ -127,6 +130,7 @@ export function registerTools(api: OpenClawPluginApi, config: MTeamPluginConfig)
   } as unknown as AnyAgentTool);
 
   // === mteam_claim_task ===
+  (api.logger as any)?.info("[m-team] registering mteam_claim_task");
   api.registerTool({
     name: 'mteam_claim_task',
     description: '认领一个待处理任务（Plugin内部直接创建executor session）',
@@ -222,6 +226,7 @@ ${systemPrompt}`,
   } as unknown as AnyAgentTool);
 
   // === mteam_update_task ===
+  (api.logger as any)?.info("[m-team] registering mteam_update_task");
   api.registerTool({
     name: 'mteam_update_task',
     description: '更新任务状态或追加步骤到 context',
@@ -273,6 +278,7 @@ ${systemPrompt}`,
   } as unknown as AnyAgentTool);
 
   // === mteam_cancel_task ===
+  (api.logger as any)?.info("[m-team] registering mteam_cancel_task");
   api.registerTool({
     name: 'mteam_cancel_task',
     description: 'Publisher 取消任务（不可再 relay）',
@@ -310,6 +316,7 @@ ${systemPrompt}`,
   } as unknown as AnyAgentTool);
 
   // === mteam_complete_task ===
+  (api.logger as any)?.info("[m-team] registering mteam_complete_task");
   api.registerTool({
     name: 'mteam_complete_task',
     description: 'Executor 完成任务（带通知）',
@@ -356,6 +363,7 @@ ${systemPrompt}`,
   } as unknown as AnyAgentTool);
 
   // === mteam_relay_task ===
+  (api.logger as any)?.info("[m-team] registering mteam_relay_task");
   api.registerTool({
     name: 'mteam_relay_task',
     description: 'Executor 完成当前步骤并交接给下一个 executor（追加 context 记录这一步，然后放回 pending 池子）',
@@ -406,6 +414,7 @@ ${systemPrompt}`,
   } as unknown as AnyAgentTool);
 
   // === mteam_relinquish_task ===
+  (api.logger as any)?.info("[m-team] registering mteam_relinquish_task");
   api.registerTool({
     name: 'mteam_relinquish_task',
     description: 'Executor 主动放弃当前任务（放回 pending）',
@@ -487,6 +496,7 @@ ${systemPrompt}`,
   } as unknown as AnyAgentTool);
 
   // === mteam_get_task ===
+  (api.logger as any)?.info("[m-team] registering mteam_get_task");
   api.registerTool({
     name: 'mteam_get_task',
     description: '获取任务详情',
@@ -524,6 +534,7 @@ ${systemPrompt}`,
   } as unknown as AnyAgentTool);
 
   // === mteam_close_task ===
+  (api.logger as any)?.info("[m-team] registering mteam_close_task");
   api.registerTool({
     name: 'mteam_close_task',
     description: 'Publisher 验收通过，关闭任务（终态）',
@@ -557,4 +568,7 @@ ${systemPrompt}`,
       }
     },
   } as unknown as AnyAgentTool);
+  } catch (err) {
+    (api.logger as any)?.error('[m-team] registerTools failed: ' + String(err));
+  }
 }
