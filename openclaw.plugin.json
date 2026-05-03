@@ -84,5 +84,21 @@
   "skills": [
     "./skills/m-team-publisher",
     "./skills/m-team-executor"
-  ]
+  ],
+  "contracts": {
+    "tools": [
+      "mteam_publish_task",
+      "mteam_claim_task",
+      "mteam_update_task",
+      "mteam_complete_task",
+      "mteam_relay_task",
+      "mteam_relinquish_task",
+      "mteam_get_task",
+      "mteam_get_pending",
+      "mteam_cancel_task",
+      "mteam_get_agent_active",
+      "mteam_get_all_tasks",
+      "mteam_close_task"
+    ]
+  }
 }
