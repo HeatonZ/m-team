@@ -4,3 +4,7 @@ dist
 queue/
 .env
 package-lock.json
+
+# m-team 运行时生成文件
+executors/
+skills/
