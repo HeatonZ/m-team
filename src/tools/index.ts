@@ -191,7 +191,7 @@ export function registerTools(api: OpenClawPluginApi, config: MTeamPluginConfig)
 【必读】角色规范文件：
 - SOUL.md（判断原则）：${soulPath}
 - AGENTS.md（运行规范）：${agentsPath}
-- mteam-executor skill（执行方法论）：~/.hermes/skills/ai-frameworks/mteam-executor/SKILL.md
+- mteam-executor skill（执行方法论）：{workspaceRoot}/skills/ai-frameworks/mteam-executor/SKILL.md
 
 【重要】任务认领状态：
 任务已被心跳 session（${agentId}）认领，处于 RUNNING 状态。
