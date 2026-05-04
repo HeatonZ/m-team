@@ -7,13 +7,16 @@
  *   业务逻辑（pool / notifications）                 → ../pool, ../notifications
  */
 
-import type { AnyAgentTool, OpenClawPluginApi } from 'openclaw/plugin-sdk/core';
+import type {
+  AnyAgentTool,
+  OpenClawPluginApi,
+  PluginLogger,
+} from 'openclaw/plugin-sdk/core';
 import {
   jsonResult,
   readStringParam as readStr,
   readNumberParam as readNum,
 } from 'openclaw/plugin-sdk/core';
-import type { PluginLogger } from 'openclaw/plugin-sdk/core';
 import { ToolInputError } from './helpers.js';
 
 import {
@@ -104,7 +107,7 @@ export function registerTools(api: OpenClawPluginApi, config: MTeamPluginConfig)
       },
       required: ['goal', 'description'],
     } as AnyAgentTool['parameters'],
-    async execute(_toolCallId: string, rawParams: Record<string, unknown>) {
+    async execute(_toolCallId: string, rawParams: Record<string, unknown>): Promise<Awaited<ReturnType<typeof jsonResult>>> {
       try {
         const description = readStr(rawParams, 'description', { required: true });
         const goal = readStr(rawParams, 'goal', { required: true });
@@ -124,7 +127,7 @@ export function registerTools(api: OpenClawPluginApi, config: MTeamPluginConfig)
 
         return jsonResult({ taskId });
       } catch (e) {
-        return { ok: false, error: (e as Error)?.message ?? String(e) };
+        return { ok: false, error: (e as unknown as Error)?.message ?? String(e) } as Awaited<ReturnType<typeof jsonResult>>;
       }
     },
   }as AnyAgentTool);
@@ -142,13 +145,13 @@ export function registerTools(api: OpenClawPluginApi, config: MTeamPluginConfig)
       },
       required: ['taskId', 'agentId'],
     } as AnyAgentTool['parameters'],
-    async execute(_toolCallId: string, rawParams: Record<string, unknown>) {
+    async execute(_toolCallId: string, rawParams: Record<string, unknown>): Promise<Awaited<ReturnType<typeof jsonResult>>> {
       try {
         const taskId = readTaskId(rawParams, 'taskId', { required: true })!;
         const agentId = readStr(rawParams, 'agentId', { required: true })!;
 
         const result = claimTask(taskId, agentId);
-        if (!result.success) return { ok: false, data: result };
+        if (!result.success) return { ok: false, data: result } as Awaited<ReturnType<typeof jsonResult>>;
 
         const task = getTask(taskId) ?? result.task;
 
@@ -211,7 +214,7 @@ export function registerTools(api: OpenClawPluginApi, config: MTeamPluginConfig)
 [系统信息] executorAgentId=${agentId}
 [任务目录] ${taskWorkdir}
 ${systemPrompt}`,
-        }).catch((_runErr: Error) => {
+        }).catch((_runErr: unknown) => {
           (api.logger as PluginLogger)?.error('[m-team] subagent.run 异步启动失败，回滚任务状态');
           relinquishTask(taskId, agentId);
           return { runId: null };
@@ -220,8 +223,8 @@ ${systemPrompt}`,
         const subagentResult = await subagentRun;
 
         return jsonResult({ ...result, runId: subagentResult?.runId, sessionKey });
-      } catch (e) {
-        return { ok: false, error: (e as Error)?.message ?? String(e) };
+      } catch (e: unknown) {
+        return { ok: false, error: (e as Error)?.message ?? String(e) } as Awaited<ReturnType<typeof jsonResult>>;
       }
     },
   }as AnyAgentTool);
@@ -251,7 +254,7 @@ ${systemPrompt}`,
       },
       required: ['taskId'],
     } as AnyAgentTool['parameters'],
-    async execute(_toolCallId: string, rawParams: Record<string, unknown>) {
+    async execute(_toolCallId: string, rawParams: Record<string, unknown>): Promise<Awaited<ReturnType<typeof jsonResult>>> {
       try {
         const taskId = readStr(rawParams, 'taskId', { required: true })!;
         const agentId = readStr(rawParams, 'agentId');
@@ -272,8 +275,8 @@ ${systemPrompt}`,
 
         const task = updateTask(taskId, status ?? null, contextEntry, description ?? null, lastHeartbeatAt ?? null, agentId ?? null);
         return jsonResult({ task });
-      } catch (e) {
-        return { ok: false, error: (e as Error)?.message ?? String(e) };
+      } catch (e: unknown) {
+        return { ok: false, error: (e as Error)?.message ?? String(e) } as Awaited<ReturnType<typeof jsonResult>>;
       }
     },
   }as AnyAgentTool);
@@ -292,7 +295,7 @@ ${systemPrompt}`,
       },
       required: ['taskId', 'publisher'],
     } as AnyAgentTool['parameters'],
-    async execute(_toolCallId: string, rawParams: Record<string, unknown>) {
+    async execute(_toolCallId: string, rawParams: Record<string, unknown>): Promise<Awaited<ReturnType<typeof jsonResult>>> {
       try {
         const taskId = readTaskId(rawParams, 'taskId', { required: true })!;
         const publisher = readStr(rawParams, 'publisher', { required: true })!;
@@ -310,8 +313,8 @@ ${systemPrompt}`,
         }
 
         return jsonResult({ success: result.success, task: result.task });
-      } catch (e) {
-        return { ok: false, error: (e as Error)?.message ?? String(e) };
+      } catch (e: unknown) {
+        return { ok: false, error: (e as Error)?.message ?? String(e) } as Awaited<ReturnType<typeof jsonResult>>;
       }
     },
   }as AnyAgentTool);
@@ -337,7 +340,7 @@ ${systemPrompt}`,
       },
       required: ['taskId', 'contextStep'],
     } as AnyAgentTool['parameters'],
-    async execute(_toolCallId: string, rawParams: Record<string, unknown>) {
+    async execute(_toolCallId: string, rawParams: Record<string, unknown>): Promise<Awaited<ReturnType<typeof jsonResult>>> {
       try {
         const taskId = readTaskId(rawParams, 'taskId', { required: true })!;
         const contextStep = readStr(rawParams, 'contextStep', { required: true })!;
@@ -357,8 +360,8 @@ ${systemPrompt}`,
         }
 
         return jsonResult({ success: result.success, task: result.task });
-      } catch (e) {
-        return { ok: false, error: (e as Error)?.message ?? String(e) };
+      } catch (e: unknown) {
+        return { ok: false, error: (e as Error)?.message ?? String(e) } as Awaited<ReturnType<typeof jsonResult>>;
       }
     },
   }as AnyAgentTool);
@@ -386,7 +389,7 @@ ${systemPrompt}`,
       },
       required: ['taskId', 'agentId', 'contextStep'],
     } as AnyAgentTool['parameters'],
-    async execute(_toolCallId: string, rawParams: Record<string, unknown>) {
+    async execute(_toolCallId: string, rawParams: Record<string, unknown>): Promise<Awaited<ReturnType<typeof jsonResult>>> {
       try {
         const taskId = readTaskId(rawParams, 'taskId', { required: true })!;
         const agentId = readStr(rawParams, 'agentId', { required: true })!;
@@ -408,8 +411,8 @@ ${systemPrompt}`,
         }
 
         return jsonResult({ success: result.success, task: result.task });
-      } catch (e) {
-        return { ok: false, error: (e as Error)?.message ?? String(e) };
+      } catch (e: unknown) {
+        return { ok: false, error: (e as Error)?.message ?? String(e) } as Awaited<ReturnType<typeof jsonResult>>;
       }
     },
   } as AnyAgentTool);
@@ -428,7 +431,7 @@ ${systemPrompt}`,
       },
       required: ['taskId', 'executorId'],
     } as AnyAgentTool['parameters'],
-    async execute(_toolCallId: string, rawParams: Record<string, unknown>) {
+    async execute(_toolCallId: string, rawParams: Record<string, unknown>): Promise<Awaited<ReturnType<typeof jsonResult>>> {
       try {
         const taskId = readTaskId(rawParams, 'taskId', { required: true })!;
         const executorId = readStr(rawParams, 'executorId', { required: true })!;
@@ -446,8 +449,8 @@ ${systemPrompt}`,
         }
 
         return jsonResult({ success: result.success, reason: result.reason, task: result.task });
-      } catch (e) {
-        return { ok: false, error: (e as Error)?.message ?? String(e) };
+      } catch (e: unknown) {
+        return { ok: false, error: (e as Error)?.message ?? String(e) } as Awaited<ReturnType<typeof jsonResult>>;
       }
     },
   }as AnyAgentTool);
@@ -463,13 +466,13 @@ ${systemPrompt}`,
       },
       required: ['agentId'],
     } as AnyAgentTool['parameters'],
-    async execute(_toolCallId: string, rawParams: Record<string, unknown>) {
+    async execute(_toolCallId: string, rawParams: Record<string, unknown>): Promise<Awaited<ReturnType<typeof jsonResult>>> {
       try {
         const agentId = readStr(rawParams, 'agentId', { required: true })!;
         const pending = getPendingTasks(agentId);
         return jsonResult({ pending });
-      } catch (e) {
-        return { ok: false, error: (e as Error)?.message ?? String(e) };
+      } catch (e: unknown) {
+        return { ok: false, error: (e as Error)?.message ?? String(e) } as Awaited<ReturnType<typeof jsonResult>>;
       }
     },
   }as AnyAgentTool);
@@ -485,13 +488,13 @@ ${systemPrompt}`,
       },
       required: ['agentId'],
     } as AnyAgentTool['parameters'],
-    async execute(_toolCallId: string, rawParams: Record<string, unknown>) {
+    async execute(_toolCallId: string, rawParams: Record<string, unknown>): Promise<Awaited<ReturnType<typeof jsonResult>>> {
       try {
         const agentId = readStr(rawParams, 'agentId', { required: true })!;
         const activeTask = getAgentActiveTask(agentId);
         return jsonResult({ activeTask });
-      } catch (e) {
-        return { ok: false, error: (e as Error)?.message ?? String(e) };
+      } catch (e: unknown) {
+        return { ok: false, error: (e as Error)?.message ?? String(e) } as Awaited<ReturnType<typeof jsonResult>>;
       }
     },
   }as AnyAgentTool);
@@ -508,13 +511,13 @@ ${systemPrompt}`,
       },
       required: ['taskId'],
     } as AnyAgentTool['parameters'],
-    async execute(_toolCallId: string, rawParams: Record<string, unknown>) {
+    async execute(_toolCallId: string, rawParams: Record<string, unknown>): Promise<Awaited<ReturnType<typeof jsonResult>>> {
       try {
         const taskId = readStr(rawParams, 'taskId', { required: true })!;
         const task = getTask(taskId);
         return jsonResult({ task });
-      } catch (e) {
-        return { ok: false, error: (e as Error)?.message ?? String(e) };
+      } catch (e: unknown) {
+        return { ok: false, error: (e as Error)?.message ?? String(e) } as Awaited<ReturnType<typeof jsonResult>>;
       }
     },
   }as AnyAgentTool);
@@ -524,12 +527,12 @@ ${systemPrompt}`,
     name: 'mteam_get_all_tasks',
     description: '获取所有任务',
     parameters: { type: 'object', properties: {} } as AnyAgentTool['parameters'],
-    async execute(_toolCallId: string) {
+    async execute(_toolCallId: string): Promise<Awaited<ReturnType<typeof jsonResult>>> {
       try {
         const tasks = getAllTasks();
         return jsonResult({ tasks });
-      } catch (e) {
-        return { ok: false, error: (e as Error)?.message ?? String(e) };
+      } catch (e: unknown) {
+        return { ok: false, error: (e as Error)?.message ?? String(e) } as Awaited<ReturnType<typeof jsonResult>>;
       }
     },
   }as AnyAgentTool);
@@ -547,7 +550,7 @@ ${systemPrompt}`,
       },
       required: ['taskId', 'publisher'],
     } as AnyAgentTool['parameters'],
-    async execute(_toolCallId: string, rawParams: Record<string, unknown>) {
+    async execute(_toolCallId: string, rawParams: Record<string, unknown>): Promise<Awaited<ReturnType<typeof jsonResult>>> {
       try {
         const taskId = readTaskId(rawParams, 'taskId', { required: true })!;
         const publisher = readStr(rawParams, 'publisher', { required: true })!;
@@ -564,8 +567,8 @@ ${systemPrompt}`,
         }
 
         return jsonResult({ success: result.success, task: result.task });
-      } catch (e) {
-        return { ok: false, error: (e as Error)?.message ?? String(e) };
+      } catch (e: unknown) {
+        return { ok: false, error: (e as Error)?.message ?? String(e) } as Awaited<ReturnType<typeof jsonResult>>;
       }
     },
   }as AnyAgentTool);

@@ -4,28 +4,16 @@
  * executor session 正常/异常结束时自动触发，标记任务完成/失败并发送通知。
  */
 
-import type { OpenClawPluginApi } from 'openclaw/plugin-sdk/core';
+import type {
+  OpenClawPluginApi,
+  PluginHookSubagentEndedEvent,
+} from 'openclaw/plugin-sdk/core';
 import { completeTask, failTask } from '../pool/operations.js';
 import { getNotifications, formatTaskNotifications, sendNotifications } from '../notifications.js';
 
-// Re-export for backward compatibility with index.ts casts
-export {};
-
-/** SDK 类型：OpenClawPluginApi (registerTools 参数) */
-
-// Local event type — mirrors SDK PluginHookSubagentEndedEvent shape (not in SDK public export)
-interface SubagentEndedEvent {
-  targetSessionKey: string;
-  outcome: string;
-  reason?: string;
-  error?: string;
-}
-
-// ============================================================
-
 export function registerSubagentEndedHook(api: OpenClawPluginApi): void {
-  api.on('subagent_ended', async (event: unknown) => {
-    const { targetSessionKey, outcome, reason, error } = event as SubagentEndedEvent;
+  api.on('subagent_ended', async (event: PluginHookSubagentEndedEvent) => {
+    const { targetSessionKey, outcome, reason, error } = event;
 
     // 只处理 agent:<agentId>:m-team:<taskId> 格式的 session
     if (!targetSessionKey?.startsWith('agent:')) return;

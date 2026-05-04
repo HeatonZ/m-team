@@ -40,8 +40,12 @@ import type { NotificationConfig } from './notifications.js';
 // ============================================================
 
 import { startDashboard, registerDashboardCleanup, stopDashboard } from './dashboard.js';
-import { definePluginEntry } from 'openclaw/plugin-sdk/plugin-entry';
-import type { OpenClawPluginApi } from 'openclaw/plugin-sdk/core';
+import { definePluginEntry, emptyPluginConfigSchema } from 'openclaw/plugin-sdk/plugin-entry';
+import type {
+  OpenClawPluginApi,
+  OpenClawPluginConfigSchema,
+} from 'openclaw/plugin-sdk/core';
+import type { NotificationConfig } from './notifications.js';
 
 interface PluginConfig {
   workspaceRoot?: string;
@@ -54,6 +58,7 @@ const plugin = definePluginEntry({
   id: 'm-team',
   name: 'M-Team 去中心化任务池',
   description: '去中心化任务池协作插件 — 多Agent任务分发与执行',
+  configSchema: emptyPluginConfigSchema(),
   contracts: {
     tools: [
       'mteam_publish_task',

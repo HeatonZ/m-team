@@ -6,14 +6,11 @@
  * - publisher 心跳：验收 COMPLETED 任务
  */
 
-import type { OpenClawPluginApi } from 'openclaw/plugin-sdk/core';
-
-// M-Team local event type
-interface HeartbeatPromptContributionEvent {
-  sessionKey?: string;
-  agentId?: string;
-  heartbeatName?: string;
-}
+import type {
+  OpenClawPluginApi,
+  PluginHeartbeatPromptContributionEvent,
+  PluginHeartbeatPromptContributionResult,
+} from 'openclaw/plugin-sdk/core';
 
 interface RegisterOptions {
   executors: string[];
@@ -105,13 +102,13 @@ export function registerHeartbeatPromptContributionHook(
   const publishers = new Set(options.publishers ?? []);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  (api.on as (hook: string, handler: unknown) => void)(
+  (api.on as (hook: string, handler: (...args: unknown[]) => unknown) => void)(
     'heartbeat_prompt_contribution',
-    async (
-      event: HeartbeatPromptContributionEvent,
+    (
+      event: PluginHeartbeatPromptContributionEvent,
       _ctx: unknown,
-    ): Promise<unknown> => {
-      const { agentId } = event as HeartbeatPromptContributionEvent;
+    ): PluginHeartbeatPromptContributionResult | undefined => {
+      const { agentId } = event;
 
       if (!agentId) return undefined;
 

@@ -54,7 +54,7 @@ export function readTaskId(
 
   // 纯数字 → 无效
   if (/^\d+$/.test(raw)) {
-    throw new Error(
+    throw new ToolInputError(
       `taskId 不能只写纯数字，需要完整格式 task_1234567890，而非 ${raw}。` +
       `请从任务信息中复制完整的 taskId（含 task_ 前缀）。`
     );
@@ -62,7 +62,7 @@ export function readTaskId(
 
   // 必须有 task_ 前缀
   if (!raw.startsWith('task_')) {
-    throw new Error(
+    throw new ToolInputError(
       `taskId "${raw}" 格式无效，必须以 task_ 开头（如 task_1234567890）。` +
       `请从任务信息中复制完整的 taskId。`
     );
