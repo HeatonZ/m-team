@@ -202,12 +202,14 @@ export function registerTools(api: OpenClawPluginApi, config: MTeamPluginConfig)
 |- 在未调用任何工具的情况下自行结束会话，任务将永久卡在 running 状态
 |- 在 tool call 的 agentId 参数中传入 subagent 自己的 session agentId，必须传入 ${agentId}
 |`;
+        const taskWorkdir = `${config.workspaceRoot ?? '/mnt/d/code/m-team'}/tasks/${taskId}`;
 
         const subagentRun = api.runtime?.subagent?.run({
           sessionKey,
           message: `[M-Team Task #${taskId}] ${task?.description ?? ''}
 
 [系统信息] executorAgentId=${agentId}
+[任务目录] ${taskWorkdir}
 ${systemPrompt}`,
         }).catch((_runErr: Error) => {
           (api.logger as PluginLogger)?.error('[m-team] subagent.run 异步启动失败，回滚任务状态');
