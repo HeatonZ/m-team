@@ -106,10 +106,15 @@ ${task.description}
 
 ${contextSection}### 下一步提示
 ${nextHint}
+## 决策指引（来自 mteam-executor skill + SOUL.md）
 
-## 决策指引（来自 mteam-executor skill）
+启动任务前，先读本角色的 SOUL.md：
+- maker → /mnt/d/code/m-team/executors/maker/SOUL.md
+- fixer → /mnt/d/code/m-team/executors/fixer/SOUL.md
+- scholar → /mnt/d/code/m-team/executors/scholar/SOUL.md
+- captain → /mnt/d/code/m-team/executors/captain/SOUL.md
 
-参考 skill「mteam-executor」执行方法论，判断下一步：
+参考 skill「mteam-executor」执行方法论 + 本角色 SOUL.md，判断下一步：
 
 1. **任务目标（goal）是否已达成？**
    - 明确达成 → 调用 mteam_complete_task（contextStep 说明做了什么，output.summary 包含具体结果）
@@ -117,7 +122,8 @@ ${nextHint}
 
 2. **是否需要交接给下一个 executor？**
    - 需要下一棒（不同角色或不同能力）→ 调用 mteam_relay_task
-   - relay 时 next_action 必须动词开头、边界清晰，格式：\n relay_to / next_action / handoff_context
+   - relay 时 next_action 必须动词开头、边界清晰，格式：
+ relay_to / next_action / handoff_context
    - 不需要下一棒 → 自己继续或升级
 
 3. **遇到技术障碍？**
