@@ -95,7 +95,6 @@ const plugin = definePluginEntry({
     registerSubagentEndedHook(api);
     registerHeartbeatPromptContributionHook(api, {
       executors: config.executors ?? ['maker', 'fixer', 'scholar', 'captain'],
-      publishers: config.publishers ?? [],
     });
     registerSessionGuardHook(api);
 
