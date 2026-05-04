@@ -165,6 +165,12 @@ export function registerTools(api: OpenClawPluginApi, config: MTeamPluginConfig)
         }
 
         const sessionKey = `agent:${agentId}:m-team:${taskId}`;
+
+        // 根据 agentId 推断角色，用于加载对应的 SOUL.md 和 AGENTS.md
+        const role = agentId.replace(/[0-9]/g, '').replace(/:$/, '') || agentId;
+        const soulPath = `/mnt/d/code/m-team/executors/${role}/SOUL.md`;
+        const agentsPath = `/mnt/d/code/m-team/executors/${role}/AGENTS.md`;
+
         const systemPrompt = `
 【任务规范 — M-Team 执行者】
 你正在执行一个多步骤任务。在调用任何工具之前，你必须先用结构化推理分析当前任务：
@@ -182,6 +188,11 @@ export function registerTools(api: OpenClawPluginApi, config: MTeamPluginConfig)
 - 核心目标: ${task?.goal ?? ''}
 - 执行者 agentId: ${agentId}
 
+【必读】角色规范文件：
+- SOUL.md（判断原则）：${soulPath}
+- AGENTS.md（运行规范）：${agentsPath}
+- mteam-executor skill（执行方法论）：~/.hermes/skills/ai-frameworks/mteam-executor/SKILL.md
+
 【重要】任务认领状态：
 任务已被心跳 session（${agentId}）认领，处于 RUNNING 状态。
 **禁止调用 mteam_claim_task**——任务不在 PENDING 状态，claim 会失败。
@@ -189,21 +200,21 @@ export function registerTools(api: OpenClawPluginApi, config: MTeamPluginConfig)
 
 【工具使用规范】
 
-|1. 完成任务（最终完成）→ 调用 mteam_complete_task
-|   - 当你认为任务目标已全部达成，不需要再交接给其他 agent 时使用
-|   - contextStep 描述你具体做了什么，contextOutput.summary 包含可验证的结果摘要
+| 1. 完成任务（最终完成）→ 调用 mteam_complete_task
+|    - 当你认为任务目标已全部达成，不需要再交接给其他 agent 时使用
+|    - contextStep 描述你具体做了什么，contextOutput.summary 包含可验证的结果摘要
 
-|2. 完成任务并交接（交给下一个 agent 继续）→ 调用 mteam_relay_task
-|   - 当任务未完成，还有后续步骤需要其他 agent 继续执行时使用
-|   - relay 后任务回到待认领状态，下一个 agent 会接手
+| 2. 完成任务并交接（交给下一个 agent 继续）→ 调用 mteam_relay_task
+|    - 当任务未完成，还有后续步骤需要其他 agent 继续执行时使用
+|    - relay 后任务回到待认领状态，下一个 agent 会接手
 
-|3. 主动放弃（放回 pending 不追加 context）→ 调用 mteam_relinquish_task
-|   - 当你无法继续执行，需要暂时放弃时使用
+| 3. 主动放弃（放回 pending 不追加 context）→ 调用 mteam_relinquish_task
+|    - 当你无法继续执行，需要暂时放弃时使用
 
-|【禁止】
-|- 调用 mteam_claim_task——任务已被认领，claim 会返回 NOT_PENDING
-|- 在未调用任何工具的情况下自行结束会话，任务将永久卡在 running 状态
-|- 在 tool call 的 agentId 参数中传入 subagent 自己的 session agentId，必须传入 ${agentId}
+| 【禁止】
+| - 调用 mteam_claim_task——任务已被认领，claim 会返回 NOT_PENDING
+| - 在未调用任何工具的情况下自行结束会话，任务将永久卡在 running 状态
+| - 在 tool call 的 agentId 参数中传入 subagent 自己的 session agentId，必须传入 ${agentId}
 |`;
         const taskWorkdir = `${config.workspaceRoot ?? '/mnt/d/code/m-team'}/tasks/${taskId}`;
 
