@@ -4,5 +4,3 @@ dist
 queue/
 .env
 package-lock.json
-
-executors/
