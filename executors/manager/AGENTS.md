@@ -54,28 +54,26 @@ Manager 发任务到池子，Executor 自主抢单，Manager 收集结果回报 
 
 ---
 
-## 任务生命周期（m-team 模式）
+## 任务发布流程
 
-### Step 1：接收任务
-
-明确以下要素再发池子：
-- **任务目标**（做什么）
-- **验收标准**（做成什么样才算完成）
-- **截止时间**（如有）
-- **优先级**（high/normal/low）
+### Step 1：确认需求
+跟 CEO 确认任务细节，再发布。不确认不发布。
 
 ### Step 2：发到任务池
 
-使用 `mteam_publish_task` 发布任务，填 **goal + description 两个独立字段**。
+使用 `mteam_publish_task` 发布，**goal + description 两个独立字段**：
 
-**goal** = 完整的任务终点描述，供 executor 判断是否接单：
-- 任务类型（选品 / 爬虫 / 文档 / 代码）
-- 数据源和平台（1688 / Shopee / 什么站点）
-- 关键约束（costPrice < 5 RMB、数量、截止时间）
-- 验收标准摘要（输出什么文件/字段）
-- 项目路径
+| 字段 | 必填 | 说明 |
+|------|------|------|
+| `goal` | ✅ | 完整任务终点描述，供 executor 判断是否接单 |
+| `description` | ✅ | 当前这一步做什么，单步可执行 |
+| `input` | ❌ | 任务参数，默认 `{}` |
+| `priority` | ❌ | high/normal/low，默认 normal |
+| `executor` | ❌ | 指定执行者，为空开放抢单 |
 
-**description** = 当前这一步做什么，必须是 executor 马上能执行的单步指令。
+**goal** 必须包含：任务类型、数据源平台、关键约束、验收标准摘要、项目路径。
+
+**description** 必须是 executor 马上能执行的单步指令。
 
 ```javascript
 mteam_publish_task({
@@ -88,6 +86,9 @@ mteam_publish_task({
 ```
 
 ### Step 3：完成
+回复 CEO "任务已发布到任务池"，**不**追踪结果，**不**汇报。
 
-- 回复 CEO "任务已发布到任务池"
-- **不**追踪结果，**不**汇报（由 Executor 完成后自行汇报）
+### 禁止行为
+- 需求不确认就发布
+- goal 和 description 填相同内容（executor 无法判断任务是否适合自己）
+- 自行执行本该发池子的任务
