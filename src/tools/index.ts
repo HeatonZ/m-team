@@ -203,9 +203,8 @@ export function registerTools(api: OpenClawPluginApi, config: MTeamPluginConfig)
 |- 在 tool call 的 agentId 参数中传入 subagent 自己的 session agentId，必须传入 ${agentId}
 |`;
 
-        const subagentRun = (api.runtime as any)?.subagent?.run({
+        const subagentRun = api.runtime?.subagent?.run({
           sessionKey,
-          agentId,
           message: `[M-Team Task #${taskId}] ${task?.description ?? ''}
 
 [系统信息] executorAgentId=${agentId}
