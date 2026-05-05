@@ -199,22 +199,28 @@ export function registerTools(api: OpenClawPluginApi, config: MTeamPluginConfig)
 
 **判断顺序：做完这步后，先判断是否 relay，再判断是否 complete。不要倒过来。**
 
-| 1. 交接任务（交给下一个 agent 继续）→ 调用 mteam_relay_task
-|    - 当你完成当前这一步后，任务还有后续步骤需要其他人接力时使用
-|    - 这是多步骤任务的正常出口，**不是失败**
-|
-| 2. 完成任务（最终完成）→ 调用 mteam_complete_task
-|    - **只有当任务的完整 goal 已全部达成时**才使用
-|    - 不确定 goal 是否全部达成 → 先 relay，不要直接 complete
-|
-| 3. 主动放弃（放回 pending 不追加 context）→ 调用 mteam_relinquish_task
-|    - 当你无法继续执行，需要暂时放弃时使用
+1. 交接任务（交给下一个 agent 继续）→ 调用 mteam_relay_task
+   - 当你完成当前这一步后，任务还有后续步骤需要其他人接力时使用
+   - 这是多步骤任务的正常出口，**不是失败**
 
-| 【禁止】
-| - 调用 mteam_claim_task——任务已被认领，claim 会返回 NOT_PENDING
-| - 在未调用任何工具的情况下自行结束会话，任务将永久卡在 running 状态
-| - 在 tool call 的 agentId 参数中传入 subagent 自己的 session agentId，必须传入 ${agentId}
-|`;
+2. 完成任务（最终完成）→ 调用 mteam_complete_task
+   - **只有当任务的完整 goal 已全部达成时**才使用
+   - 不确定 goal 是否全部达成 → 先 relay，不要直接 complete
+   - **在判断 goal 是否达成之前，禁止调用 complete_task**。先对照 goal 逐条检查：
+
+     a. 列出 goal 中要求的**每一条标准**
+     b. 对照 context 中已完成的步骤，逐一确认：每条标准是否都有对应的执行记录
+     c. 若有任何一条未满足 → relay，把下一条要做什么填入 description
+     d. 若全部满足 → complete_task
+
+3. 主动放弃（放回 pending 不追加 context）→ 调用 mteam_relinquish_task
+   - 当你无法继续执行，需要暂时放弃时使用
+
+【禁止】
+- 调用 mteam_claim_task——任务已被认领，claim 会返回 NOT_PENDING
+- 在未调用任何工具的情况下自行结束会话，任务将永久卡在 running 状态
+- 在 tool call 的 agentId 参数中传入 subagent 自己的 session agentId，必须传入 ${agentId}
+`;
 
         const subagentRun = api.runtime?.subagent?.run({
           sessionKey,
