@@ -343,7 +343,8 @@ export function relayTask(
   taskId: string,
   executorId: string,
   contextEntry: ContextEntryInput,
-  heartbeat?: number
+  heartbeat?: number,
+  description?: string
 ): RelayResult {
   init();
   const db = getDb();
@@ -368,7 +369,8 @@ export function relayTask(
       status: TaskStatus.PENDING,
       executor: null,
       lastExecutor: executorId,
-      context: JSON.stringify(newContext)
+      context: JSON.stringify(newContext),
+      ...(description !== undefined && { description })
     };
     if (heartbeat !== undefined) patch.lastHeartbeatAt = heartbeat;
 

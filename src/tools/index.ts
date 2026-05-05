@@ -393,8 +393,9 @@ ${systemPrompt}`,
           },
         },
         lastHeartbeatAt: { type: 'number', description: '心跳时间戳（毫秒），relay 时携带以便追踪' },
+        description: { type: 'string', description: 'relay 后任务的 description（下一棒看到的内容）' },
       },
-      required: ['taskId', 'agentId', 'contextStep'],
+      required: ['taskId', 'agentId', 'contextStep', 'description'],
     } as AnyAgentTool['parameters'],
     async execute(_toolCallId: string, rawParams: Record<string, unknown>): Promise<Awaited<ReturnType<typeof jsonResult>>> {
       try {
@@ -403,9 +404,10 @@ ${systemPrompt}`,
         const contextStep = readStr(rawParams, 'contextStep', { required: true })!;
         const contextOutput = rawParams.contextOutput as { summary?: string; files?: string[] } | undefined;
         const lastHeartbeatAt = readNum(rawParams, 'lastHeartbeatAt');
+        const description = readStr(rawParams, 'description', { required: true })!;
 
         const contextEntry = { step: contextStep, output: contextOutput || {} };
-        const result = relayTask(taskId, agentId, contextEntry, lastHeartbeatAt ?? undefined);
+        const result = relayTask(taskId, agentId, contextEntry, lastHeartbeatAt ?? undefined, description);
         if (!result.success) return { ok: false, data: result };
 
         if (result.task && config.notifications?.length) {
