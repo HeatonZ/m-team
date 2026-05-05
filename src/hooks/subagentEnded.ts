@@ -8,8 +8,7 @@ import type {
   OpenClawPluginApi,
   PluginHookSubagentEndedEvent,
 } from 'openclaw/plugin-sdk/core';
-import { completeTask, failTask } from '../pool/operations.js';
-import { getNotifications, formatTaskNotifications, sendNotifications } from '../notifications.js';
+import { failTask } from '../pool/operations.js';
 
 export function registerSubagentEndedHook(api: OpenClawPluginApi): void {
   api.on('subagent_ended', async (event: PluginHookSubagentEndedEvent) => {
@@ -32,14 +31,11 @@ export function registerSubagentEndedHook(api: OpenClawPluginApi): void {
     const isOk = outcome === 'ok' || outcome === 'reset';
 
     if (isOk) {
-      const result = completeTask(taskId, null, { outcome, error: error || undefined });
-      if (result.success) {
-        api.logger?.info(`[m-team] subagent_ended: 任务 ${taskId} 标记完成 (outcome=${outcome})`);
-        const notifications = formatTaskNotifications(result.task!, getNotifications());
-        await sendNotifications(notifications, api.logger);
-      } else {
-        api.logger?.info(`[m-team] subagent_ended: 任务 ${taskId} 无操作 (${result.reason})`);
-      }
+      // executor 已通过 relay_task 或 complete_task 自行处理任务状态，
+      // subagent_ended 只负责 log，不重复调用 completeTask/failTask
+      // （relay 后任务已是 PENDING，completeTask 会因状态不是 RUNNING 而失败；
+      //  但即调用成功，executor 已写的 context step 也会被覆盖）
+      api.logger?.info(`[m-team] subagent_ended: 任务 ${taskId} executor 已处理 (outcome=${outcome})`);
     } else {
       const errorMsg = error || reason || outcome;
       const result = failTask(taskId, errorMsg ?? undefined, undefined, { outcome, error: errorMsg });
