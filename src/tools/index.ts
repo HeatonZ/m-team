@@ -34,7 +34,7 @@ import {
   closeTask,
 } from '../pool/index.js';
 import { TaskStatus } from '../schema/task.js';
-import { formatTaskNotifications, formatRelinquishNotifications, formatRelayNotifications, formatPublishNotifications, formatClaimNotifications, formatCancelNotifications, formatCloseNotifications, sendNotifications } from '../notifications.js';
+import { formatTaskNotifications, formatRelinquishNotifications, formatRelayNotifications, formatPublishNotifications, formatClaimNotifications, formatCancelNotifications, formatCloseNotifications, formatRejectNotifications, sendNotifications } from '../notifications.js';
 import type { NotificationConfig } from '../notifications.js';
 
 // ─── SDK 类型兼容别名 ────────────────────────────────────────────────────────
@@ -284,6 +284,22 @@ ${systemPrompt}`,
         }
 
         const task = updateTask(taskId, status ?? null, contextEntry, description ?? null, lastHeartbeatAt ?? null, agentId ?? null);
+
+        // 发送通知：reject（驳回→pending）单独处理，其他状态不通知
+        if (config.notifications?.length && task) {
+          const isReject = status === 'pending'
+            && contextStep
+            && contextStep.includes('驳回');
+          if (isReject) {
+            try {
+              const notifications = formatRejectNotifications(task, config.notifications);
+              await sendNotifications(notifications, api.logger as PluginLogger);
+            } catch (e) {
+              (api.logger as PluginLogger)?.warn('[m-team] 通知发送失败');
+            }
+          }
+        }
+
         return jsonResult({ task });
       } catch (e: unknown) {
         return { ok: false, error: (e as Error)?.message ?? String(e) } as Awaited<ReturnType<typeof jsonResult>>;

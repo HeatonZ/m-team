@@ -409,6 +409,40 @@ export function formatCancelNotifications(
   return result;
 }
 
+export function formatRejectNotifications(
+  task: Task,
+  notifications: NotificationConfig[]
+): FormattedNotification[] {
+  if (!notifications || notifications.length === 0) return [];
+  if (!task) return [];
+
+  // 取最后一步的 step 描述
+  const lastEntry = task.context[task.context.length - 1];
+  const rejectReason = (lastEntry as { step?: string })?.step ?? '';
+
+  const result: FormattedNotification[] = [];
+  for (const cfg of notifications) {
+    if (!cfg.agents.includes(task.executor ?? 'unknown')) continue;
+
+    const lines = [
+      `🔁 任务已驳回并放回池子 [${task.taskId}]`,
+      ``,
+      `📋 ${task.description}`,
+      `执行者: ${task.executor ?? 'unknown'}`
+    ].filter(Boolean);
+
+    const message = lines.join('\n');
+
+    if (cfg.provider === 'feishu') {
+      result.push({ provider: 'feishu', chatId: cfg.groupId, appId: cfg.appId, appSecret: cfg.appSecret, message });
+    } else if (cfg.provider === 'discord') {
+      result.push({ provider: 'discord', channelId: cfg.channelId, discordToken: cfg.discordToken, message });
+    }
+  }
+
+  return result;
+}
+
 export function formatCloseNotifications(
   task: Task,
   notifications: NotificationConfig[]
