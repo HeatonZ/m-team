@@ -177,6 +177,21 @@ contextOutput = {
 }
 ```
 
+**常见误区：executor 以为"做完这步就 complete，剩下的 publisher 会安排"。**
+
+这是错的。**下一步由 executor 判断，不是 publisher。**
+
+```
+❌ 错误：description 说一步，executor 做完就 mteam_complete_task，然后等 publisher 安排下一步
+✅ 正确：做完这步 → 判断 goal 是否达成 → 判断是否需要 relay → 如果需要 relay 就 relay，不 complete
+```
+
+**只有满足以下条件之一才 complete：**
+1. goal 明确全部达成
+2. 这步就是最后一步，且没有后续步骤
+
+**其他情况一律 relay，不 complete。**
+
 ### failTask 标准动作
 
 调用 `mteam_failTask`（任务确实无法完成）：
