@@ -197,14 +197,16 @@ export function registerTools(api: OpenClawPluginApi, config: MTeamPluginConfig)
 
 【工具使用规范】
 
-| 1. 完成任务（最终完成）→ 调用 mteam_complete_task
-|    - 当你认为任务目标已全部达成，不需要再交接给其他 agent 时使用
-|    - contextStep 描述你具体做了什么，contextOutput.summary 包含可验证的结果摘要
+**判断顺序：做完这步后，先判断是否 relay，再判断是否 complete。不要倒过来。**
 
-| 2. 完成任务并交接（交给下一个 agent 继续）→ 调用 mteam_relay_task
-|    - 当任务未完成，还有后续步骤需要其他 agent 继续执行时使用
-|    - relay 后任务回到待认领状态，下一个 agent 会接手
-
+| 1. 交接任务（交给下一个 agent 继续）→ 调用 mteam_relay_task
+|    - 当你完成当前这一步后，任务还有后续步骤需要其他人接力时使用
+|    - 这是多步骤任务的正常出口，**不是失败**
+|
+| 2. 完成任务（最终完成）→ 调用 mteam_complete_task
+|    - **只有当任务的完整 goal 已全部达成时**才使用
+|    - 不确定 goal 是否全部达成 → 先 relay，不要直接 complete
+|
 | 3. 主动放弃（放回 pending 不追加 context）→ 调用 mteam_relinquish_task
 |    - 当你无法继续执行，需要暂时放弃时使用
 
