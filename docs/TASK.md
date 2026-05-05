@@ -193,13 +193,12 @@ mteam_relay_task({
   contextOutput: {
     summary: "找到10家供应商",
     files: ["data/suppliers.json"]
-  }
+  },
+  description: "下一步：联系供应商询价"
 })
 // 返回: { success: true, task: { ... } }
-// 调用后 status → pending，executor → null，context 追加当前步骤
+// 调用后 status → pending，executor → null，description 更新，context 追加当前步骤
 ```
-
-**relay 后 description 不变**，由下一个 executor 自行判断下一步要做什么。
 
 ---
 

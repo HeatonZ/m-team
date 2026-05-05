@@ -137,7 +137,8 @@ mteam_relay_task({
   taskId: "xxx",
   agentId: "maker",
   contextStep: "整理报价单",
-  contextOutput: { summary: "整理了报价对比", files: ["data/quotes.xlsx"] }
+  contextOutput: { summary: "整理了报价对比", files: ["data/quotes.xlsx"] },
+  description: "下一步：发送报价给客户"
 })
   → status=pending                   mteam_get_pending()
   → executor=null                      → status=running
@@ -154,7 +155,7 @@ relay 时：
 - `executor` 设为 `null`
 - `lastExecutor` 记录上一个 agent（传承上下文）
 - `context` 追加当前步骤的输出
-- `description` 不变，由下一棒自行判断下一步
+- `description` 更新为下一棒要执行的具体步骤描述（**必填**，由当前 executor 填写）
 
 ---
 
