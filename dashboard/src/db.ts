@@ -3,7 +3,7 @@
  * Wraps m-team/pool with WORKSPACE_ROOT setup.
  */
 
-import { openDb, getDb, getTaskRow, getAllTaskRows, getTaskRowsByStatus, getTaskRowByExecutor } from 'm-team/pool/db';
+import { openDb, getDb, getTaskRow, getAllTaskRows, getTaskRowsByStatus, getTaskRowByExecutor, updateTaskRow } from 'm-team/pool/db';
 import { TaskStatus } from 'm-team/schema/task';
 
 // Dashboard types (relative import — must work from any cwd when spawned)
@@ -68,3 +68,5 @@ export function getAgentActiveTask(agentId: string) {
   ensureInit();
   return getTaskRowByExecutor(agentId);
 }
+
+export { updateTaskRow };

@@ -7,7 +7,7 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { setWorkspaceRoot, getAllTasks, getPendingTasks, getRunningTasks, getCompletedTasks, getFailedTasks, getCancelledTasks, getClosedTasks, getTask as getTaskById, STATUS_LABELS, PRIORITY_LABELS } from './src/db.ts';
+import { setWorkspaceRoot, getAllTasks, getPendingTasks, getRunningTasks, getCompletedTasks, getFailedTasks, getCancelledTasks, getClosedTasks, getTask as getTaskById, updateTaskRow, STATUS_LABELS, PRIORITY_LABELS } from './src/db.ts';
 
 const _scriptPath = import.meta.url
   ? fileURLToPath(import.meta.url)
@@ -82,8 +82,20 @@ async function handle(req, res) {
       }
       // GET /api/tasks/:id
       const detailMatch = seg.match(/^\/tasks\/(task_\w+)$/);
-      if (detailMatch) {
+      if (detailMatch && req.method === 'GET') {
         const task = getTaskById(detailMatch[1]);
+        if (!task) return json(res, 404, { error: 'not found' });
+        return json(res, 200, task);
+      }
+      // PATCH /api/tasks/:id
+      const patchMatch = seg.match(/^\/tasks\/(task_\w+)$/);
+      if (patchMatch && req.method === 'PATCH') {
+        const taskId = patchMatch[1];
+        let body = '';
+        req.on('data', chunk => { body += chunk; });
+        await new Promise<void>(resolve => { req.on('end', resolve); });
+        const patch = JSON.parse(body);
+        const task = updateTaskRow(taskId, patch);
         if (!task) return json(res, 404, { error: 'not found' });
         return json(res, 200, task);
       }

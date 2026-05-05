@@ -1,14 +1,18 @@
+import { useState } from 'react';
 import type { FC } from 'react';
 import type { Task, ContextStepEntry } from '../types/task';
 import { STATUS_LABELS, PRIORITY_LABELS } from '../types/task';
 import { formatTime, escHtml } from '../utils/format';
+import { TaskEditModal } from './TaskEditModal';
 
 interface TaskDetailModalProps {
   task: Task | null;
   onClose: () => void;
+  onUpdate: (updated: Task) => void;
 }
 
-export const TaskDetailModal: FC<TaskDetailModalProps> = ({ task, onClose }) => {
+export const TaskDetailModal: FC<TaskDetailModalProps> = ({ task, onClose, onUpdate }) => {
+  const [showEdit, setShowEdit] = useState(false);
   if (!task) return null;
 
   // context[0] is always the input entry; steps are the rest
@@ -86,6 +90,18 @@ export const TaskDetailModal: FC<TaskDetailModalProps> = ({ task, onClose }) => 
           </Field>
         )}
       </div>
+
+      <div className="modal-actions">
+        <button className="btn-edit" onClick={() => setShowEdit(true)}>✏️ 编辑</button>
+      </div>
+
+      {showEdit && (
+        <TaskEditModal
+          task={task}
+          onClose={() => setShowEdit(false)}
+          onSave={onUpdate}
+        />
+      )}
     </div>
   );
 };

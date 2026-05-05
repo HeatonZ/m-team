@@ -61,7 +61,7 @@ export function App() {
         onCardClick={handleCardClick}
       />
 
-      <TaskDetailModal task={selectedTask} onClose={handleCloseModal} />
+      <TaskDetailModal task={selectedTask} onClose={handleCloseModal} onUpdate={(updated) => { handleRefresh(); setSelectedTask(updated); }} />
     </div>
   );
 }
