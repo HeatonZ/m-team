@@ -184,11 +184,8 @@ export function registerTools(api: OpenClawPluginApi, config: MTeamPluginConfig)
 - 核心目标: ${task?.goal ?? ''}
 - 执行者 agentId: ${agentId}
 - 任务目录: ${taskWorkdir}
-
-【必读】角色规范文件：
-- SOUL.md
-- AGENTS.md
-- mteam-executor skill（执行方法论）：{workspaceRoot}/skills/ai-frameworks/mteam-executor/SKILL.md
+- 工作区约束：你的所有文件操作（读、写、终端命令）必须在任务目录内进行
+- **重要**：不要切换到其他目录，所有路径相对于 ${taskWorkdir}
 
 【重要】任务认领状态：
 任务已被心跳 session（${agentId}）认领，处于 RUNNING 状态。
