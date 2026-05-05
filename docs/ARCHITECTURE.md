@@ -23,7 +23,7 @@
 - **共享任务池** — SQLite 持久化，任务池透明共享
 - **接力执行** — executor 只做当前步骤，没完成就放回池子让下一个接上
 - **context 追溯** — 完整步骤历史，下一个 executor 能看到之前做了什么
-- **自动完成** — Executor Session 结束时 hook 自动标记完成/失败，无需手动调工具
+- **executor 自主判断** — executor 自行判断下一步（relay / complete），subagent_ended 只处理异常退出
 
 ---
 
@@ -51,16 +51,17 @@
      ▼
 ┌──────────────────────────────────────────────────────────┐
 │  Executor Session                                        │
-│  mteam_update_task({ lastHeartbeatAt })   ← 心跳保活     │
-│  mteam_update_task({ status, contextStep })              │
-│       ├─ pending  → 放回池子，下一个 executor 接上       │
-│       └─ completed → subagent_ended hook 自动标记完成   │
+│  mteam_relay_task({ contextStep })     ← 交接（正常出口）│
+│  mteam_complete_task({ contextStep })  ← 完成（正常出口）│
+│  mteam_update_task({ lastHeartbeatAt }) ← 心跳保活       │
+│                                                        │
+│  subagent_ended hook                                   │
+│    ok/reset → 只 log（不干扰 relay/complete）           │
+│    异常 → failTask                                     │
 │                                                        │
 │  Publisher 心跳                                         │
-│  mteam_update_task({ status, contextStep })  ← 驳回     │
-│       ├─ pending  → 打回重做                           │
-│  mteam_close_task({ taskId, publisher })   ← 验收通过   │
-│       └─ closed（终态）                               │
+│  mteam_close_task({ taskId, publisher })  ← 验收通过   │
+│  mteam_update_task({ status:pending })    ← 驳回重做   │
 └──────────────────────────────────────────────────────────┘
        ↑
        │relay
@@ -92,4 +93,4 @@
 4. **产出写任务文件夹** — 便于追溯和清理
 5. **状态必须流转** — 不要让任务卡在 running
 6. **context 无限追溯** — 每步 output 追加到 context，不丢历史
-7. **hook 兜底** — Executor Session 结束时自动完成任务，不依赖手动调用
+7. **executor 自主 + hook 兜底** — executor 自行判断 relay/complete，subagent_ended 只处理 session 异常退出

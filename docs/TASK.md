@@ -60,9 +60,10 @@
 ### 状态流转
 
 ```
-pending → running → completed → closed（验收通过，终态）
-                        ↘ failed
-                        ↘ pending（需接力，taskId 不变）
+PENDING ──claim──► RUNNING ──complete──► COMPLETED ──close──► CLOSED（终态）
+    ▲                       │
+    │ relay                 │ fail（subagent_ended hook 触发）
+    └──relinquish──────────►FAILED
 ```
 
 ---
@@ -197,6 +198,8 @@ mteam_relay_task({
 // 返回: { success: true, task: { ... } }
 // 调用后 status → pending，executor → null，context 追加当前步骤
 ```
+
+**relay 后 description 不变**，由下一个 executor 自行判断下一步要做什么。
 
 ---
 
