@@ -367,7 +367,7 @@ export function relayTask(
     const patch: Record<string, unknown> = {
       status: TaskStatus.PENDING,
       executor: null,
-      // lastExecutor 不设置（保持 null），避免心跳误判"这是自己的任务"而自relay自claim
+      lastExecutor: executorId,
       context: JSON.stringify(newContext)
     };
     if (heartbeat !== undefined) patch.lastHeartbeatAt = heartbeat;
