@@ -1,6 +1,6 @@
 {
   "name": "m-team",
-  "version": "0.7.3",
+  "version": "0.7.4",
   "description": "去中心化任务池协作插件 — 多Agent任务分发与执行",
   "type": "module",
   "main": "dist/index.js",
