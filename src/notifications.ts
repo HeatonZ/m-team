@@ -223,10 +223,10 @@ export function formatTaskNotifications(task: Task, notifications: NotificationC
         appId: cfg.appId,
         appSecret: cfg.appSecret,
         message: [
-          `✅ 任务完成`,
+          `✅ 任务完成 [${task.taskId}]`,
           ``,
           `📋 ${task.description}`,
-          `执行者: ${task.executor}`,
+          `执行者: ${effectiveExecutor}`,
           summary ? `结果: ${summary}` : null,
           duration ? `耗时: ${duration}` : null
         ]
@@ -239,7 +239,7 @@ export function formatTaskNotifications(task: Task, notifications: NotificationC
         channelId: cfg.channelId,
         discordToken: cfg.discordToken,
         message: [
-          `✅ **${task.description}**`,
+          `✅ **${task.description}** [${task.taskId}]`,
           summary ? `_${summary}_` : null,
           `执行者: ${task.executor}${duration ? ` | 耗时: ${duration}` : ''}`
         ]
@@ -294,7 +294,7 @@ function formatRelayOrRelinquishNotifications(
     if (!cfg.agents.includes(lastExecutor)) continue;
 
     const lines = [
-      `${stepEmoji} 任务放回池子`,
+      `${stepEmoji} 任务放回池子 [${task.taskId}]`,
       ``,
       `📋 ${task.description}`,
       `执行者: ${lastExecutor}`,
@@ -330,7 +330,7 @@ export function formatPublishNotifications(
     if (!cfg.agents.includes(task.publisher)) continue;
 
     const lines = [
-      `📋 任务已发布`,
+      `📋 任务已发布 [${task.taskId}]`,
       ``,
       `🎯 ${task.goal}`,
       `📝 ${task.description}`,
@@ -361,7 +361,7 @@ export function formatClaimNotifications(
     if (!cfg.agents.includes(task.executor ?? 'unknown')) continue;
 
     const lines = [
-      `🏃 任务已被认领`,
+      `🏃 任务已被认领 [${task.taskId}]`,
       ``,
       `🎯 ${task.goal}`,
       `认领者: ${task.executor}`
@@ -391,7 +391,7 @@ export function formatCancelNotifications(
     if (!cfg.agents.includes(task.publisher)) continue;
 
     const lines = [
-      `🚫 任务已取消`,
+      `🚫 任务已取消 [${task.taskId}]`,
       ``,
       `🎯 ${task.goal}`,
       `取消者: ${task.publisher}`
@@ -429,7 +429,7 @@ export function formatCloseNotifications(
     if (!cfg.agents.includes(task.publisher)) continue;
 
     const lines = [
-      `🔒 任务已验收通过`,
+      `🔒 任务已验收通过 [${task.taskId}]`,
       ``,
       `📋 ${task.description}`,
       `验收者: ${task.publisher}`,
