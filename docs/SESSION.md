@@ -138,7 +138,7 @@ mteam_relay_task({
   agentId: "maker",
   contextStep: "整理报价单",
   contextOutput: { summary: "整理了报价对比", files: ["data/quotes.xlsx"] },
-  description: "下一步：发送报价给客户"
+  description: "发送报价给客户"
 })
   → status=pending                   mteam_get_pending()
   → executor=null                      → status=running
