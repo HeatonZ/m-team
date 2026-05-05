@@ -165,11 +165,7 @@ export function registerTools(api: OpenClawPluginApi, config: MTeamPluginConfig)
         }
 
         const sessionKey = `agent:${agentId}:m-team:${taskId}`;
-
-        // 根据 agentId 推断角色，用于加载对应的 SOUL.md 和 AGENTS.md
-        const role = agentId.replace(/[0-9]/g, '').replace(/:$/, '') || agentId;
-        const soulPath = `/mnt/d/code/m-team/executors/${role}/SOUL.md`;
-        const agentsPath = `/mnt/d/code/m-team/executors/${role}/AGENTS.md`;
+        const taskWorkdir = `${config.workspaceRoot ?? '/mnt/d/code/m-team'}/tasks/${taskId}`;
 
         const systemPrompt = `
 【任务规范 — M-Team 执行者】
@@ -187,10 +183,11 @@ export function registerTools(api: OpenClawPluginApi, config: MTeamPluginConfig)
 - 任务描述: ${task?.description ?? ''}
 - 核心目标: ${task?.goal ?? ''}
 - 执行者 agentId: ${agentId}
+- 任务目录: ${taskWorkdir}
 
 【必读】角色规范文件：
-- SOUL.md（判断原则）：${soulPath}
-- AGENTS.md（运行规范）：${agentsPath}
+- SOUL.md
+- AGENTS.md
 - mteam-executor skill（执行方法论）：{workspaceRoot}/skills/ai-frameworks/mteam-executor/SKILL.md
 
 【重要】任务认领状态：
@@ -216,14 +213,11 @@ export function registerTools(api: OpenClawPluginApi, config: MTeamPluginConfig)
 | - 在未调用任何工具的情况下自行结束会话，任务将永久卡在 running 状态
 | - 在 tool call 的 agentId 参数中传入 subagent 自己的 session agentId，必须传入 ${agentId}
 |`;
-        const taskWorkdir = `${config.workspaceRoot ?? '/mnt/d/code/m-team'}/tasks/${taskId}`;
 
         const subagentRun = api.runtime?.subagent?.run({
           sessionKey,
           message: `[M-Team Task #${taskId}] ${task?.description ?? ''}
 
-[系统信息] executorAgentId=${agentId}
-[任务目录] ${taskWorkdir}
 ${systemPrompt}`,
         }).catch((_runErr: unknown) => {
           (api.logger as PluginLogger)?.error('[m-team] subagent.run 异步启动失败，回滚任务状态');
