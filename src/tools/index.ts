@@ -228,7 +228,6 @@ ${systemPrompt}`,
           },
         },
         description: { type: 'string', description: '更新当前步骤描述（下一步做什么）' },
-        lastHeartbeatAt: { type: 'number', description: '心跳时间戳（毫秒）' },
       },
       required: ['taskId'],
     } as AnyAgentTool['parameters'],
@@ -238,9 +237,8 @@ ${systemPrompt}`,
         const agentId = readStr(rawParams, 'agentId');
         const status = readStr(rawParams, 'status');
         const contextStep = readStr(rawParams, 'contextStep');
-        const contextOutput = rawParams.contextOutput as { summary?: string; files?: string[] } | undefined;
+        const contextOutput = rawParams.contextOutput as { summary?: string; files?: string } | undefined;
         const description = readStr(rawParams, 'description');
-        const lastHeartbeatAt = readNum(rawParams, 'lastHeartbeatAt');
 
         if (status !== undefined && !Object.values(TaskStatus).includes(status as TaskStatus)) {
           throw new ToolInputError(`Invalid status '${status}', must be one of: ${Object.values(TaskStatus).join(', ')}`);
@@ -251,7 +249,7 @@ ${systemPrompt}`,
           contextEntry = { step: contextStep, output: contextOutput || {} };
         }
 
-        const task = updateTask(taskId, status ?? null, contextEntry, description ?? null, lastHeartbeatAt ?? null, agentId ?? null);
+        const task = updateTask(taskId, status ?? null, contextEntry, description ?? null, null, agentId ?? null);
 
         // 发送通知：reject（驳回→pending）单独处理，其他状态不通知
         if (config.notifications?.length && task) {
@@ -379,7 +377,6 @@ ${systemPrompt}`,
             files: { type: 'array', items: { type: 'string' }, description: '任务文件夹内的相对路径' },
           },
         },
-        lastHeartbeatAt: { type: 'number', description: '心跳时间戳（毫秒），relay 时携带以便追踪' },
         description: { type: 'string', description: 'relay 后任务的 description（下一棒看到的内容）' },
       },
       required: ['taskId', 'agentId', 'contextStep', 'description'],
@@ -390,11 +387,10 @@ ${systemPrompt}`,
         const agentId = readStr(rawParams, 'agentId', { required: true })!;
         const contextStep = readStr(rawParams, 'contextStep', { required: true })!;
         const contextOutput = rawParams.contextOutput as { summary?: string; files?: string[] } | undefined;
-        const lastHeartbeatAt = readNum(rawParams, 'lastHeartbeatAt');
         const description = readStr(rawParams, 'description', { required: true })!;
 
         const contextEntry = { step: contextStep, output: contextOutput || {} };
-        const result = relayTask(taskId, agentId, contextEntry, lastHeartbeatAt ?? undefined, description);
+        const result = relayTask(taskId, agentId, contextEntry, undefined, description);
         if (!result.success) return { ok: false, data: result };
 
         if (result.task && config.notifications?.length) {

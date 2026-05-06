@@ -155,7 +155,6 @@ async function handle(req: http.IncomingMessage, res: http.ServerResponse) {
       if (!body.contextStep) return error(res, 400, 'contextStep required');
       const args = ['tasks', 'relay', relayMatch[1], '--agent-id', String(body.agentId), '--step', String(body.contextStep)];
       if (body.contextOutput?.summary) args.push('--summary', String(body.contextOutput.summary));
-      if (body.lastHeartbeatAt) args.push('--heartbeat', String(body.lastHeartbeatAt));
       const result = await cli(args);
       if (result.code !== 0) return error(res, 400, result.stderr);
       return json(res, 200, JSON.parse(result.stdout));
@@ -210,7 +209,6 @@ async function handle(req: http.IncomingMessage, res: http.ServerResponse) {
       if (body.status)      args.push('--status', String(body.status));
       if (body.contextStep)  args.push('--step', String(body.contextStep));
       if (body.description) args.push('--description', String(body.description));
-      if (body.lastHeartbeatAt) args.push('--heartbeat', String(body.lastHeartbeatAt));
       if (body.executorId)   args.push('--executor-id', String(body.executorId));
       const result = await cli(args);
       if (result.code !== 0) return error(res, 400, result.stderr);

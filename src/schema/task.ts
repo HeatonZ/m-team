@@ -87,7 +87,7 @@ export interface Task {
   lastExecutor: string | null;
   createdAt: number;
   completedAt: number | null;
-  lastHeartbeatAt: number | null;
+  updatedAt: number;
 }
 
 // ============================================================
@@ -187,7 +187,7 @@ export function createTask(input: CreateTaskInput): Task {
     lastExecutor: null,
     createdAt: Date.now(),
     completedAt: null,
-    lastHeartbeatAt: null
+    updatedAt: Date.now()
   };
 }
 

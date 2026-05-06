@@ -104,7 +104,7 @@ describe('TC-B：中转交接流程', () => {
       await callTool(api, 'mteam_relay_task', { taskId, agentId: 'alice', contextStep: 'alice_step1', contextOutput: {}, description: 'alice_step1' });
 
       await callTool(api, 'mteam_claim_task', { taskId, agentId: 'bob' });
-      await callTool(api, 'mteam_relay_task', { taskId, agentId: 'bob', contextStep: 'bob_step1', contextOutput: {} });
+      await callTool(api, 'mteam_relay_task', { taskId, agentId: 'bob', contextStep: 'bob_step1', contextOutput: {}, description: 'bob_step1' });
 
       await callTool(api, 'mteam_claim_task', { taskId, agentId: 'carol' });
       await callTool(api, 'mteam_complete_task', { taskId, contextStep: 'carol_final', contextOutput: {} });

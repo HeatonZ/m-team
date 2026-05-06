@@ -19,7 +19,7 @@ export interface TaskRow {
   last_executor: string | null;
   created_at: number;
   completed_at: number | null;
-  last_heartbeat_at: number | null;
+  updated_at: number;
 }
 
 // 序列化：Task → TaskRow（写入 DB）
@@ -36,7 +36,7 @@ export function serializeTask(task: Task): TaskRow {
     last_executor: task.lastExecutor,
     created_at: task.createdAt,
     completed_at: task.completedAt ?? null,
-    last_heartbeat_at: task.lastHeartbeatAt ?? null
+    updated_at: task.updatedAt,
   };
 }
 
@@ -54,6 +54,6 @@ export function deserializeTask(row: TaskRow): Task {
     lastExecutor: row.last_executor,
     createdAt: row.created_at,
     completedAt: row.completed_at,
-    lastHeartbeatAt: row.last_heartbeat_at
+    updatedAt: row.updated_at
   };
 }

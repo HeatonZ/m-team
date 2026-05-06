@@ -182,15 +182,14 @@ describe('TC-A：正常完成流程', () => {
 
       const updateResult = await callTool(api, 'mteam_update_task', {
         taskId,
-        lastHeartbeatAt: Date.now()
       });
       const updated = getTask(updateResult as { ok: boolean; data: unknown }) as {
-        status: string; context: unknown[]; lastHeartbeatAt: number | null
+        status: string; context: unknown[]; updatedAt: number | null
       };
 
       assert.equal(updated.status, 'running');
       assert.equal(updated.context.length, 1);
-      assert.notEqual(updated.lastHeartbeatAt, null);
+      assert.notEqual(updated.updatedAt, null);
     });
   });
 

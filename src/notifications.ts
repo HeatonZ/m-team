@@ -285,8 +285,8 @@ function formatRelayOrRelinquishNotifications(
     : stepLabel;
 
   const duration =
-    task.lastHeartbeatAt && task.createdAt
-      ? `${Math.round((task.lastHeartbeatAt - task.createdAt) / 1000)}秒`
+    task.updatedAt && task.createdAt
+      ? `${Math.round((task.updatedAt - task.createdAt) / 1000)}秒`
       : null;
 
   const result: FormattedNotification[] = [];

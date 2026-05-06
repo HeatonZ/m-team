@@ -110,7 +110,7 @@ export function claimTask(taskId: string, agentId: string, sessionKey?: string):
     const newLastExecutor = task.executor !== null ? task.executor : task.lastExecutor;
 
     const updated = db.prepare(
-      'UPDATE tasks SET status = ?, executor = ?, last_executor = ?, last_heartbeat_at = ? WHERE task_id = ? AND status = ?'
+      'UPDATE tasks SET status = ?, executor = ?, last_executor = ?, updated_at = ? WHERE task_id = ? AND status = ?'
     ).run(TaskStatus.RUNNING, agentId, newLastExecutor, Date.now(), taskId, TaskStatus.PENDING);
 
     if (updated.changes === 0) {
@@ -140,7 +140,7 @@ export function updateTask(
   status: string | null,
   contextEntry: ContextEntryInput | null,
   description: string | null,
-  lastHeartbeatAt: number | null,
+  updatedAt: number | null,
   executorId: string | null
 ): Task | null {
   init();
@@ -156,7 +156,7 @@ export function updateTask(
         return task; // relay 被拒绝，保持 cancelled
       }
       if (status === TaskStatus.COMPLETED || status === TaskStatus.FAILED) {
-        const patch: Record<string, unknown> = { status: status as Task['status'], completedAt: Date.now() };
+        const patch: Record<string, unknown> = { status: status as Task['status'], completedAt: Date.now(), updatedAt: Date.now() };
         updateTaskRow(taskId, patch);
         const updated = getTaskRow(taskId)!;
         syncTaskJson(updated);
@@ -187,7 +187,7 @@ export function updateTask(
         executor: null,
         lastExecutor: task.executor ?? null,
         description: description ?? task.description,
-        lastHeartbeatAt: lastHeartbeatAt ?? null
+        updatedAt: updatedAt ?? Date.now()
       };
       if (contextEntry) {
         const newContext = [...task.context];
@@ -213,10 +213,10 @@ export function updateTask(
         patch.completedAt = Date.now();
       }
       if (description) patch.description = description;
-      if (lastHeartbeatAt) patch.lastHeartbeatAt = lastHeartbeatAt;
+      if (updatedAt) patch.updatedAt = updatedAt;
       updateTaskRow(taskId, patch);
     } else {
-      if (lastHeartbeatAt) updateTaskRow(taskId, { lastHeartbeatAt });
+      if (updatedAt) updateTaskRow(taskId, { updatedAt });
       if (description) updateTaskRow(taskId, { description });
     }
 
@@ -268,7 +268,8 @@ export function cancelTask(taskId: string, publisher: string, reason?: string, s
     const patch: Record<string, unknown> = {
       status: TaskStatus.CANCELLED,
       executor: null,
-      completedAt: Date.now()
+      completedAt: Date.now(),
+      updatedAt: Date.now()
     };
     updateTaskRow(taskId, patch);
     const updated = getTaskRow(taskId)!;
@@ -319,7 +320,8 @@ export function relinquishTask(
       status: TaskStatus.PENDING,
       executor: null,
       lastExecutor: executorId,
-      context: JSON.stringify(newContext)
+      context: JSON.stringify(newContext),
+      updatedAt: Date.now()
     };
     updateTaskRow(taskId, patch);
     const updated = getTaskRow(taskId)!;
@@ -345,7 +347,6 @@ export function relayTask(
   taskId: string,
   executorId: string,
   contextEntry: ContextEntryInput,
-  heartbeat?: number,
   description?: string,
   sessionKey?: string
 ): RelayResult {
@@ -373,9 +374,9 @@ export function relayTask(
       executor: null,
       lastExecutor: executorId,
       context: JSON.stringify(newContext),
-      ...(description !== undefined && { description })
+      ...(description !== undefined && { description }),
+      updatedAt: Date.now()
     };
-    if (heartbeat !== undefined) patch.lastHeartbeatAt = heartbeat;
 
     updateTaskRow(taskId, patch);
     const updated = getTaskRow(taskId)!;
@@ -417,7 +418,8 @@ export function completeTask(
     const patch: Record<string, unknown> = {
       status: TaskStatus.COMPLETED,
       completedAt: Date.now(),
-      executor: null
+      executor: null,
+      updatedAt: Date.now()
     };
 
     const entryToAdd = contextEntry ?? fallbackEntry;
@@ -472,7 +474,8 @@ export function failTask(
     const patch: Record<string, unknown> = {
       status: TaskStatus.FAILED,
       completedAt: Date.now(),
-      executor: null
+      executor: null,
+      updatedAt: Date.now()
     };
 
     const entryToAdd = contextEntry ?? fallbackEntry;

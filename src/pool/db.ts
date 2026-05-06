@@ -38,8 +38,11 @@ export function isDbOpen(): boolean {
 }
 
 function initSchema(db: Database.Database): void {
+  // 先删除（测试用的 in-memory DB 每次全新创建，生产文件 DB 由 migration 处理）
+  db.exec(`DROP TABLE IF EXISTS task_logs;`);
+  db.exec(`DROP TABLE IF EXISTS tasks;`);
   db.exec(`
-    CREATE TABLE IF NOT EXISTS tasks (
+    CREATE TABLE tasks (
       task_id        TEXT PRIMARY KEY,
       description    TEXT NOT NULL,
       goal           TEXT NOT NULL,
@@ -51,10 +54,10 @@ function initSchema(db: Database.Database): void {
       last_executor  TEXT,
       created_at     INTEGER NOT NULL,
       completed_at   INTEGER,
-      last_heartbeat_at INTEGER
+      updated_at     INTEGER NOT NULL
     );
 
-    CREATE TABLE IF NOT EXISTS task_logs (
+    CREATE TABLE task_logs (
       id          INTEGER PRIMARY KEY AUTOINCREMENT,
       task_id     TEXT NOT NULL,
       action      TEXT NOT NULL,
@@ -114,10 +117,10 @@ export function insertTask(task: Task): void {
   db.prepare(`
     INSERT INTO tasks
       (task_id, description, goal, context, priority, publisher,
-       status, executor, last_executor, created_at, completed_at, last_heartbeat_at)
+       status, executor, last_executor, created_at, completed_at, updated_at)
     VALUES
       (@task_id, @description, @goal, @context, @priority, @publisher,
-       @status, @executor, @last_executor, @created_at, @completed_at, @last_heartbeat_at)
+       @status, @executor, @last_executor, @created_at, @completed_at, @updated_at)
   `).run(row);
 }
 
@@ -128,8 +131,8 @@ export function updateTaskRow(taskId: string, patch: Record<string, unknown>): T
   const fieldMap: Record<string, string> = {
     taskId: 'task_id',
     completedAt: 'completed_at',
-    lastHeartbeatAt: 'last_heartbeat_at',
-    lastExecutor: 'last_executor'
+    lastExecutor: 'last_executor',
+    updatedAt: 'updated_at'
   };
 
   for (const [k, v] of Object.entries(patch)) {

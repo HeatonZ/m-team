@@ -373,15 +373,15 @@ describe('mteam_update_task', () => {
     expect(extract(result).task.context).toHaveLength(2); // input + 步骤一
   });
 
-  test('心跳时间戳正常处理', async () => {
+  test('updatedAt 正常处理', async () => {
     const api = await freshApi();
     const before = Date.now();
     const taskId = publishTask({ description: 'd', goal: 'g' });
     claimTask(taskId, 'alice');
     const result = await callTool(api, 'mteam_update_task', { taskId, agentId: 'alice' });
     expect(result.ok).toBe(true);
-    // heartbeat 由 claimTask 写入，比 publishTask 更晚，所以 > before
-    expect(extract(result).task.lastHeartbeatAt).toBeGreaterThanOrEqual(before);
+    // updatedAt 由 claimTask 写入，比 publishTask 更晚，所以 > before
+    expect(extract(result).task.updatedAt).toBeGreaterThanOrEqual(before);
   });
 
   test('不存在的 taskId 返回 task=null', async () => {

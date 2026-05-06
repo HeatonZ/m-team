@@ -143,14 +143,13 @@ async function cmdTasks(argv: string[]) {
       const agentId = extract(args, '--agent-id');
       const step = extract(args, '--step', '-s');
       const summary = extract(args, '--summary');
-      const heartbeat = extract(args, '--heartbeat');
 
       if (!taskId) fatal('缺少 taskId');
       if (!agentId) fatal('--agent-id 必须提供');
       if (!step) fatal('--step 必须提供');
 
       const contextOutput = summary ? { summary } : undefined;
-      const result = relayTask(taskId, agentId, { step, output: contextOutput ?? {} }, heartbeat ? parseInt(heartbeat, 10) : undefined);
+      const result = relayTask(taskId, agentId, { step, output: contextOutput ?? {} }, undefined);
       if (!result.success) {
         console.error(`[mteam] relay 失败: ${result.reason}`);
         process.exit(1);
@@ -214,14 +213,14 @@ async function cmdTasks(argv: string[]) {
       const status = parseStatus(extract(args, '--status', '-s'));
       const step = extract(args, '--step');
       const description = extract(args, '--description', '-d');
-      const heartbeat = extract(args, '--heartbeat');
+      const updatedAtRaw = extract(args, '--updated-at');
       const executorId = extract(args, '--executor-id');
 
       if (!taskId) fatal('缺少 taskId');
       if (!status && !step && !description) fatal('至少需要 --status / --step / --description 之一');
 
       const contextEntry = step ? { step, output: {} } : null;
-      const task = updateTask(taskId, status ?? null, contextEntry, description ?? null, heartbeat ? parseInt(heartbeat, 10) : null, executorId ?? null);
+      const task = updateTask(taskId, status ?? null, contextEntry, description ?? null, updatedAtRaw ? parseInt(updatedAtRaw, 10) : null, executorId ?? null);
       if (!task) fatal(`任务不存在: ${taskId}`);
       ok({ task });
       break;
@@ -287,7 +286,7 @@ async function cmdHeartbeat(argv: string[]) {
   }
 
   const task = updateTask(activeTask.taskId, null, null, null, Date.now(), null);
-  ok({ agentId, heartbeat: true, taskId: activeTask.taskId, lastHeartbeatAt: task?.lastHeartbeatAt });
+  ok({ agentId, heartbeat: true, taskId: activeTask.taskId, updatedAt: task?.updatedAt });
 }
 
 // ─── 参数解析辅助 ─────────────────────────────────────────────

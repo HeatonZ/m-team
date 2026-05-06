@@ -59,7 +59,7 @@ describe('TC-K：db.js 底层', () => {
   });
 
   describe('TC-K2：updateTaskRow 字段名映射正确（camelCase → snake_case）', () => {
-    it('completedAt → completed_at，lastHeartbeatAt → last_heartbeat_at，lastExecutor → last_executor', async () => {
+    it('completedAt → completed_at，updatedAt → updated_at，lastExecutor → last_executor', async () => {
       const pubResult = await callTool(api, 'mteam_publish_task', { description: 'd', goal: 'g' });
       const taskId = (extract(pubResult) as { taskId: string }).taskId;
       await callTool(api, 'mteam_claim_task', { taskId, agentId: 'alice' });
@@ -67,9 +67,10 @@ describe('TC-K：db.js 底层', () => {
       await callTool(api, 'mteam_complete_task', { taskId, contextStep: 'done', contextOutput: {} });
 
       const db = getDb();
-      const row = db.prepare('SELECT completed_at, last_heartbeat_at, last_executor FROM tasks WHERE task_id = ?').get(taskId) as any;
+      const row = db.prepare('SELECT completed_at, updated_at, last_executor FROM tasks WHERE task_id = ?').get(taskId) as any;
 
       assert.notEqual(row.completed_at, null);
+      assert.notEqual(row.updated_at, null);
       assert.equal(row.last_executor, null);
     });
   });
