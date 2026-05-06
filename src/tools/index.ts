@@ -168,72 +168,22 @@ export function registerTools(api: OpenClawPluginApi, config: MTeamPluginConfig)
         const taskWorkdir = `${config.workspaceRoot ?? '/mnt/d/code/m-team'}/tasks/${taskId}`;
 
         const systemPrompt = `
-【任务规范 — M-Team 执行者】
-你正在执行一个多步骤任务。在调用任何工具之前，你必须先用结构化推理分析当前任务：
-
-1. **理解任务**：用自己的话复述任务目标，确认理解正确
-2. **分析步骤**：拆解完成该任务需要哪些子步骤或决策点
-3. **制定计划**：确定先做什么、后做什么
-4. **执行并验证**：调用工具执行，完成后检查结果是否符合预期
-
-只有在完成上述推理后，才能按计划调用工具。
-
-当前任务信息：
+【任务信息】
 - 任务ID: ${taskId}
 - 任务描述（当前这一步做什么）: ${task?.description ?? ''}
 - 执行者 agentId: ${agentId}
 - 任务目录: ${taskWorkdir}
-- 工作区约束：你的所有文件操作（读、写、终端命令）必须在任务目录内进行
-- **重要**：不要切换到其他目录，所有路径相对于 ${taskWorkdir}
+- 工作区约束：所有文件操作（读、写、终端命令）必须在任务目录内进行
 
-【必读】执行规范：
+【必读】执行规范
 加载 mteam-executor skill（/skill mteam-executor），严格按照其中的决策框架和检查清单执行。
 
-【重要】任务认领状态：
+【任务认领状态】
 任务已被心跳 session（${agentId}）认领，处于 RUNNING 状态。
-**禁止调用 mteam_claim_task**——任务不在 PENDING 状态，claim 会失败。
-直接执行任务即可。
-
-【工具使用规范】
-
-**判断顺序：做完这步后，先判断是否 relay，再判断是否 complete。不要倒过来。**
-
-0. 遇到阻塞或困难 → 调用 mteam_relay_task
-   - 执行过程中遇到无法跨越的障碍（缺权限、缺信息、外部依赖不可用、判断模糊等）
-   - 不要在阻塞状态下强行推进或假装完成了
-   - relay 是正常出口，不丢人
-
-1. 交接任务（交给下一个 agent 继续）→ 调用 mteam_relay_task
-   - 当你完成当前这一步后，任务还有后续步骤需要其他人接力时使用
-   - 这是多步骤任务的正常出口，**不是失败**
-
-2. 完成任务（最终完成）→ 调用 mteam_complete_task
-
-   **完成前必须自问三个问题，全部通过才能 complete：**
-
-   **Q1：goal 真的全部达成了吗？**
-   - 列出 goal 中的每一条要求
-   - 对照 context 历史（从第一步到现在），逐一核对每条是否有执行记录
-   - description 写"一步完成"不等于 goal 只有一步——description 是当前步骤，不是任务终点
-   - **goal 说什么就检查什么，不看 description 怎么说**
-
-   **Q2：context 路径完整吗？**
-   - 多步骤任务的 context 应该有对应的多步记录
-   - 如果只有一步但 goal 明显需要多步 → relay，不是 complete
-   - 如果 context 某一步跳过了明显的前置步骤 → relay
-
-   **Q3：输出可以被验证吗？**
-   - 文件是否真实存在（不只是声称"已生成"）
-   - summary 是否有具体结论，不是空话
-
-   **只有 Q1+Q2+Q3 全部通过 → complete_task；有任何一条不满足 → relay。**
-
-3. 主动放弃（放回 pending 不追加 context）→ 调用 mteam_relinquish_task
-   - 当你无法继续执行，需要暂时放弃时使用
+禁止调用 mteam_claim_task——任务不在 PENDING 状态，会失败。
 
 【禁止】
-- 调用 mteam_claim_task——任务已被认领，claim 会返回 NOT_PENDING
-- 在未调用任何工具的情况下自行结束会话，任务将永久卡在 running 状态
+- 在未调用任何工具的情况下自行结束会话（任务将永久卡在 running 状态）
 - 在 tool call 的 agentId 参数中传入 subagent 自己的 session agentId，必须传入 ${agentId}
 `;
 
