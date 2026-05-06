@@ -169,7 +169,7 @@ async function sendDiscordDirect(
   discordToken: string,
   logger?: { error: (msg: string) => void; info?: (msg: string) => void }
 ): Promise<void> {
-    if (!logger) return;
+  if (!logger) return;
   const res = await fetch(
     `https://discord.com/api/v10/channels/${channelId}/messages`,
     {
@@ -190,67 +190,124 @@ async function sendDiscordDirect(
 
 
 // ============================================================
-// 通知格式化
+// 通知格式化 — 共享工具
 // ============================================================
 
 import type { Task } from './schema/task.js';
 
-export function formatTaskNotifications(task: Task, notifications: NotificationConfig[]): FormattedNotification[] {
+/**
+ * 计算耗时字符串
+ */
+function formatDuration(createdAt: number, endAt?: number | null): string | null {
+  if (!endAt) return null;
+  return `${Math.round((endAt - createdAt) / 1000)}秒`;
+}
+
+/**
+ * 通用通知构建（Feishu / Discord 分流）
+ */
+function buildNotification(
+  cfg: NotificationConfig,
+  message: string
+): FormattedNotification | null {
+  if (cfg.provider === 'feishu') {
+    return { provider: 'feishu', chatId: cfg.groupId, appId: cfg.appId, appSecret: cfg.appSecret, message };
+  } else {
+    return { provider: 'discord', channelId: cfg.channelId, discordToken: cfg.discordToken, message };
+  }
+}
+
+/**
+ * 基础通知模板：过滤 agent → 拼接消息 → 返回格式化通知
+ * 用于 publish / claim / cancel / close（无特殊 status 过滤的场景）
+ */
+function formatBasicNotification(
+  task: Task,
+  notifications: NotificationConfig[],
+  filterAgent: (cfg: NotificationConfig, effectiveAgent: string) => boolean,
+  buildLines: (task: Task, effectiveAgent: string, duration: string | null) => string[]
+): FormattedNotification[] {
   if (!notifications || notifications.length === 0) return [];
-  if (!task || task.status !== 'completed') return [];
+  if (!task) return [];
 
-  // 从最后一个 context entry 取 summary（executor 填写在 contextOutput.summary）
-  const lastEntry = task.context[task.context.length - 1];
-  const summary = (lastEntry as { output?: { summary?: string } })?.output?.summary ?? null;
+  const effectiveAgent = task.executor || task.lastExecutor || 'unknown';
+  const duration = formatDuration(task.createdAt, task.completedAt ?? task.updatedAt);
+  const lines = buildLines(task, effectiveAgent, duration).filter(Boolean);
+  if (lines.length === 0) return [];
 
-  // 耗时：completedAt - createdAt（Schema 只有这两个时间戳）
-  const duration =
-    task.completedAt && task.createdAt
-      ? `${Math.round((task.completedAt - task.createdAt) / 1000)}秒`
-      : null;
-
+  const message = lines.join('\n');
   const result: FormattedNotification[] = [];
-  for (const cfg of notifications) {
-    // executor（当前执行者）> lastExecutor（relay 场景）> context 兜底 > unknown
-    const lastEntry = task.context[task.context.length - 1] as { executor?: string } | undefined;
-    const effectiveExecutor = (task.executor || task.lastExecutor || lastEntry?.executor || 'unknown');
-    if (!cfg.agents.includes(effectiveExecutor)) continue;
 
-    if (cfg.provider === 'feishu') {
-      result.push({
-        provider: 'feishu',
-        chatId: cfg.groupId,
-        appId: cfg.appId,
-        appSecret: cfg.appSecret,
-        message: [
-          `✅ 任务完成 [${task.taskId}]`,
-          ``,
-          `📋 ${task.description}`,
-          `执行者: ${effectiveExecutor}`,
-          summary ? `结果: ${summary}` : null,
-          duration ? `耗时: ${duration}` : null
-        ]
-          .filter(Boolean)
-          .join('\n')
-      });
-    } else if (cfg.provider === 'discord') {
-      result.push({
-        provider: 'discord',
-        channelId: cfg.channelId,
-        discordToken: cfg.discordToken,
-        message: [
-          `✅ **${task.description}** [${task.taskId}]`,
-          summary ? `_${summary}_` : null,
-          `执行者: ${task.executor}${duration ? ` | 耗时: ${duration}` : ''}`
-        ]
-          .filter(Boolean)
-          .join('\n')
-      });
-    }
+  for (const cfg of notifications) {
+    if (!filterAgent(cfg, effectiveAgent)) continue;
+    const notif = buildNotification(cfg, message);
+    if (notif) result.push(notif);
   }
 
   return result;
 }
+
+
+// ============================================================
+// 通知格式化 — publish / claim / cancel
+// ============================================================
+
+export function formatPublishNotifications(
+  task: Task,
+  notifications: NotificationConfig[]
+): FormattedNotification[] {
+  return formatBasicNotification(
+    task,
+    notifications,
+    (cfg, _agent) => cfg.agents.includes(task.publisher),
+    (task) => [
+      `📋 任务已发布 [${task.taskId}]`,
+      ``,
+      `🎯 ${task.goal}`,
+      `📝 ${task.description}`,
+      `优先级: ${task.priority ?? 'normal'}`
+    ]
+  );
+}
+
+export function formatClaimNotifications(
+  task: Task,
+  notifications: NotificationConfig[]
+): FormattedNotification[] {
+  return formatBasicNotification(
+    task,
+    notifications,
+    (cfg, _agent) => cfg.agents.includes(task.executor ?? 'unknown'),
+    (task) => [
+      `🏃 任务已被认领 [${task.taskId}]`,
+      ``,
+      `🎯 ${task.goal}`,
+      `认领者: ${task.executor}`
+    ]
+  );
+}
+
+export function formatCancelNotifications(
+  task: Task,
+  notifications: NotificationConfig[]
+): FormattedNotification[] {
+  return formatBasicNotification(
+    task,
+    notifications,
+    (cfg, _agent) => cfg.agents.includes(task.publisher),
+    (task) => [
+      `🚫 任务已取消 [${task.taskId}]`,
+      ``,
+      `🎯 ${task.goal}`,
+      `取消者: ${task.publisher}`
+    ]
+  );
+}
+
+
+// ============================================================
+// 通知格式化 — relay / relinquish
+// ============================================================
 
 export function formatRelinquishNotifications(
   task: Task,
@@ -274,140 +331,40 @@ function formatRelayOrRelinquishNotifications(
   if (!notifications || notifications.length === 0) return [];
   if (!task) return [];
 
-  const lastEntry = task.context[task.context.length - 1];
   const stepLabel = type === 'relay' ? '交接' : '放弃';
   const stepEmoji = type === 'relay' ? '🔄' : '↩️';
   const lastExecutor = task.lastExecutor ?? 'unknown';
-
-  // 取最后一步的 step 描述作为动作说明
+  const lastEntry = task.context[task.context.length - 1];
   const stepText = (lastEntry as { type: string; step?: string })?.type === 'step'
     ? (lastEntry as { step?: string }).step ?? stepLabel
     : stepLabel;
+  const duration = formatDuration(task.createdAt, task.updatedAt);
 
-  const duration =
-    task.updatedAt && task.createdAt
-      ? `${Math.round((task.updatedAt - task.createdAt) / 1000)}秒`
-      : null;
+  const lines = [
+    `${stepEmoji} 任务放回池子 [${task.taskId}]`,
+    ``,
+    `📋 ${task.description}`,
+    `执行者: ${lastExecutor}`,
+    `动作: ${stepText}`,
+    ...(duration ? [`耗时: ${duration}`] : [])
+  ].filter(Boolean);
 
+  const message = lines.join('\n');
   const result: FormattedNotification[] = [];
+
   for (const cfg of notifications) {
     if (!cfg.agents.includes(lastExecutor)) continue;
-
-    const lines = [
-      `${stepEmoji} 任务放回池子 [${task.taskId}]`,
-      ``,
-      `📋 ${task.description}`,
-      `执行者: ${lastExecutor}`,
-      `动作: ${stepText}`,
-      duration ? `耗时: ${duration}` : null
-    ].filter(Boolean);
-
-    const message = lines.join('\n');
-
-    if (cfg.provider === 'feishu') {
-      result.push({ provider: 'feishu', chatId: cfg.groupId, appId: cfg.appId, appSecret: cfg.appSecret, message });
-    } else if (cfg.provider === 'discord') {
-      result.push({ provider: 'discord', channelId: cfg.channelId, discordToken: cfg.discordToken, message });
-    }
+    const notif = buildNotification(cfg, message);
+    if (notif) result.push(notif);
   }
 
   return result;
 }
+
 
 // ============================================================
-// 通知格式化 — publish / claim / cancel
+// 通知格式化 — reject
 // ============================================================
-
-export function formatPublishNotifications(
-  task: Task,
-  notifications: NotificationConfig[]
-): FormattedNotification[] {
-  if (!notifications || notifications.length === 0) return [];
-  if (!task) return [];
-
-  const result: FormattedNotification[] = [];
-  for (const cfg of notifications) {
-    if (!cfg.agents.includes(task.publisher)) continue;
-
-    const lines = [
-      `📋 任务已发布 [${task.taskId}]`,
-      ``,
-      `🎯 ${task.goal}`,
-      `📝 ${task.description}`,
-      `优先级: ${task.priority ?? 'normal'}`
-    ].filter(Boolean);
-
-    const message = lines.join('\n');
-
-    if (cfg.provider === 'feishu') {
-      result.push({ provider: 'feishu', chatId: cfg.groupId, appId: cfg.appId, appSecret: cfg.appSecret, message });
-    } else if (cfg.provider === 'discord') {
-      result.push({ provider: 'discord', channelId: cfg.channelId, discordToken: cfg.discordToken, message });
-    }
-  }
-
-  return result;
-}
-
-export function formatClaimNotifications(
-  task: Task,
-  notifications: NotificationConfig[]
-): FormattedNotification[] {
-  if (!notifications || notifications.length === 0) return [];
-  if (!task) return [];
-
-  const result: FormattedNotification[] = [];
-  for (const cfg of notifications) {
-    if (!cfg.agents.includes(task.executor ?? 'unknown')) continue;
-
-    const lines = [
-      `🏃 任务已被认领 [${task.taskId}]`,
-      ``,
-      `🎯 ${task.goal}`,
-      `认领者: ${task.executor}`
-    ].filter(Boolean);
-
-    const message = lines.join('\n');
-
-    if (cfg.provider === 'feishu') {
-      result.push({ provider: 'feishu', chatId: cfg.groupId, appId: cfg.appId, appSecret: cfg.appSecret, message });
-    } else if (cfg.provider === 'discord') {
-      result.push({ provider: 'discord', channelId: cfg.channelId, discordToken: cfg.discordToken, message });
-    }
-  }
-
-  return result;
-}
-
-export function formatCancelNotifications(
-  task: Task,
-  notifications: NotificationConfig[]
-): FormattedNotification[] {
-  if (!notifications || notifications.length === 0) return [];
-  if (!task) return [];
-
-  const result: FormattedNotification[] = [];
-  for (const cfg of notifications) {
-    if (!cfg.agents.includes(task.publisher)) continue;
-
-    const lines = [
-      `🚫 任务已取消 [${task.taskId}]`,
-      ``,
-      `🎯 ${task.goal}`,
-      `取消者: ${task.publisher}`
-    ].filter(Boolean);
-
-    const message = lines.join('\n');
-
-    if (cfg.provider === 'feishu') {
-      result.push({ provider: 'feishu', chatId: cfg.groupId, appId: cfg.appId, appSecret: cfg.appSecret, message });
-    } else if (cfg.provider === 'discord') {
-      result.push({ provider: 'discord', channelId: cfg.channelId, discordToken: cfg.discordToken, message });
-    }
-  }
-
-  return result;
-}
 
 export function formatRejectNotifications(
   task: Task,
@@ -416,28 +373,63 @@ export function formatRejectNotifications(
   if (!notifications || notifications.length === 0) return [];
   if (!task) return [];
 
-  // 取最后一步的 step 描述
   const lastEntry = task.context[task.context.length - 1];
   const rejectReason = (lastEntry as { step?: string })?.step ?? '';
 
+  const lines = [
+    `🔁 任务已驳回并放回池子 [${task.taskId}]`,
+    ``,
+    `📋 ${task.description}`,
+    `执行者: ${task.executor ?? 'unknown'}`
+  ].filter(Boolean);
+
+  const message = lines.join('\n');
   const result: FormattedNotification[] = [];
+
   for (const cfg of notifications) {
     if (!cfg.agents.includes(task.executor ?? 'unknown')) continue;
+    const notif = buildNotification(cfg, message);
+    if (notif) result.push(notif);
+  }
 
-    const lines = [
-      `🔁 任务已驳回并放回池子 [${task.taskId}]`,
-      ``,
-      `📋 ${task.description}`,
-      `执行者: ${task.executor ?? 'unknown'}`
-    ].filter(Boolean);
+  return result;
+}
 
-    const message = lines.join('\n');
 
-    if (cfg.provider === 'feishu') {
-      result.push({ provider: 'feishu', chatId: cfg.groupId, appId: cfg.appId, appSecret: cfg.appSecret, message });
-    } else if (cfg.provider === 'discord') {
-      result.push({ provider: 'discord', channelId: cfg.channelId, discordToken: cfg.discordToken, message });
-    }
+// ============================================================
+// 通知格式化 — task（完成）/ close
+// ============================================================
+
+export function formatTaskNotifications(
+  task: Task,
+  notifications: NotificationConfig[]
+): FormattedNotification[] {
+  if (!notifications || notifications.length === 0) return [];
+  if (!task || task.status !== 'completed') return [];
+
+  const lastEntry = task.context[task.context.length - 1];
+  const summary = (lastEntry as { output?: { summary?: string } })?.output?.summary ?? null;
+  const duration = formatDuration(task.createdAt, task.completedAt);
+  const effectiveExecutor = task.executor || task.lastExecutor
+    || (lastEntry as { executor?: string })?.executor
+    || 'unknown';
+
+  const lines = [
+    `✅ 任务完成 [${task.taskId}]`,
+    ``,
+    `📋 ${task.description}`,
+    `执行者: ${effectiveExecutor}`,
+    ...(summary ? [`结果: ${summary}`] : []),
+    ...(duration ? [`耗时: ${duration}`] : [])
+  ].filter(Boolean);
+
+  const message = lines.join('\n');
+  const result: FormattedNotification[] = [];
+
+  for (const cfg of notifications) {
+    if (!cfg.agents.includes(effectiveExecutor)) continue;
+    const notif = buildNotification(cfg, message);
+    if (notif) result.push(notif);
   }
 
   return result;
@@ -452,34 +444,25 @@ export function formatCloseNotifications(
 
   const lastEntry = task.context[task.context.length - 1];
   const summary = (lastEntry as { output?: { summary?: string } })?.output?.summary ?? null;
+  const duration = formatDuration(task.createdAt, task.completedAt);
 
-  const duration =
-    task.completedAt && task.createdAt
-      ? `${Math.round((task.completedAt - task.createdAt) / 1000)}秒`
-      : null;
+  const lines = [
+    `🔒 任务已验收通过 [${task.taskId}]`,
+    ``,
+    `📋 ${task.description}`,
+    `验收者: ${task.publisher}`,
+    ...(summary ? [`结果: ${summary}`] : []),
+    ...(duration ? [`总耗时: ${duration}`] : [])
+  ].filter(Boolean);
 
+  const message = lines.join('\n');
   const result: FormattedNotification[] = [];
+
   for (const cfg of notifications) {
     if (!cfg.agents.includes(task.publisher)) continue;
-
-    const lines = [
-      `🔒 任务已验收通过 [${task.taskId}]`,
-      ``,
-      `📋 ${task.description}`,
-      `验收者: ${task.publisher}`,
-      summary ? `结果: ${summary}` : null,
-      duration ? `总耗时: ${duration}` : null
-    ].filter(Boolean);
-
-    const message = lines.join('\n');
-
-    if (cfg.provider === 'feishu') {
-      result.push({ provider: 'feishu', chatId: cfg.groupId, appId: cfg.appId, appSecret: cfg.appSecret, message });
-    } else if (cfg.provider === 'discord') {
-      result.push({ provider: 'discord', channelId: cfg.channelId, discordToken: cfg.discordToken, message });
-    }
+    const notif = buildNotification(cfg, message);
+    if (notif) result.push(notif);
   }
 
   return result;
 }
-
