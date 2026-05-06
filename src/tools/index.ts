@@ -498,7 +498,9 @@ ${systemPrompt}`,
       try {
         const agentId = readStr(rawParams, 'agentId', { required: true })!;
         const pending = getPendingTasks(agentId);
-        return jsonResult({ pending });
+        // 认领时只看 description，goal 不暴露给执行者
+        const sanitized = pending.map(({ goal: _goal, ...rest }) => rest);
+        return jsonResult({ pending: sanitized });
       } catch (e: unknown) {
         return { ok: false, error: (e as Error)?.message ?? String(e) } as Awaited<ReturnType<typeof jsonResult>>;
       }

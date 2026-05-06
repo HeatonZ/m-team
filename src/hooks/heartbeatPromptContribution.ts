@@ -27,12 +27,15 @@ const CLAIM_PROMPT = `## 心跳任务：认领新任务
 **你处于心跳 session，只能认领任务，不能执行任务。**
 
 1. 调用 mteam_get_pending({ agentId })
-2. 看每个 pending task 的 description，判断是否适合自己
+2. 看每个 pending task 的 **description**（下一步要做什么），判断是否适合自己
    - 读本 agent 的 IDENTITY.md，理解自己职责范围
+   - description 描述的是具体下一步动作，只有当动作在自己能力范围内才认领
    - **肯定适合** → 认领
    - **不确定 / 模糊** → 跳过，不要侥幸认领
 3. 若有合适的 → mteam_claim_task({ agentId, taskId })
 4. 若没有合适的 → 回复 "HEARTBEAT_OK"
+
+**goal 不在认领决策范围内**，goal 是复盘时用的标尺（任务完成后对照检查是否达成），认领时不需要看。
 
 **禁止：不要执行任务，不要调用 relay_task / complete_task / relinquish_task / update_task，只做认领。**
 

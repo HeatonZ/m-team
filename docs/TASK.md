@@ -240,8 +240,9 @@ mteam_relinquish_task({
 
 ```javascript
 // 获取待认领任务（最多 3 条，agent 有 running 任务时返回空）
+// 注意：返回的 task 不含 goal，认领时只看 description
 mteam_get_pending({ agentId: "my-agent" })
-// 返回: { pending: [...] }
+// 返回: { pending: [{ taskId, description, priority, context, ... }] }
 
 // 获取 agent 当前进行中任务
 mteam_get_agent_active({ agentId: "my-agent" })
