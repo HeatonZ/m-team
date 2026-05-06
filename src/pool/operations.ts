@@ -12,7 +12,6 @@ import {
   getTaskRow,
   updateTaskRow,
   insertTask,
-  writeTaskLog
 } from './db';
 import {
   TaskStatus,
@@ -79,14 +78,6 @@ export function publishTask(input: {
     syncTaskJson(task);
   })();
 
-  writeTaskLog({
-    taskId: task.taskId,
-    action: 'publish',
-    sessionKey: sessionKey ?? null,
-    operator: publisher ?? 'user',
-    params: { description, goal, input: inputData, priority }
-  });
-
   console.log(`[m-team-pool] 任务发布: ${task.taskId} - ${input.description}`);
   return task.taskId;
 }
@@ -131,14 +122,6 @@ export function claimTask(taskId: string, agentId: string, sessionKey?: string):
     console.log(`[m-team-pool] ${agentId} 认领了任务 ${taskId}`);
     return { success: true, taskId, task: updatedTask };
   })();
-
-  writeTaskLog({
-    taskId,
-    action: 'claim',
-    sessionKey: sessionKey ?? null,
-    agentId,
-    result: { success: result.success, reason: result.reason }
-  });
 
   return result as ClaimResult;
 }
@@ -294,15 +277,6 @@ export function cancelTask(taskId: string, publisher: string, reason?: string, s
     return { success: true, task: updated };
   })();
 
-  writeTaskLog({
-    taskId,
-    action: 'cancel',
-    sessionKey: sessionKey ?? null,
-    operator: publisher,
-    params: { reason: reason ?? null },
-    result: { success: result.success, reason: result.reason }
-  });
-
   return result as CancelResult;
 }
 
@@ -353,15 +327,6 @@ export function relinquishTask(
     console.log(`[m-team-pool] executor ${executorId} 放弃任务 ${taskId}: ${reason}`);
     return { success: true, task: updated };
   })();
-
-  writeTaskLog({
-    taskId,
-    action: 'relinquish',
-    sessionKey: sessionKey ?? null,
-    agentId: executorId,
-    params: { reason },
-    result: { success: result.success, reason: result.reason }
-  });
 
   return result as RelinquishResult;
 }
@@ -418,15 +383,6 @@ export function relayTask(
     console.log(`[m-team-pool] executor ${executorId} 交接任务 ${taskId}（relay）`);
     return { success: true, task: updated };
   })();
-
-  writeTaskLog({
-    taskId,
-    action: 'relay',
-    sessionKey: sessionKey ?? null,
-    agentId: executorId,
-    params: { step: contextEntry.step, description },
-    result: { success: result.success, reason: result.reason }
-  });
 
   return result as RelayResult;
 }
@@ -488,15 +444,6 @@ export function completeTask(
     return { success: true, task: updated };
   })();
 
-  writeTaskLog({
-    taskId,
-    action: 'complete',
-    sessionKey: sessionKey ?? null,
-    agentId: result.task?.executor ?? null,
-    params: contextEntry ? { step: contextEntry.step } : null,
-    result: { success: result.success, reason: result.reason }
-  });
-
   return result as CompleteResult;
 }
 
@@ -551,15 +498,6 @@ export function failTask(
     return { success: true, task: updated };
   })();
 
-  writeTaskLog({
-    taskId,
-    action: 'fail',
-    sessionKey: sessionKey ?? null,
-    agentId: result.task?.executor ?? null,
-    params: contextEntry ? { step: contextEntry.step, errorMsg } : { errorMsg },
-    result: { success: result.success, reason: result.reason }
-  });
-
   return result as CompleteResult;
 }
 
@@ -598,14 +536,6 @@ export function closeTask(taskId: string, publisher: string, sessionKey?: string
     console.log(`[m-team-pool] 任务 ${taskId} 被 ${publisher} 验收关闭`);
     return { success: true, task: updated };
   })();
-
-  writeTaskLog({
-    taskId,
-    action: 'close',
-    sessionKey: sessionKey ?? null,
-    operator: publisher,
-    result: { success: result.success, reason: result.reason }
-  });
 
   return result as CloseResult;
 }
