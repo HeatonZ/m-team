@@ -68,7 +68,7 @@ PENDING ──claim──► RUNNING ──complete──► COMPLETED ──clo
 
 ---
 
-## Tool API（12 个）
+## Tool API（13 个）
 
 | Tool | 调用者 | 说明 |
 |------|--------|------|
@@ -77,6 +77,7 @@ PENDING ──claim──► RUNNING ──complete──► COMPLETED ──clo
 | `mteam_update_task` | 执行者 | 只更新心跳或追加 context |
 | `mteam_complete_task` | 执行者 | 完成任务，标记 completed |
 | `mteam_relay_task` | 执行者 | 接力，追加 context 后变回 pending |
+| `mteam_reject_task` | Publisher | 验收不通过，驳回任务到 pending |
 | `mteam_cancel_task` | 管理者 | Publisher 取消任务（不可再 relay） |
 | `mteam_relinquish_task` | 执行者 | 主动放弃（放回 pending） |
 | `mteam_get_pending` | 执行者 | 获取待认领任务（agent 有任务时返回空） |
@@ -181,6 +182,22 @@ mteam_complete_task({
 
 ---
 
+### mteam_reject_task
+
+Publisher 验收不通过，驳回任务到 `pending` 池子，同时通知原执行者。
+
+```javascript
+mteam_reject_task({
+  taskId: "task_xxx",
+  reason: "缺少价格信息，请补充后再提交"
+})
+// 返回: { success: true, task: { ..., status: "pending" } }
+```
+
+**注意**：驳回后任务回到 pending 池子，任何执行者都可再次认领。验收通过用 `mteam_close_task`（终态）。
+
+---
+
 ### mteam_relay_task
 
 Executor 完成当前步骤并交接给下一个 agent。追加 context 后任务变回 `pending`。
@@ -275,7 +292,7 @@ mteam_close_task({
 1. Executor 完成任务 → `completed`
 2. Publisher 心跳检测到 COMPLETED 任务 → 注入验收 prompt
 3. Publisher 判断通过 → `mteam_close_task` → `closed`
-4. Publisher 判断驳回 → `mteam_update_task({ status: pending, contextStep: "驳回原因", description: "下一步要求" })` → `pending`
+4. Publisher 判断驳回 → `mteam_reject_task({ taskId, reason: "驳回原因" })` → `pending`
 
 **注意**：`closed` 是终态，不可逆。
 

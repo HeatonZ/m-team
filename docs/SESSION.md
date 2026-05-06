@@ -36,7 +36,7 @@ mteam_get_pending({ agentId })
 mteam_get_all_tasks()
   → 过滤 COMPLETED + publisher=self
   → 通过 → mteam_close_task
-  → 驳回 → mteam_update_task({ status: pending, ... })
+  → 驳回 → mteam_reject_task({ taskId, reason: "驳回原因" })
 ```
 
 ### Executor Session

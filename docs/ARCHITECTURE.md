@@ -61,7 +61,7 @@
 │                                                        │
 │  Publisher 心跳                                         │
 │  mteam_close_task({ taskId, publisher })  ← 验收通过   │
-│  mteam_update_task({ status:pending })    ← 驳回重做   │
+│  mteam_reject_task({ taskId, reason })     ← 驳回重做   │
 └──────────────────────────────────────────────────────────┘
        ↑
        │relay
