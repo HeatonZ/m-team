@@ -4,7 +4,7 @@
 
 import { readStringParam } from 'openclaw/plugin-sdk/core';
 import type { AnyAgentTool } from 'openclaw/plugin-sdk';
-import { textResult, readTaskId } from './shared.js';
+import { textResult } from './shared.js';
 import { updateTask } from '../pool/index.js';
 import { TaskStatus } from '../schema/task.js';
 import { formatRejectNotifications } from '../notifications.js';
