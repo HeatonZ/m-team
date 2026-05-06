@@ -129,7 +129,7 @@ export function registerTools(api: OpenClawPluginApi, config: MTeamPluginConfig)
 
         return jsonResult({ taskId });
       } catch (e) {
-        return { ok: false, error: (e as unknown as Error)?.message ?? String(e) } as Awaited<ReturnType<typeof jsonResult>>;
+        return failedTextResult((e as Error)?.message ?? String(e), { status: 'failed' });
       }
     },
   }as AnyAgentTool);
@@ -301,7 +301,7 @@ ${systemPrompt}`,
         const publisher = readStr(rawParams, 'publisher', { required: true })!;
         const reason = readStr(rawParams, 'reason');
         const result = cancelTask(taskId, publisher, reason);
-        if (!result.success) return { ok: false, data: result };
+        if (!result.success) return failedTextResult(result.error ?? '操作失败', { success: result.success, reason: result.reason });
 
         if (result.task && config.notifications?.length) {
           try {
@@ -351,7 +351,7 @@ ${systemPrompt}`,
 
         const contextEntry = { step: contextStep, output: contextOutput || {} };
         const result = completeTask(taskId, contextEntry);
-        if (!result.success) return { ok: false, data: result };
+        if (!result.success) return failedTextResult(result.error ?? '操作失败', { success: result.success, reason: result.reason });
 
         if (result.task && config.notifications?.length) {
           try {
@@ -405,7 +405,7 @@ ${systemPrompt}`,
 
         const contextEntry = { step: contextStep, output: contextOutput || {} };
         const result = relayTask(taskId, agentId, contextEntry, undefined, description);
-        if (!result.success) return { ok: false, data: result };
+        if (!result.success) return failedTextResult(result.error ?? '操作失败', { success: result.success, reason: result.reason });
 
         if (result.task && config.notifications?.length) {
           try {
@@ -446,7 +446,7 @@ ${systemPrompt}`,
         const executorId = readStr(rawParams, 'executorId', { required: true })!;
         const reason = readStr(rawParams, 'reason') ?? 'executor_relinquish';
         const result = relinquishTask(taskId, executorId, reason);
-        if (!result.success) return { ok: false, data: result };
+        if (!result.success) return failedTextResult(result.error ?? '操作失败', { success: result.success, reason: result.reason });
 
         if (result.success && result.task && config.notifications?.length) {
           try {
@@ -581,7 +581,7 @@ ${systemPrompt}`,
         const taskId = readTaskId(rawParams, 'taskId', { required: true })!;
         const publisher = readStr(rawParams, 'publisher', { required: true })!;
         const result = closeTask(taskId, publisher);
-        if (!result.success) return { ok: false, data: result };
+        if (!result.success) return failedTextResult(result.error ?? '操作失败', { success: result.success, reason: result.reason });
 
         if (result.task && config.notifications?.length) {
           try {
