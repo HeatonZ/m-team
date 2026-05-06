@@ -289,22 +289,4 @@ relay 时 contextOutput 必须包含：
 
 ## References
 
-本 skill 是 M-Team executor 方法论的顶层入口。配套文件：
-
-- **IDENTITY.md**（每个角色的身份定义）位于 `{workspaceRoot}/executors/{maker,fixer,scholar,captain}/IDENTITY.md`
-- **SOUL.md**（每个角色的决策原则）位于 `{workspaceRoot}/executors/{maker,fixer,scholar,captain}/SOUL.md`
-- **AGENTS.md**（每个角色的运行规范）位于 `{workspaceRoot}/executors/{maker,fixer,scholar,captain}/AGENTS.md`
-
-执行任务前应先读对应角色的 IDENTITY.md + SOUL.md + AGENTS.md，再读本 skill 的决策树。
-
----
-
-### 配套机制：heartbeat 分态注入
-
-Executor 的 heartbeat session 由 `src/hooks/heartbeatPromptContribution.ts` 提供动态提示注入：
-
-- **有 active task** → 注入任务上下文（goal + description + 最近3步）+ 本 skill 决策树
-- **无 active task** → 注入空闲认领逻辑
-- **Publisher** → 简化 prompt，不迭代已完成任务
-
-Hook 通过 `api.tools.invoke({ name: 'mteam_get_agent_active', input: { agentId } })` 主动查询任务状态（`PluginHeartbeatPromptContributionEvent` 本身不携带任务字段）。
+本 skill 是 M-Team executor 方法论的顶层入口，具体实现机制（heartbeat 注入、工具注册、数据库 schema）由 m-team 插件内部管理，executor 不需要了解这些细节。
