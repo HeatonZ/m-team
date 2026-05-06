@@ -65,11 +65,10 @@ export function publishTask(input: {
   input?: Record<string, unknown>;
   publisher?: string;
   priority?: string;
-  sessionKey?: string;
 }): string {
   init();
 
-  const { description, goal, input: inputData, publisher, priority, sessionKey } = input;
+  const { description, goal, input: inputData, publisher, priority } = input;
   const task = createTask({ description, goal, input: inputData, publisher, priority: priority as TaskPriority | undefined });
 
   const db = getDb();
@@ -93,7 +92,7 @@ export interface ClaimResult {
   reason?: string;
 }
 
-export function claimTask(taskId: string, agentId: string, sessionKey?: string): ClaimResult {
+export function claimTask(taskId: string, agentId: string): ClaimResult {
   init();
   const db = getDb();
 
@@ -253,7 +252,7 @@ export interface CancelResult {
   reason?: string;
 }
 
-export function cancelTask(taskId: string, publisher: string, reason?: string, sessionKey?: string): CancelResult {
+export function cancelTask(taskId: string, publisher: string, reason?: string): CancelResult {
   init();
   const db = getDb();
 
@@ -294,8 +293,7 @@ export interface RelinquishResult {
 export function relinquishTask(
   taskId: string,
   executorId: string,
-  reason: string = 'executor_relinquish',
-  sessionKey?: string
+  reason: string = 'executor_relinquish'
 ): RelinquishResult {
   init();
   const db = getDb();
@@ -347,8 +345,7 @@ export function relayTask(
   taskId: string,
   executorId: string,
   contextEntry: ContextEntryInput,
-  description?: string,
-  sessionKey?: string
+  description?: string
 ): RelayResult {
   init();
   const db = getDb();
@@ -403,8 +400,7 @@ export interface CompleteResult {
 export function completeTask(
   taskId: string,
   contextEntry: ContextEntryInput | null,
-  fallbackEntry?: { outcome?: string; error?: string },
-  sessionKey?: string
+  fallbackEntry?: { outcome?: string; error?: string }
 ): CompleteResult {
   init();
   const db = getDb();
@@ -459,8 +455,7 @@ export function failTask(
   taskId: string,
   errorMsg: string | null,
   contextEntry?: ContextEntryInput,
-  fallbackEntry?: { outcome?: string; error?: string },
-  sessionKey?: string
+  fallbackEntry?: { outcome?: string; error?: string }
 ): CompleteResult {
   init();
   const db = getDb();
@@ -516,7 +511,7 @@ export interface CloseResult {
   reason?: string;
 }
 
-export function closeTask(taskId: string, publisher: string, sessionKey?: string): CloseResult {
+export function closeTask(taskId: string, publisher: string): CloseResult {
   init();
   const db = getDb();
 

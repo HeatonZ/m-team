@@ -22,7 +22,6 @@ declare module '../notifications' {
 
 declare module '../hooks/subagentEnded.js' {
   export function registerSubagentEndedHook(hook: (info: {
-    sessionKey: string;
     taskId: string;
     agentId: string;
     outcome: string;
