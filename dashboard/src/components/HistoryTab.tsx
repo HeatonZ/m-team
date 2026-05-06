@@ -8,6 +8,10 @@ interface HistoryTabProps {
   tasks: Task[];
   onStatusChange: (s: TaskStatus) => void;
   onCardClick: (taskId: string) => void;
+  page: number;
+  totalPages: number;
+  total: number;
+  onPageChange: (p: number) => void;
 }
 
 export const HistoryTab: FC<HistoryTabProps> = ({
@@ -15,10 +19,14 @@ export const HistoryTab: FC<HistoryTabProps> = ({
   tasks,
   onStatusChange,
   onCardClick,
+  page,
+  totalPages,
+  total,
+  onPageChange,
 }) => {
   return (
     <div className="section">
-      <h2>📜 历史记录</h2>
+      <h2>📜 历史记录 <span style={{ fontWeight: 'normal', fontSize: '0.8em' }}>({total}条)</span></h2>
       <div className="tab-bar">
         {HISTORY_STATUSES.map((s) => (
           <button
@@ -39,6 +47,25 @@ export const HistoryTab: FC<HistoryTabProps> = ({
           ))
         )}
       </div>
+      {totalPages > 1 && (
+        <div className="pagination">
+          <button
+            className="tab"
+            onClick={() => onPageChange(page - 1)}
+            disabled={page <= 1}
+          >
+            ‹ 上一页
+          </button>
+          <span className="page-info">{page} / {totalPages}</span>
+          <button
+            className="tab"
+            onClick={() => onPageChange(page + 1)}
+            disabled={page >= totalPages}
+          >
+            下一页 ›
+          </button>
+        </div>
+      )}
     </div>
   );
 };

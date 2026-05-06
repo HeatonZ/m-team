@@ -14,7 +14,7 @@ export function App() {
 
   const { tasks: pendingTasks, reload: reloadPending } = usePendingTasks();
   const { tasks: runningTasks, reload: reloadRunning } = useRunningTasks();
-  const { tasks: historyTasks, reload: reloadHistory } = useHistoryTasks(activeHistoryStatus);
+  const { tasks: historyTasks, reload: reloadHistory, page: historyPage, totalPages: historyTotalPages, total: historyTotal, setPage: setHistoryPage } = useHistoryTasks(activeHistoryStatus);
 
   const handleRefresh = useCallback(() => {
     reloadPending();
@@ -59,6 +59,10 @@ export function App() {
         tasks={historyTasks}
         onStatusChange={setActiveHistoryStatus}
         onCardClick={handleCardClick}
+        page={historyPage}
+        totalPages={historyTotalPages}
+        total={historyTotal}
+        onPageChange={setHistoryPage}
       />
 
       <TaskDetailModal task={selectedTask} onClose={handleCloseModal} onUpdate={(updated) => { handleRefresh(); setSelectedTask(updated); }} />

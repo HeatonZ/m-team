@@ -340,3 +340,25 @@ h2 {
   font-size: 13px;
   margin-top: 8px;
 }
+
+/* Pagination */
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 16px;
+  padding: 12px 0;
+}
+
+.pagination .tab:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.page-info {
+  font-size: 13px;
+  color: #8899a6;
+  min-width: 60px;
+  text-align: center;
+}

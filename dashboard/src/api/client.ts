@@ -18,9 +18,9 @@ export async function fetchRunningTasks(): Promise<Task[]> {
   return data.tasks;
 }
 
-export async function fetchHistoryTasks(status: TaskStatus): Promise<Task[]> {
-  const data = await get<{ tasks: Task[] }>(`/tasks/history?status=${status}`);
-  return data.tasks;
+export async function fetchHistoryTasks(status: TaskStatus, page = 1): Promise<{ tasks: Task[]; total: number; page: number; pageSize: number; totalPages: number }> {
+  const data = await get<{ tasks: Task[]; total: number; page: number; pageSize: number; totalPages: number }>(`/tasks/history?status=${status}&page=${page}`);
+  return data;
 }
 
 export async function fetchTaskDetail(taskId: string): Promise<Task> {

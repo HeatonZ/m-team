@@ -69,16 +69,23 @@ async function handle(req, res) {
         const tasks = getRunningTasks();
         return json(res, 200, { tasks });
       }
-      // GET /api/tasks/history?status=completed|failed|cancelled
+      // GET /api/tasks/history?status=completed|failed|cancelled&page=1
       if (seg === '/tasks/history') {
         const status = url.searchParams.get('status') || 'completed';
-        let tasks;
-        if (status === 'completed') tasks = getCompletedTasks();
-        else if (status === 'closed') tasks = getClosedTasks();
-        else if (status === 'failed') tasks = getFailedTasks();
-        else if (status === 'cancelled') tasks = getCancelledTasks();
-        else tasks = [];
-        return json(res, 200, { tasks });
+        const page = Math.max(1, parseInt(url.searchParams.get('page') || '1', 10));
+        const pageSize = 20;
+        let tasks, total;
+        if (status === 'completed') { tasks = getCompletedTasks(); }
+        else if (status === 'closed') { tasks = getClosedTasks(); }
+        else if (status === 'failed') { tasks = getFailedTasks(); }
+        else if (status === 'cancelled') { tasks = getCancelledTasks(); }
+        else { tasks = []; }
+        total = tasks.length;
+        const totalPages = Math.ceil(total / pageSize);
+        const paginated = tasks
+          .sort((a, b) => (b.completedAt ?? 0) - (a.completedAt ?? 0))
+          .slice((page - 1) * pageSize, page * pageSize);
+        return json(res, 200, { tasks: paginated, total, page, pageSize, totalPages });
       }
       // GET /api/tasks/:id
       const detailMatch = seg.match(/^\/tasks\/(task_\w+)$/);
