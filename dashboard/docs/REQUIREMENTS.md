@@ -15,7 +15,7 @@
 
 | 区块 | 展示内容 | 数据源 |
 |------|----------|--------|
-| 待认领（pending） | 任务 goal、优先级 badge、发布者 | `GET /api/tasks/pending` |
+| 待认领（pending） | 任务 description、优先级 badge、发布者 | `GET /api/tasks/pending` |
 | 执行中（running） | 任务 goal、当前 executor、心跳时间 | `GET /api/tasks/running` |
 
 - running 任务显示 `updatedAt`（格式：本地时间字符串）

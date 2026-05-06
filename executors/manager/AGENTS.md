@@ -65,8 +65,8 @@ Manager 发任务到池子，Executor 自主抢单，Manager 收集结果回报 
 
 | 字段 | 必填 | 说明 |
 |------|------|------|
-| `goal` | ✅ | 完整任务终点描述，供 executor 判断是否接单 |
-| `description` | ✅ | 当前这一步做什么，单步可执行 |
+| `goal` | ✅ | 完整任务终点描述，复盘时判断是否完成（认领时不暴露给 executor） |
+| `description` | ✅ | 当前这一步做什么，单步可执行，executor 据此判断是否接单 |
 | `input` | ❌ | 任务参数，默认 `{}` |
 | `priority` | ❌ | high/normal/low，默认 normal |
 | `executor` | ❌ | 指定执行者，为空开放抢单 |
