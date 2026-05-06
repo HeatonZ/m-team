@@ -54,10 +54,21 @@ function initSchema(db: Database.Database): void {
       last_heartbeat_at INTEGER
     );
 
-    CREATE INDEX IF NOT EXISTS idx_tasks_status      ON tasks(status);
-    CREATE INDEX IF NOT EXISTS idx_tasks_executor   ON tasks(executor);
-    CREATE INDEX IF NOT EXISTS idx_tasks_priority   ON tasks(priority);
-    CREATE INDEX IF NOT EXISTS idx_tasks_created_at ON tasks(created_at);
+    CREATE TABLE IF NOT EXISTS task_logs (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      task_id     TEXT NOT NULL,
+      action      TEXT NOT NULL,
+      session_key TEXT,
+      agent_id    TEXT,
+      operator    TEXT,
+      params      TEXT,
+      result      TEXT,
+      created_at  INTEGER NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_task_logs_task_id   ON task_logs(task_id);
+    CREATE INDEX IF NOT EXISTS idx_task_logs_action    ON task_logs(action);
+    CREATE INDEX IF NOT EXISTS idx_task_logs_created_at ON task_logs(created_at);
   `);
 }
 
@@ -134,4 +145,94 @@ export function updateTaskRow(taskId: string, patch: Record<string, unknown>): T
 export function deleteTaskRow(taskId: string): void {
   const db = getDb();
   db.prepare('DELETE FROM tasks WHERE task_id = ?').run(taskId);
+}
+
+// ============================================================
+// 任务操作日志（TTL 3天）
+// ============================================================
+
+export interface TaskLogInput {
+  taskId: string;
+  action: string;
+  sessionKey?: string;
+  agentId?: string;
+  operator?: string;
+  params?: Record<string, unknown>;
+  result?: Record<string, unknown>;
+}
+
+export function writeTaskLog(input: TaskLogInput): void {
+  const db = getDb();
+  const now = Date.now();
+  // TTL: 3天 = 3 * 24 * 60 * 60 * 1000 = 259200000 ms
+  const ttl = 3 * 24 * 60 * 60 * 1000;
+  const cutoff = now - ttl;
+
+  // 写入新日志 + 清理 3 天前旧数据
+  db.prepare(`
+    INSERT INTO task_logs (task_id, action, session_key, agent_id, operator, params, result, created_at)
+    VALUES (@task_id, @action, @session_key, @agent_id, @operator, @params, @result, @created_at)
+  `).run({
+    task_id: input.taskId,
+    action: input.action,
+    session_key: input.sessionKey ?? null,
+    agent_id: input.agentId ?? null,
+    operator: input.operator ?? null,
+    params: input.params ? JSON.stringify(input.params) : null,
+    result: input.result ? JSON.stringify(input.result) : null,
+    created_at: now,
+  });
+
+  db.prepare('DELETE FROM task_logs WHERE created_at < ?').run(cutoff);
+}
+
+export interface TaskLog {
+  id: number;
+  taskId: string;
+  action: string;
+  sessionKey: string | null;
+  agentId: string | null;
+  operator: string | null;
+  params: Record<string, unknown> | null;
+  result: Record<string, unknown> | null;
+  createdAt: number;
+}
+
+export function getTaskLogs(taskId?: string, action?: string, limit = 200): TaskLog[] {
+  const db = getDb();
+  let sql = 'SELECT * FROM task_logs';
+  const conditions: string[] = [];
+  const args: unknown[] = [];
+
+  if (taskId) {
+    conditions.push('task_id = ?');
+    args.push(taskId);
+  }
+  if (action) {
+    conditions.push('action = ?');
+    args.push(action);
+  }
+  if (conditions.length > 0) {
+    sql += ' WHERE ' + conditions.join(' AND ');
+  }
+  sql += ' ORDER BY created_at DESC LIMIT ?';
+  args.push(limit);
+
+  const rows = db.prepare(sql).all(...args) as Array<{
+    id: number; task_id: string; action: string; session_key: string | null;
+    agent_id: string | null; operator: string | null; params: string | null;
+    result: string | null; created_at: number;
+  }>;
+
+  return rows.map(r => ({
+    id: r.id,
+    taskId: r.task_id,
+    action: r.action,
+    sessionKey: r.session_key,
+    agentId: r.agent_id,
+    operator: r.operator,
+    params: r.params ? JSON.parse(r.params) : null,
+    result: r.result ? JSON.parse(r.result) : null,
+    createdAt: r.created_at,
+  }));
 }

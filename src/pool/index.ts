@@ -31,6 +31,8 @@ import {
 export { setWorkspaceRoot, DB_PATH };
 export { publishTask, claimTask, updateTask, relinquishTask, relayTask, cancelTask, completeTask, failTask, closeTask };
 export type { ClaimResult, CancelResult, RelinquishResult, RelayResult, CompleteResult, CloseResult, ContextEntryInput };
+export { getTaskLogs } from './db';
+export type { TaskLog, TaskLogInput } from './db';
 
 // ============================================================
 // 只读查询

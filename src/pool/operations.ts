@@ -11,7 +11,8 @@ import {
   isDbOpen,
   getTaskRow,
   updateTaskRow,
-  insertTask
+  insertTask,
+  writeTaskLog
 } from './db';
 import {
   TaskStatus,
@@ -65,10 +66,11 @@ export function publishTask(input: {
   input?: Record<string, unknown>;
   publisher?: string;
   priority?: string;
+  sessionKey?: string;
 }): string {
   init();
 
-  const { description, goal, input: inputData, publisher, priority } = input;
+  const { description, goal, input: inputData, publisher, priority, sessionKey } = input;
   const task = createTask({ description, goal, input: inputData, publisher, priority: priority as TaskPriority | undefined });
 
   const db = getDb();
@@ -76,6 +78,14 @@ export function publishTask(input: {
     insertTask(task);
     syncTaskJson(task);
   })();
+
+  writeTaskLog({
+    taskId: task.taskId,
+    action: 'publish',
+    sessionKey: sessionKey ?? null,
+    operator: publisher ?? 'user',
+    params: { description, goal, input: inputData, priority }
+  });
 
   console.log(`[m-team-pool] 任务发布: ${task.taskId} - ${input.description}`);
   return task.taskId;
@@ -92,7 +102,7 @@ export interface ClaimResult {
   reason?: string;
 }
 
-export function claimTask(taskId: string, agentId: string): ClaimResult {
+export function claimTask(taskId: string, agentId: string, sessionKey?: string): ClaimResult {
   init();
   const db = getDb();
 
@@ -121,6 +131,14 @@ export function claimTask(taskId: string, agentId: string): ClaimResult {
     console.log(`[m-team-pool] ${agentId} 认领了任务 ${taskId}`);
     return { success: true, taskId, task: updatedTask };
   })();
+
+  writeTaskLog({
+    taskId,
+    action: 'claim',
+    sessionKey: sessionKey ?? null,
+    agentId,
+    result: { success: result.success, reason: result.reason }
+  });
 
   return result as ClaimResult;
 }
@@ -252,7 +270,7 @@ export interface CancelResult {
   reason?: string;
 }
 
-export function cancelTask(taskId: string, publisher: string, reason?: string): CancelResult {
+export function cancelTask(taskId: string, publisher: string, reason?: string, sessionKey?: string): CancelResult {
   init();
   const db = getDb();
 
@@ -276,6 +294,15 @@ export function cancelTask(taskId: string, publisher: string, reason?: string): 
     return { success: true, task: updated };
   })();
 
+  writeTaskLog({
+    taskId,
+    action: 'cancel',
+    sessionKey: sessionKey ?? null,
+    operator: publisher,
+    params: { reason: reason ?? null },
+    result: { success: result.success, reason: result.reason }
+  });
+
   return result as CancelResult;
 }
 
@@ -292,7 +319,8 @@ export interface RelinquishResult {
 export function relinquishTask(
   taskId: string,
   executorId: string,
-  reason: string = 'executor_relinquish'
+  reason: string = 'executor_relinquish',
+  sessionKey?: string
 ): RelinquishResult {
   init();
   const db = getDb();
@@ -326,6 +354,15 @@ export function relinquishTask(
     return { success: true, task: updated };
   })();
 
+  writeTaskLog({
+    taskId,
+    action: 'relinquish',
+    sessionKey: sessionKey ?? null,
+    agentId: executorId,
+    params: { reason },
+    result: { success: result.success, reason: result.reason }
+  });
+
   return result as RelinquishResult;
 }
 
@@ -344,7 +381,8 @@ export function relayTask(
   executorId: string,
   contextEntry: ContextEntryInput,
   heartbeat?: number,
-  description?: string
+  description?: string,
+  sessionKey?: string
 ): RelayResult {
   init();
   const db = getDb();
@@ -381,6 +419,15 @@ export function relayTask(
     return { success: true, task: updated };
   })();
 
+  writeTaskLog({
+    taskId,
+    action: 'relay',
+    sessionKey: sessionKey ?? null,
+    agentId: executorId,
+    params: { step: contextEntry.step, description },
+    result: { success: result.success, reason: result.reason }
+  });
+
   return result as RelayResult;
 }
 
@@ -397,7 +444,8 @@ export interface CompleteResult {
 export function completeTask(
   taskId: string,
   contextEntry: ContextEntryInput | null,
-  fallbackEntry?: { outcome?: string; error?: string }
+  fallbackEntry?: { outcome?: string; error?: string },
+  sessionKey?: string
 ): CompleteResult {
   init();
   const db = getDb();
@@ -440,6 +488,15 @@ export function completeTask(
     return { success: true, task: updated };
   })();
 
+  writeTaskLog({
+    taskId,
+    action: 'complete',
+    sessionKey: sessionKey ?? null,
+    agentId: result.task?.executor ?? null,
+    params: contextEntry ? { step: contextEntry.step } : null,
+    result: { success: result.success, reason: result.reason }
+  });
+
   return result as CompleteResult;
 }
 
@@ -451,7 +508,8 @@ export function failTask(
   taskId: string,
   errorMsg: string | null,
   contextEntry?: ContextEntryInput,
-  fallbackEntry?: { outcome?: string; error?: string }
+  fallbackEntry?: { outcome?: string; error?: string },
+  sessionKey?: string
 ): CompleteResult {
   init();
   const db = getDb();
@@ -493,6 +551,15 @@ export function failTask(
     return { success: true, task: updated };
   })();
 
+  writeTaskLog({
+    taskId,
+    action: 'fail',
+    sessionKey: sessionKey ?? null,
+    agentId: result.task?.executor ?? null,
+    params: contextEntry ? { step: contextEntry.step, errorMsg } : { errorMsg },
+    result: { success: result.success, reason: result.reason }
+  });
+
   return result as CompleteResult;
 }
 
@@ -506,7 +573,7 @@ export interface CloseResult {
   reason?: string;
 }
 
-export function closeTask(taskId: string, publisher: string): CloseResult {
+export function closeTask(taskId: string, publisher: string, sessionKey?: string): CloseResult {
   init();
   const db = getDb();
 
@@ -531,6 +598,14 @@ export function closeTask(taskId: string, publisher: string): CloseResult {
     console.log(`[m-team-pool] 任务 ${taskId} 被 ${publisher} 验收关闭`);
     return { success: true, task: updated };
   })();
+
+  writeTaskLog({
+    taskId,
+    action: 'close',
+    sessionKey: sessionKey ?? null,
+    operator: publisher,
+    result: { success: result.success, reason: result.reason }
+  });
 
   return result as CloseResult;
 }

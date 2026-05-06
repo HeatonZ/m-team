@@ -7,7 +7,7 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { setWorkspaceRoot, getAllTasks, getPendingTasks, getRunningTasks, getCompletedTasks, getFailedTasks, getCancelledTasks, getClosedTasks, getTask as getTaskById, updateTaskRow, STATUS_LABELS, PRIORITY_LABELS } from './src/db.ts';
+import { setWorkspaceRoot, getAllTasks, getPendingTasks, getRunningTasks, getCompletedTasks, getFailedTasks, getCancelledTasks, getClosedTasks, getTask as getTaskById, updateTaskRow, getTaskLogs, STATUS_LABELS, PRIORITY_LABELS } from './src/db.ts';
 
 const _scriptPath = import.meta.url
   ? fileURLToPath(import.meta.url)
@@ -105,6 +105,15 @@ async function handle(req, res) {
         const task = updateTaskRow(taskId, patch);
         if (!task) return json(res, 404, { error: 'not found' });
         return json(res, 200, task);
+      }
+
+      // GET /api/logs?taskId=...&action=...&limit=200
+      if (seg === '/logs' && req.method === 'GET') {
+        const taskId = url.searchParams.get('taskId') || undefined;
+        const action = url.searchParams.get('action') || undefined;
+        const limit = Math.min(500, Math.max(1, parseInt(url.searchParams.get('limit') || '200', 10)));
+        const logs = getTaskLogs(taskId, action, limit);
+        return json(res, 200, { logs });
       }
 
       return json(res, 404, { error: 'not found' });
