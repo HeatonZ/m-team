@@ -20,9 +20,7 @@ const IS_PROD = !import.meta.url || !process.env.VITE_DEV;
 const DASHBOARD_DIR = IS_PROD ? path.join(REPO_ROOT, 'dashboard') : __dirname;
 const DIST = path.join(DASHBOARD_DIR, 'dist');
 const PUBLIC = path.join(DASHBOARD_DIR, 'public');
-const PORT = IS_PROD
-  ? (process.env.PORT || 3000)   // 正式: 3000
-  : (process.env.PORT || 3001);  // 开发: 3001
+const PORT = process.env.PORT || 3000;
 
 // Initialise DB path
 const WORKSPACE = process.env.WORKSPACE_ROOT || '/mnt/d/code/m-team';

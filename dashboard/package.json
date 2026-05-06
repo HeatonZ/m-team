@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "concurrently -n \"api,vite\" -c \"cyan,magenta\" \"tsx server.ts\" \"vite\"",
+    "dev": "concurrently -n \"api,vite\" -c \"cyan,magenta\" \"tsx --env-file=.env server.ts\" \"vite\"",
     "server": "tsx server.ts",
     "build": "vite build",
     "preview": "vite preview",
