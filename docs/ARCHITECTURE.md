@@ -53,7 +53,7 @@
 │  Executor Session                                        │
 │  mteam_relay_task({ contextStep })     ← 交接（正常出口）│
 │  mteam_complete_task({ contextStep })  ← 完成（正常出口）│
-│  mteam_update_task({ updatedAt }) ← 更新戳       │
+│  mteam_update_task({ updatedAt }) ← 任务操作时自动更新 │
 │                                                        │
 │  subagent_ended hook                                   │
 │    ok/reset → 只 log（不干扰 relay/complete）           │
@@ -78,7 +78,7 @@
 - **publisher 发布任务** — publisher 只是记录身份，不做权限控制
 - **执行者自主认领** — 根据 `goal` + `context` 自行判断是否接单
 - **agent 不能同时做多个任务** — 有进行中任务时不能认领新任务
-- **心跳保活** — 执行中的任务定期更新 `updatedAt`
+- **任务卡死检测** — running 任务超过 40 分钟 `updatedAt` 未更新视为死任务，由 heartbeat sessions_list 检查后自动 relinquish
 - **context 无限追溯** — 每步 output 追加到 context 数组，供后续 executor 参考
 - **task.json 同步写入** — 每个任务目录下保留 task.json，供外部工具直接读文件系统
 - **hook 兜底** — Executor Session 结束时自动完成任务，不依赖手动调用
