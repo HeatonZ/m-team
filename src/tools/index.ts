@@ -3,7 +3,7 @@
  *
  * 类型来源：
  *   AnyAgentTool / OpenClawPluginApi / PluginLogger → openclaw/plugin-sdk/core
- *   jsonResult / readStringParam / ToolInputError  → openclaw/plugin-sdk/core
+ *   jsonResult / readStringParam  → openclaw/plugin-sdk/core
  *   业务逻辑（pool / notifications）                 → ../pool, ../notifications
  */
 
@@ -25,7 +25,6 @@ function textResult<TDetails>(text: string, details: TDetails) {
   return { content: [{ type: 'text' as const, text }], details };
 }
 const failedTextResult = textResult;
-import { ToolInputError } from './helpers.js';
 
 import {
   publishTask,
@@ -53,9 +52,6 @@ export const readStringParam = readStr;
 /** readNumberParam 的 m-team 别名 */
 export const readNumberParam = readNum;
 
-/** 保留给外部调用者的别名（向后兼容） */
-export { ToolInputError };
-
 // ─── taskId 格式校验（m-team 私有） ─────────────────────────────────────────
 
 /**
@@ -72,14 +68,14 @@ export function readTaskId(
   if (raw === undefined) return undefined;
 
   if (/^\d+$/.test(raw)) {
-    throw new ToolInputError(
+    throw new Error(
       `taskId 不能只写纯数字，需要完整格式 task_1234567890，而非 ${raw}。` +
       `请从任务信息中复制完整的 taskId（含 task_ 前缀）。`
     );
   }
 
   if (!raw.startsWith('task_')) {
-    throw new ToolInputError(
+    throw new Error(
       `taskId "${raw}" 格式无效，必须以 task_ 开头（如 task_1234567890）。` +
       `请从任务信息中复制完整的 taskId。`
     );
