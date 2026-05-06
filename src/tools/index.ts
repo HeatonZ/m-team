@@ -196,6 +196,11 @@ export function registerTools(api: OpenClawPluginApi, config: MTeamPluginConfig)
 
 **判断顺序：做完这步后，先判断是否 relay，再判断是否 complete。不要倒过来。**
 
+0. 遇到阻塞或困难 → 调用 mteam_relay_task
+   - 执行过程中遇到无法跨越的障碍（缺权限、缺信息、外部依赖不可用、判断模糊等）
+   - 不要在阻塞状态下强行推进或假装完成了
+   - relay 是正常出口，不丢人
+
 1. 交接任务（交给下一个 agent 继续）→ 调用 mteam_relay_task
    - 当你完成当前这一步后，任务还有后续步骤需要其他人接力时使用
    - 这是多步骤任务的正常出口，**不是失败**
