@@ -13,10 +13,12 @@ import type {
 import { writeTaskLog } from '../pool/db.js';
 
 // toolName → action mapping
+// 注意：mteam_fail_task 是 subagent_ended hook 内部调用，不注册工具但保留 map 条目
 const TOOL_ACTION_MAP: Record<string, string> = {
   mteam_publish_task: 'publish',
   mteam_claim_task: 'claim',
   mteam_update_task: 'update',
+  mteam_reject_task: 'reject',
   mteam_cancel_task: 'cancel',
   mteam_relinquish_task: 'relinquish',
   mteam_relay_task: 'relay',
