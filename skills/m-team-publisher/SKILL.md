@@ -1,13 +1,7 @@
 ---
 name: m-team-publisher
 description: "Use when: (1) user says '帮我做xxx' / '发个任务' / '发布到m-team', OR (2) user wants to delegate a multi-step task to other agents, OR (3) user asks another agent to do something that requires context from a third party (e.g. '在飞书发条消息体现Manager的风格'). This skill transforms a vague request into a structured task and publishes it to the pool."
-version: 1.2.0
-author: Hermes Agent
 license: MIT
-metadata:
-  hermes:
-    tags: [m-team, task-publish, multi-agent, autonomous-agents]
-    related_skills: [m-team-executor, skill-triggering, task-delegation]
 ---
 
 # M-Team Publisher Playbook
