@@ -14,11 +14,17 @@ import type {
 } from 'openclaw/plugin-sdk/core';
 import {
   jsonResult,
-  textResult,
-  failedTextResult,
   readStringParam as readStr,
   readNumberParam as readNum,
 } from 'openclaw/plugin-sdk/core';
+
+// textResult(text, details) 和 failedTextResult 运行时等价，
+// SDK 类型声明存在但 runtime 导出路径不在 package.json exports 里，
+// 故本地实现（与 SDK 行为一致）。
+function textResult<TDetails>(text: string, details: TDetails) {
+  return { content: [{ type: 'text' as const, text }], details };
+}
+const failedTextResult = textResult;
 import { ToolInputError } from './helpers.js';
 
 import {

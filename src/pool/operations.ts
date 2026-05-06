@@ -357,8 +357,10 @@ export function relayTask(
     const task = getTaskRow(taskId);
     if (!task) return { success: false, task: null, reason: 'TASK_NOT_FOUND' };
     if (task.status === TaskStatus.CANCELLED) return { success: false, task: null, reason: 'TASK_CANCELLED' };
-    if (task.status !== TaskStatus.RUNNING) return { success: false, task: null, reason: `TASK_NOT_RUNNING_${task.status}` };
-    if (task.executor !== executorId) return { success: false, task: null, reason: 'NOT_CURRENT_EXECUTOR' };
+    if (task.status !== TaskStatus.RUNNING) {
+      return { success: false, error: 'TASK_NOT_RUNNING', reason: `TASK_NOT_RUNNING_${task.status}` };
+    }
+    if (task.executor !== executorId) return { success: false, error: 'NOT_CURRENT_EXECUTOR', reason: 'NOT_CURRENT_EXECUTOR' };
 
     const newContext = [...task.context];
     newContext.push({
@@ -412,7 +414,7 @@ export function completeTask(
     if (!task) return { success: false, reason: 'TASK_NOT_FOUND' };
 
     if (task.status !== TaskStatus.RUNNING) {
-      return { success: false, reason: `TASK_NOT_RUNNING_${task.status}` };
+      return { success: false, error: 'TASK_NOT_RUNNING', reason: `TASK_NOT_RUNNING_${task.status}` };
     }
 
     const patch: Record<string, unknown> = {
@@ -468,7 +470,7 @@ export function failTask(
     if (!task) return { success: false, reason: 'TASK_NOT_FOUND' };
 
     if (task.status !== TaskStatus.RUNNING) {
-      return { success: false, reason: `TASK_NOT_RUNNING_${task.status}` };
+      return { success: false, error: 'TASK_NOT_RUNNING', reason: `TASK_NOT_RUNNING_${task.status}` };
     }
 
     const patch: Record<string, unknown> = {
