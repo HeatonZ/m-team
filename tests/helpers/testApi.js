@@ -28,6 +28,22 @@ export function jsonResult(data) {
   return { ok: true, data };
 }
 
+/**
+ * 成功文本结果（与 SDK textResult 兼容）
+ * 格式: { ok: true, data: { text, ...details } }
+ */
+export function textResult(text, details = {}) {
+  return { ok: true, data: { text, ...details } };
+}
+
+/**
+ * 失败文本结果（与 SDK failedTextResult 兼容）
+ * 格式: { ok: false, error: string, data: { status: "failed", ...details } }
+ */
+export function failedTextResult(message, details = {}) {
+  return { ok: false, error: message, data: { status: 'failed', ...details } };
+}
+
 export function readStringParam(record, name, opts) {
   const value = record?.[name];
   if (value === undefined || value === null) {
@@ -160,6 +176,8 @@ export async function callTool(api, toolName, params) {
 export function extract(result) {
   // m-team mock 格式（src/tools/helpers.ts 返回的格式）
   if (result && result.ok === true) return result.data;
+  // failedTextResult 格式：{ ok: false, error: string, data: {...} }
+  if (result && result.ok === false && result.data) return result.data;
   // SDK content 格式
   if (result && Array.isArray(result.content)) {
     const text =

@@ -14,6 +14,8 @@ import type {
 } from 'openclaw/plugin-sdk/core';
 import {
   jsonResult,
+  textResult,
+  failedTextResult,
   readStringParam as readStr,
   readNumberParam as readNum,
 } from 'openclaw/plugin-sdk/core';
@@ -151,7 +153,7 @@ export function registerTools(api: OpenClawPluginApi, config: MTeamPluginConfig)
         const agentId = readStr(rawParams, 'agentId', { required: true })!;
 
         const result = claimTask(taskId, agentId);
-        if (!result.success) return { ok: false, data: result } as Awaited<ReturnType<typeof jsonResult>>;
+        if (!result.success) return failedTextResult(result.error ?? '操作失败', { success: result.success, reason: result.reason });
 
         const task = getTask(taskId) ?? result.task;
 
@@ -202,7 +204,10 @@ ${systemPrompt}`,
 
         return jsonResult({ ...result, runId: subagentResult?.runId, sessionKey });
       } catch (e: unknown) {
-        return { ok: false, error: (e as Error)?.message ?? String(e) } as Awaited<ReturnType<typeof jsonResult>>;
+        return failedTextResult<string, { status: "failed" }>(
+          (e as Error)?.message ?? String(e),
+          { status: "failed" }
+        );
       }
     },
   }as AnyAgentTool);
@@ -268,7 +273,10 @@ ${systemPrompt}`,
 
         return jsonResult({ task });
       } catch (e: unknown) {
-        return { ok: false, error: (e as Error)?.message ?? String(e) } as Awaited<ReturnType<typeof jsonResult>>;
+        return failedTextResult<string, { status: "failed" }>(
+          (e as Error)?.message ?? String(e),
+          { status: "failed" }
+        );
       }
     },
   }as AnyAgentTool);
@@ -306,7 +314,10 @@ ${systemPrompt}`,
 
         return jsonResult({ success: result.success, task: result.task });
       } catch (e: unknown) {
-        return { ok: false, error: (e as Error)?.message ?? String(e) } as Awaited<ReturnType<typeof jsonResult>>;
+        return failedTextResult<string, { status: "failed" }>(
+          (e as Error)?.message ?? String(e),
+          { status: "failed" }
+        );
       }
     },
   }as AnyAgentTool);
@@ -353,7 +364,10 @@ ${systemPrompt}`,
 
         return jsonResult({ success: result.success, task: result.task });
       } catch (e: unknown) {
-        return { ok: false, error: (e as Error)?.message ?? String(e) } as Awaited<ReturnType<typeof jsonResult>>;
+        return failedTextResult<string, { status: "failed" }>(
+          (e as Error)?.message ?? String(e),
+          { status: "failed" }
+        );
       }
     },
   }as AnyAgentTool);
@@ -404,7 +418,10 @@ ${systemPrompt}`,
 
         return jsonResult({ success: result.success, task: result.task });
       } catch (e: unknown) {
-        return { ok: false, error: (e as Error)?.message ?? String(e) } as Awaited<ReturnType<typeof jsonResult>>;
+        return failedTextResult<string, { status: "failed" }>(
+          (e as Error)?.message ?? String(e),
+          { status: "failed" }
+        );
       }
     },
   } as AnyAgentTool);
@@ -442,7 +459,10 @@ ${systemPrompt}`,
 
         return jsonResult({ success: result.success, reason: result.reason, task: result.task });
       } catch (e: unknown) {
-        return { ok: false, error: (e as Error)?.message ?? String(e) } as Awaited<ReturnType<typeof jsonResult>>;
+        return failedTextResult<string, { status: "failed" }>(
+          (e as Error)?.message ?? String(e),
+          { status: "failed" }
+        );
       }
     },
   }as AnyAgentTool);
@@ -466,7 +486,10 @@ ${systemPrompt}`,
         const sanitized = pending.map(({ goal: _goal, ...rest }) => rest);
         return jsonResult({ pending: sanitized });
       } catch (e: unknown) {
-        return { ok: false, error: (e as Error)?.message ?? String(e) } as Awaited<ReturnType<typeof jsonResult>>;
+        return failedTextResult<string, { status: "failed" }>(
+          (e as Error)?.message ?? String(e),
+          { status: "failed" }
+        );
       }
     },
   }as AnyAgentTool);
@@ -488,7 +511,10 @@ ${systemPrompt}`,
         const activeTask = getAgentActiveTask(agentId);
         return jsonResult({ activeTask });
       } catch (e: unknown) {
-        return { ok: false, error: (e as Error)?.message ?? String(e) } as Awaited<ReturnType<typeof jsonResult>>;
+        return failedTextResult<string, { status: "failed" }>(
+          (e as Error)?.message ?? String(e),
+          { status: "failed" }
+        );
       }
     },
   }as AnyAgentTool);
@@ -511,7 +537,10 @@ ${systemPrompt}`,
         const task = getTask(taskId);
         return jsonResult({ task });
       } catch (e: unknown) {
-        return { ok: false, error: (e as Error)?.message ?? String(e) } as Awaited<ReturnType<typeof jsonResult>>;
+        return failedTextResult<string, { status: "failed" }>(
+          (e as Error)?.message ?? String(e),
+          { status: "failed" }
+        );
       }
     },
   }as AnyAgentTool);
@@ -526,7 +555,10 @@ ${systemPrompt}`,
         const tasks = getAllTasks();
         return jsonResult({ tasks });
       } catch (e: unknown) {
-        return { ok: false, error: (e as Error)?.message ?? String(e) } as Awaited<ReturnType<typeof jsonResult>>;
+        return failedTextResult<string, { status: "failed" }>(
+          (e as Error)?.message ?? String(e),
+          { status: "failed" }
+        );
       }
     },
   }as AnyAgentTool);
@@ -562,7 +594,10 @@ ${systemPrompt}`,
 
         return jsonResult({ success: result.success, task: result.task });
       } catch (e: unknown) {
-        return { ok: false, error: (e as Error)?.message ?? String(e) } as Awaited<ReturnType<typeof jsonResult>>;
+        return failedTextResult<string, { status: "failed" }>(
+          (e as Error)?.message ?? String(e),
+          { status: "failed" }
+        );
       }
     },
   }as AnyAgentTool);
