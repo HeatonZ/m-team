@@ -6,9 +6,9 @@ export interface TaskLog {
   action: string;
   sessionKey: string | null;
   agentId: string | null;
-  operator: string | null;
   params: Record<string, unknown> | null;
   result: Record<string, unknown> | null;
+  error: string | null;
   createdAt: number;
 }
 

@@ -51,7 +51,7 @@ export function registerAfterToolCallHook(api: OpenClawPluginApi): void {
           taskId: publishedTaskId,
           action,
           sessionKey: sessionKey ?? null,
-          operator: (params.publisher as string) ?? agentId ?? 'user',
+          agentId: agentId ?? undefined,
           params: {
             description: params.description as string | undefined,
             goal: params.goal as string | undefined,
@@ -85,7 +85,6 @@ export function registerAfterToolCallHook(api: OpenClawPluginApi): void {
         action,
         sessionKey: sessionKey ?? null,
         agentId: (params.agentId as string) ?? agentId ?? undefined,
-        operator: (params.publisher as string) ?? undefined,
         params: params as Record<string, unknown> | undefined,
         result: result as Record<string, unknown> | undefined,
         error: error ?? undefined,

@@ -60,9 +60,9 @@ function initSchema(db: Database.Database): void {
       action      TEXT NOT NULL,
       session_key TEXT,
       agent_id    TEXT,
-      operator    TEXT,
       params      TEXT,
       result      TEXT,
+      error       TEXT,
       created_at  INTEGER NOT NULL
     );
 
@@ -156,9 +156,9 @@ export interface TaskLogInput {
   action: string;
   sessionKey?: string;
   agentId?: string;
-  operator?: string;
   params?: Record<string, unknown>;
   result?: Record<string, unknown>;
+  error?: string;
 }
 
 export function writeTaskLog(input: TaskLogInput): void {
@@ -170,16 +170,16 @@ export function writeTaskLog(input: TaskLogInput): void {
 
   // 写入新日志 + 清理 3 天前旧数据
   db.prepare(`
-    INSERT INTO task_logs (task_id, action, session_key, agent_id, operator, params, result, created_at)
-    VALUES (@task_id, @action, @session_key, @agent_id, @operator, @params, @result, @created_at)
+    INSERT INTO task_logs (task_id, action, session_key, agent_id, params, result, error, created_at)
+    VALUES (@task_id, @action, @session_key, @agent_id, @params, @result, @error, @created_at)
   `).run({
     task_id: input.taskId,
     action: input.action,
     session_key: input.sessionKey ?? null,
     agent_id: input.agentId ?? null,
-    operator: input.operator ?? null,
     params: input.params ? JSON.stringify(input.params) : null,
     result: input.result ? JSON.stringify(input.result) : null,
+    error: input.error ?? null,
     created_at: now,
   });
 
@@ -192,9 +192,9 @@ export interface TaskLog {
   action: string;
   sessionKey: string | null;
   agentId: string | null;
-  operator: string | null;
   params: Record<string, unknown> | null;
   result: Record<string, unknown> | null;
+  error: string | null;
   createdAt: number;
 }
 
@@ -220,8 +220,8 @@ export function getTaskLogs(taskId?: string, action?: string, limit = 200): Task
 
   const rows = db.prepare(sql).all(...args) as Array<{
     id: number; task_id: string; action: string; session_key: string | null;
-    agent_id: string | null; operator: string | null; params: string | null;
-    result: string | null; created_at: number;
+    agent_id: string | null; params: string | null;
+    result: string | null; error: string | null; created_at: number;
   }>;
 
   return rows.map(r => ({
@@ -230,9 +230,9 @@ export function getTaskLogs(taskId?: string, action?: string, limit = 200): Task
     action: r.action,
     sessionKey: r.session_key,
     agentId: r.agent_id,
-    operator: r.operator,
     params: r.params ? JSON.parse(r.params) : null,
     result: r.result ? JSON.parse(r.result) : null,
+    error: r.error,
     createdAt: r.created_at,
   }));
 }

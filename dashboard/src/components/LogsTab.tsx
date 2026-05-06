@@ -131,10 +131,10 @@ export const LogsTab: FC = () => {
                   </td>
                   <td style={{ padding: '0.4rem' }}>
                     {log.result ? (
-                      log.result.success ? (
-                        <span style={{ color: '#22c55e' }}>✓ {log.result.reason ?? ''}</span>
+                      log.result.details?.success === true ? (
+                        <span style={{ color: '#22c55e' }}>✓ {log.result.details?.reason ?? ''}</span>
                       ) : (
-                        <span style={{ color: '#ef4444' }}>✗ {log.result.reason ?? ''}</span>
+                        <span style={{ color: '#ef4444' }}>✗ {log.result.details?.reason ?? log.result.details?.error ?? ''}</span>
                       )
                     ) : '-'}
                   </td>
