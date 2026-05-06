@@ -1,20 +1,14 @@
 ---
 name: mteam-executor
 description: Use when executing M-Team tasks. Covers step execution (read description only), complete vs relay判断, handover protocol, and escalation criteria.
-version: 1.0.0
-author: Hermes Agent
 license: MIT
-metadata:
-  hermes:
-    tags: [m-team, task-pool, executor, multi-agent]
-    related_skills: [task-delegation, escalation-decisions]
 ---
 
 # M-Team Executor 执行方法论
 
 ## Overview
 
-Executor（maker / fixer / scholar / captain）执行 M-Team 任务的完整执行框架。核心原则：**认领时只看 description（做什么），goal 只在复盘时用来判断是否完成**。
+Executor执行 M-Team 任务的完整执行框架。核心原则：**认领时只看 description（做什么），goal 只在复盘时用来判断是否完成**。
 
 适用于所有从 M-Team 任务池执行任务的 agent。
 
