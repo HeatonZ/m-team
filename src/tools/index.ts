@@ -201,14 +201,25 @@ export function registerTools(api: OpenClawPluginApi, config: MTeamPluginConfig)
    - 这是多步骤任务的正常出口，**不是失败**
 
 2. 完成任务（最终完成）→ 调用 mteam_complete_task
-   - **只有当任务的完整 goal 已全部达成时**才使用
-   - 不确定 goal 是否全部达成 → 先 relay，不要直接 complete
-   - **在判断 goal 是否达成之前，禁止调用 complete_task**。先对照 goal 逐条检查：
 
-     a. 列出 goal 中要求的**每一条标准**
-     b. 对照 context 中已完成的步骤，逐一确认：每条标准是否都有对应的执行记录
-     c. 若有任何一条未满足 → relay，把下一条要做什么填入 description
-     d. 若全部满足 → complete_task
+   **完成前必须自问三个问题，全部通过才能 complete：**
+
+   **Q1：goal 真的全部达成了吗？**
+   - 列出 goal 中的每一条要求
+   - 对照 context 历史（从第一步到现在），逐一核对每条是否有执行记录
+   - description 写"一步完成"不等于 goal 只有一步——description 是当前步骤，不是任务终点
+   - **goal 说什么就检查什么，不看 description 怎么说**
+
+   **Q2：context 路径完整吗？**
+   - 多步骤任务的 context 应该有对应的多步记录
+   - 如果只有一步但 goal 明显需要多步 → relay，不是 complete
+   - 如果 context 某一步跳过了明显的前置步骤 → relay
+
+   **Q3：输出可以被验证吗？**
+   - 文件是否真实存在（不只是声称"已生成"）
+   - summary 是否有具体结论，不是空话
+
+   **只有 Q1+Q2+Q3 全部通过 → complete_task；有任何一条不满足 → relay。**
 
 3. 主动放弃（放回 pending 不追加 context）→ 调用 mteam_relinquish_task
    - 当你无法继续执行，需要暂时放弃时使用
