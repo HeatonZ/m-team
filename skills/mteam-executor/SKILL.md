@@ -1,6 +1,6 @@
 ---
 name: mteam-executor
-description: Use when executing tasks from the M-Team task pool. Covers claim decisions (read description only, not goal), step execution, complete vs relay判断, handover protocol, and escalation criteria.
+description: Use when executing M-Team tasks. Covers step execution (read description only), complete vs relay判断, handover protocol, and escalation criteria.
 version: 1.0.0
 author: Hermes Agent
 license: MIT
@@ -14,48 +14,19 @@ metadata:
 
 ## Overview
 
-Executor（maker / fixer / scholar / captain）从 M-Team 任务池认领任务后的完整执行框架。核心原则：**认领时只看 description（做什么），goal 只在复盘时用来判断是否完成**。
+Executor（maker / fixer / scholar / captain）执行 M-Team 任务的完整执行框架。核心原则：**认领时只看 description（做什么），goal 只在复盘时用来判断是否完成**。
 
 适用于所有从 M-Team 任务池执行任务的 agent。
 
 ## When to Use
 
-- 认领任务成功后，开始执行前
+- 开始执行前，明确这一步的完成标准
 - 执行过程中遇到障碍，需要判断下一步
 - 步骤完成，需要判断该 complete 还是 relay
 - 任务完成后写 contextOutput
 - 遇到自己处理不了的情况，需要判断升级还是重试
 
-## 一、接单判断
-
-认领成功后，先问三个问题：
-
-```
-description 清楚吗？
-├─ 否 → relay 回池子，step 写"description 模糊，无法判断执行方向"
-
-我有足够信息完成吗？（上下文 / 文件路径 / 工具）
-├─ 否，但可以自行获取 → 自行获取后继续
-├─ 否，且无法自行获取 → relay 回池子，step 写"缺少关键信息：{具体缺失}"
-
-属于我职责范围吗？
-├─ 否 → relay 回池子，step 写"不属于 {role} 职责，建议转给 {建议角色}"
-└─ 是 → 开始执行
-```
-
-接单后立即向 task.json 写入第一条 context step：
-
-```json
-{
-  "type": "step",
-  "executor": "{agentId}",
-  "step": "开始执行：{description}",
-  "output": { "summary": "已接单，开始执行" },
-  "completedAt": {timestamp}
-}
-```
-
-## 二、步骤执行框架
+## 一、步骤执行框架
 
 每一步执行前，明确回答：
 - 这一 step 的"完成标准"是什么？
