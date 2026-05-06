@@ -44,8 +44,11 @@ export function registerAfterToolCallHook(api: OpenClawPluginApi): void {
 
       if (toolName === 'mteam_publish_task') {
         // publish: 记录 publisher / description / goal（不含 input 防止泄露敏感数据）
+        // result 是 AgentToolResult，taskId 在 result.details.taskId
+        const resultObj = result as { details?: { taskId?: string } };
+        const publishedTaskId = resultObj?.details?.taskId ?? 'unknown';
         writeTaskLog({
-          taskId: taskId ?? (result as { taskId?: string })?.taskId ?? 'unknown',
+          taskId: publishedTaskId,
           action,
           sessionKey: sessionKey ?? null,
           operator: (params.publisher as string) ?? agentId ?? 'user',

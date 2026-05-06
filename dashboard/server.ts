@@ -23,7 +23,7 @@ const PUBLIC = path.join(DASHBOARD_DIR, 'public');
 const PORT = process.env.PORT || 3000;
 
 // Initialise DB path
-const WORKSPACE = process.env.WORKSPACE_ROOT || '/mnt/d/code/m-team';
+const WORKSPACE = process.env.WORKSPACE_ROOT || '/mnt/d/workspace/m-team';
 setWorkspaceRoot(WORKSPACE);
 
 const MIME = {
