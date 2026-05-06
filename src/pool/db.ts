@@ -38,11 +38,8 @@ export function isDbOpen(): boolean {
 }
 
 function initSchema(db: Database.Database): void {
-  // 先删除（测试用的 in-memory DB 每次全新创建，生产文件 DB 由 migration 处理）
-  db.exec(`DROP TABLE IF EXISTS task_logs;`);
-  db.exec(`DROP TABLE IF EXISTS tasks;`);
   db.exec(`
-    CREATE TABLE tasks (
+    CREATE TABLE IF NOT EXISTS tasks (
       task_id        TEXT PRIMARY KEY,
       description    TEXT NOT NULL,
       goal           TEXT NOT NULL,
@@ -57,7 +54,7 @@ function initSchema(db: Database.Database): void {
       updated_at     INTEGER NOT NULL
     );
 
-    CREATE TABLE task_logs (
+    CREATE TABLE IF NOT EXISTS task_logs (
       id          INTEGER PRIMARY KEY AUTOINCREMENT,
       task_id     TEXT NOT NULL,
       action      TEXT NOT NULL,
