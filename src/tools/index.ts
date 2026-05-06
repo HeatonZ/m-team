@@ -11,11 +11,12 @@ import type {
   AnyAgentTool,
   OpenClawPluginApi,
   PluginLogger,
-} from 'openclaw/plugin-sdk/core';
+} from 'openclaw/plugin-sdk';
+
 import {
   jsonResult,
-  readStringParam as readStr,
-  readNumberParam as readNum,
+  readStringParam,
+  readNumberParam,
 } from 'openclaw/plugin-sdk/core';
 
 // textResult(text, details) 和 failedTextResult 运行时等价，
@@ -44,14 +45,6 @@ import { TaskStatus } from '../schema/task.js';
 import { formatTaskNotifications, formatRelinquishNotifications, formatRelayNotifications, formatPublishNotifications, formatClaimNotifications, formatCancelNotifications, formatCloseNotifications, formatRejectNotifications, sendNotifications } from '../notifications.js';
 import type { NotificationConfig } from '../notifications.js';
 
-// ─── SDK 类型兼容别名 ────────────────────────────────────────────────────────
-
-/** readStringParam 的 m-team 别名 */
-export const readStringParam = readStr;
-
-/** readNumberParam 的 m-team 别名 */
-export const readNumberParam = readNum;
-
 // ─── taskId 格式校验（m-team 私有） ─────────────────────────────────────────
 
 /**
@@ -64,7 +57,7 @@ export function readTaskId(
   name: string,
   opts?: { required?: boolean }
 ): string | undefined {
-  const raw = readStr(rawParams ?? {}, name, opts);
+  const raw = readStringParam(rawParams ?? {}, name, opts);
   if (raw === undefined) return undefined;
 
   if (/^\d+$/.test(raw)) {
@@ -113,10 +106,10 @@ export function registerTools(api: OpenClawPluginApi, config: MTeamPluginConfig)
     } as AnyAgentTool['parameters'],
     async execute(_toolCallId: string, rawParams: Record<string, unknown>): Promise<Awaited<ReturnType<typeof jsonResult>>> {
       try {
-        const description = readStr(rawParams, 'description', { required: true });
-        const goal = readStr(rawParams, 'goal', { required: true });
-        const publisher = readStr(rawParams, 'publisher') ?? 'user';
-        const priority = readStr(rawParams, 'priority') ?? undefined;
+        const description = readStringParam(rawParams, 'description', { required: true });
+        const goal = readStringParam(rawParams, 'goal', { required: true });
+        const publisher = readStringParam(rawParams, 'publisher') ?? 'user';
+        const priority = readStringParam(rawParams, 'priority') ?? undefined;
         const taskId = publishTask({ description: description!, goal: goal!, input: rawParams.input as Record<string, unknown> | undefined, publisher, priority: priority ?? undefined });
         const task = getTask(taskId);
 
@@ -152,7 +145,7 @@ export function registerTools(api: OpenClawPluginApi, config: MTeamPluginConfig)
     async execute(_toolCallId: string, rawParams: Record<string, unknown>): Promise<Awaited<ReturnType<typeof jsonResult>>> {
       try {
         const taskId = readTaskId(rawParams, 'taskId', { required: true })!;
-        const agentId = readStr(rawParams, 'agentId', { required: true })!;
+        const agentId = readStringParam(rawParams, 'agentId', { required: true })!;
 
         const result = claimTask(taskId, agentId);
         if (!result.success) return failedTextResult(result.error ?? '操作失败', { success: result.success, reason: result.reason });
@@ -206,10 +199,7 @@ ${systemPrompt}`,
 
         return jsonResult({ ...result, runId: subagentResult?.runId, sessionKey });
       } catch (e: unknown) {
-        return failedTextResult<string, { status: "failed" }>(
-          (e as Error)?.message ?? String(e),
-          { status: "failed" }
-        );
+        throw e;
       }
     },
   }as AnyAgentTool);
@@ -240,15 +230,15 @@ ${systemPrompt}`,
     } as AnyAgentTool['parameters'],
     async execute(_toolCallId: string, rawParams: Record<string, unknown>): Promise<Awaited<ReturnType<typeof jsonResult>>> {
       try {
-        const taskId = readStr(rawParams, 'taskId', { required: true })!;
-        const agentId = readStr(rawParams, 'agentId');
-        const status = readStr(rawParams, 'status');
-        const contextStep = readStr(rawParams, 'contextStep');
+        const taskId = readStringParam(rawParams, 'taskId', { required: true })!;
+        const agentId = readStringParam(rawParams, 'agentId');
+        const status = readStringParam(rawParams, 'status');
+        const contextStep = readStringParam(rawParams, 'contextStep');
         const contextOutput = rawParams.contextOutput as { summary?: string; files?: string } | undefined;
-        const description = readStr(rawParams, 'description');
+        const description = readStringParam(rawParams, 'description');
 
         if (status !== undefined && !Object.values(TaskStatus).includes(status as TaskStatus)) {
-          throw new ToolInputError(`Invalid status '${status}', must be one of: ${Object.values(TaskStatus).join(', ')}`);
+          throw new Error(`Invalid status '${status}', must be one of: ${Object.values(TaskStatus).join(', ')}`);
         }
 
         let contextEntry = null;
@@ -275,10 +265,7 @@ ${systemPrompt}`,
 
         return jsonResult({ task });
       } catch (e: unknown) {
-        return failedTextResult<string, { status: "failed" }>(
-          (e as Error)?.message ?? String(e),
-          { status: "failed" }
-        );
+        throw e;
       }
     },
   }as AnyAgentTool);
@@ -300,8 +287,8 @@ ${systemPrompt}`,
     async execute(_toolCallId: string, rawParams: Record<string, unknown>): Promise<Awaited<ReturnType<typeof jsonResult>>> {
       try {
         const taskId = readTaskId(rawParams, 'taskId', { required: true })!;
-        const publisher = readStr(rawParams, 'publisher', { required: true })!;
-        const reason = readStr(rawParams, 'reason');
+        const publisher = readStringParam(rawParams, 'publisher', { required: true })!;
+        const reason = readStringParam(rawParams, 'reason');
         const result = cancelTask(taskId, publisher, reason);
         if (!result.success) return failedTextResult(result.error ?? '操作失败', { success: result.success, reason: result.reason });
 
@@ -316,10 +303,7 @@ ${systemPrompt}`,
 
         return jsonResult({ success: result.success, task: result.task });
       } catch (e: unknown) {
-        return failedTextResult<string, { status: "failed" }>(
-          (e as Error)?.message ?? String(e),
-          { status: "failed" }
-        );
+        throw e;
       }
     },
   }as AnyAgentTool);
@@ -348,7 +332,7 @@ ${systemPrompt}`,
     async execute(_toolCallId: string, rawParams: Record<string, unknown>): Promise<Awaited<ReturnType<typeof jsonResult>>> {
       try {
         const taskId = readTaskId(rawParams, 'taskId', { required: true })!;
-        const contextStep = readStr(rawParams, 'contextStep', { required: true })!;
+        const contextStep = readStringParam(rawParams, 'contextStep', { required: true })!;
         const contextOutput = rawParams.contextOutput as { summary?: string; files?: string[] } | undefined;
 
         const contextEntry = { step: contextStep, output: contextOutput || {} };
@@ -366,10 +350,7 @@ ${systemPrompt}`,
 
         return jsonResult({ success: result.success, task: result.task });
       } catch (e: unknown) {
-        return failedTextResult<string, { status: "failed" }>(
-          (e as Error)?.message ?? String(e),
-          { status: "failed" }
-        );
+        throw e;
       }
     },
   }as AnyAgentTool);
@@ -400,10 +381,10 @@ ${systemPrompt}`,
     async execute(_toolCallId: string, rawParams: Record<string, unknown>): Promise<Awaited<ReturnType<typeof jsonResult>>> {
       try {
         const taskId = readTaskId(rawParams, 'taskId', { required: true })!;
-        const agentId = readStr(rawParams, 'agentId', { required: true })!;
-        const contextStep = readStr(rawParams, 'contextStep', { required: true })!;
+        const agentId = readStringParam(rawParams, 'agentId', { required: true })!;
+        const contextStep = readStringParam(rawParams, 'contextStep', { required: true })!;
         const contextOutput = rawParams.contextOutput as { summary?: string; files?: string[] } | undefined;
-        const description = readStr(rawParams, 'description', { required: true })!;
+        const description = readStringParam(rawParams, 'description', { required: true })!;
 
         const contextEntry = { step: contextStep, output: contextOutput || {} };
         const result = relayTask(taskId, agentId, contextEntry, undefined, description);
@@ -420,10 +401,7 @@ ${systemPrompt}`,
 
         return jsonResult({ success: result.success, task: result.task });
       } catch (e: unknown) {
-        return failedTextResult<string, { status: "failed" }>(
-          (e as Error)?.message ?? String(e),
-          { status: "failed" }
-        );
+        throw e;
       }
     },
   } as AnyAgentTool);
@@ -445,8 +423,8 @@ ${systemPrompt}`,
     async execute(_toolCallId: string, rawParams: Record<string, unknown>): Promise<Awaited<ReturnType<typeof jsonResult>>> {
       try {
         const taskId = readTaskId(rawParams, 'taskId', { required: true })!;
-        const executorId = readStr(rawParams, 'executorId', { required: true })!;
-        const reason = readStr(rawParams, 'reason') ?? 'executor_relinquish';
+        const executorId = readStringParam(rawParams, 'executorId', { required: true })!;
+        const reason = readStringParam(rawParams, 'reason') ?? 'executor_relinquish';
         const result = relinquishTask(taskId, executorId, reason);
         if (!result.success) return failedTextResult(result.error ?? '操作失败', { success: result.success, reason: result.reason });
 
@@ -461,10 +439,7 @@ ${systemPrompt}`,
 
         return jsonResult({ success: result.success, reason: result.reason, task: result.task });
       } catch (e: unknown) {
-        return failedTextResult<string, { status: "failed" }>(
-          (e as Error)?.message ?? String(e),
-          { status: "failed" }
-        );
+        throw e;
       }
     },
   }as AnyAgentTool);
@@ -482,16 +457,13 @@ ${systemPrompt}`,
     } as AnyAgentTool['parameters'],
     async execute(_toolCallId: string, rawParams: Record<string, unknown>): Promise<Awaited<ReturnType<typeof jsonResult>>> {
       try {
-        const agentId = readStr(rawParams, 'agentId', { required: true })!;
+        const agentId = readStringParam(rawParams, 'agentId', { required: true })!;
         const pending = getPendingTasks(agentId);
         // 认领时只看 description，goal 不暴露给执行者
         const sanitized = pending.map(({ goal: _goal, ...rest }) => rest);
         return jsonResult({ pending: sanitized });
       } catch (e: unknown) {
-        return failedTextResult<string, { status: "failed" }>(
-          (e as Error)?.message ?? String(e),
-          { status: "failed" }
-        );
+        throw e;
       }
     },
   }as AnyAgentTool);
@@ -509,14 +481,11 @@ ${systemPrompt}`,
     } as AnyAgentTool['parameters'],
     async execute(_toolCallId: string, rawParams: Record<string, unknown>): Promise<Awaited<ReturnType<typeof jsonResult>>> {
       try {
-        const agentId = readStr(rawParams, 'agentId', { required: true })!;
+        const agentId = readStringParam(rawParams, 'agentId', { required: true })!;
         const activeTask = getAgentActiveTask(agentId);
         return jsonResult({ activeTask });
       } catch (e: unknown) {
-        return failedTextResult<string, { status: "failed" }>(
-          (e as Error)?.message ?? String(e),
-          { status: "failed" }
-        );
+        throw e;
       }
     },
   }as AnyAgentTool);
@@ -535,14 +504,11 @@ ${systemPrompt}`,
     } as AnyAgentTool['parameters'],
     async execute(_toolCallId: string, rawParams: Record<string, unknown>): Promise<Awaited<ReturnType<typeof jsonResult>>> {
       try {
-        const taskId = readStr(rawParams, 'taskId', { required: true })!;
+        const taskId = readStringParam(rawParams, 'taskId', { required: true })!;
         const task = getTask(taskId);
         return jsonResult({ task });
       } catch (e: unknown) {
-        return failedTextResult<string, { status: "failed" }>(
-          (e as Error)?.message ?? String(e),
-          { status: "failed" }
-        );
+        throw e;
       }
     },
   }as AnyAgentTool);
@@ -557,10 +523,7 @@ ${systemPrompt}`,
         const tasks = getAllTasks();
         return jsonResult({ tasks });
       } catch (e: unknown) {
-        return failedTextResult<string, { status: "failed" }>(
-          (e as Error)?.message ?? String(e),
-          { status: "failed" }
-        );
+        throw e;
       }
     },
   }as AnyAgentTool);
@@ -581,7 +544,7 @@ ${systemPrompt}`,
     async execute(_toolCallId: string, rawParams: Record<string, unknown>): Promise<Awaited<ReturnType<typeof jsonResult>>> {
       try {
         const taskId = readTaskId(rawParams, 'taskId', { required: true })!;
-        const publisher = readStr(rawParams, 'publisher', { required: true })!;
+        const publisher = readStringParam(rawParams, 'publisher', { required: true })!;
         const result = closeTask(taskId, publisher);
         if (!result.success) return failedTextResult(result.error ?? '操作失败', { success: result.success, reason: result.reason });
 
@@ -596,10 +559,7 @@ ${systemPrompt}`,
 
         return jsonResult({ success: result.success, task: result.task });
       } catch (e: unknown) {
-        return failedTextResult<string, { status: "failed" }>(
-          (e as Error)?.message ?? String(e),
-          { status: "failed" }
-        );
+        throw e;
       }
     },
   }as AnyAgentTool);
