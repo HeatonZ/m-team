@@ -178,7 +178,7 @@ export function registerTools(api: OpenClawPluginApi, config: MTeamPluginConfig)
 - 工作区约束：所有文件操作（读、写、终端命令）必须在任务目录内进行
 
 【必读】执行规范
-加载 mteam-executor skill（/skill mteam-executor），严格按照其中的决策框架和检查清单执行。
+加载 m-team-executor skill（/skill m-team-executor），严格按照其中的决策框架和检查清单执行。
 
 【任务认领状态】
 任务已被心跳 session（${agentId}）认领，处于 RUNNING 状态。

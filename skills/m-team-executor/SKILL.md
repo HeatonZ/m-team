@@ -1,5 +1,5 @@
 ---
-name: mteam-executor
+name: m-team-executor
 description: Use when executing M-Team tasks. Covers step execution (read description only), complete vs relay判断, handover protocol, and escalation criteria.
 license: MIT
 ---
