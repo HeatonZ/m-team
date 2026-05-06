@@ -108,10 +108,10 @@ T0                mteam_claim_task()
                   return { success, taskId, runId, sessionKey }
 
 T1                mteam_update_task             [executor 启动]
-                  ({ lastHeartbeatAt })
+                  ({ updatedAt })
 
 T2                mteam_update_task             [executor 跑任务]
-                  ({ lastHeartbeatAt })
+                  ({ updatedAt })
                        ...
 
 Tn                                             [executor 完成任务]
@@ -164,7 +164,7 @@ relay 时：
 
 Heartbeat Session 每轮检查：
 
-1. **自己有 running 任务？** → 更新 `lastHeartbeatAt`，跳过认领
+1. **自己有 running 任务？** → 更新 `updatedAt`，跳过认领
 2. **没有 running 任务？** → 查询 pending 任务并认领
 
-超过 20 分钟 `lastHeartbeatAt` 未更新的任务视为疑似卡住，超过 40 分钟视为死任务，由下一轮 heartbeat 的 sessions_list 检查后自动 relinquish 或忽略。
+超过 20 分钟 `updatedAt` 未更新的任务视为疑似卡住，超过 40 分钟视为死任务，由下一轮 heartbeat 的 sessions_list 检查后自动 relinquish 或忽略。

@@ -24,7 +24,7 @@
   "lastExecutor": "agent_2",
   "createdAt": 1745620000000,
   "completedAt": null,
-  "lastHeartbeatAt": null
+  "updatedAt": 1745620000000,
 }
 ```
 
@@ -43,7 +43,7 @@
 | `lastExecutor` | string\|null | 上一个 executor（relay 时传承）|
 | `createdAt` | number | 创建时间戳（毫秒）|
 | `completedAt` | number\|null | 完成时间戳 |
-| `lastHeartbeatAt` | number\|null | 最近一次心跳时间戳 |
+| `updatedAt` | number | 最后更新时间戳 |
 
 ### context 格式说明
 
@@ -140,11 +140,11 @@ mteam_claim_task({
 只更新心跳或追加 context 步骤。**不**用于完成或 relay。
 
 ```javascript
-// 只更新心跳
+// 只更新 updatedAt
 mteam_update_task({
   taskId: "task_xxx",
   agentId: "maker",
-  lastHeartbeatAt: Date.now()
+  updatedAt: Date.now()
 })
 
 // Executor 追加 context 步骤（配合 complete/relay 使用，由 executor session 调用）

@@ -148,7 +148,7 @@ export interface Task {
   lastExecutor: string | null;
   createdAt: number;
   completedAt: number | null;
-  lastHeartbeatAt: number | null;
+  updatedAt: number;
 }
 ```
 

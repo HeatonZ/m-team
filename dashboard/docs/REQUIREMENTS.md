@@ -18,7 +18,7 @@
 | 待认领（pending） | 任务 goal、优先级 badge、发布者 | `GET /api/tasks/pending` |
 | 执行中（running） | 任务 goal、当前 executor、心跳时间 | `GET /api/tasks/running` |
 
-- running 任务显示 `lastHeartbeatAt`（格式：本地时间字符串）
+- running 任务显示 `updatedAt`（格式：本地时间字符串）
 - pending 任务按 priority 排序（high → normal → low）
 - 数据每 15 秒自动刷新，支持手动刷新按钮
 
@@ -49,7 +49,7 @@
 - `lastExecutor` — 上一步执行者
 - `createdAt` — 创建时间
 - `completedAt` — 完成时间
-- `lastHeartbeatAt` — 最后心跳时间
+- `updatedAt` — 最后更新时间
 
 **Context 步骤历史**（排除第 0 条 input）：
 - 每步展示：`executor` | `step` 描述 | `completedAt` 时间
@@ -120,7 +120,7 @@ interface Task {
   lastExecutor: string | null;
   createdAt: number;         // Unix ms
   completedAt: number | null;
-  lastHeartbeatAt: number | null;
+  updatedAt: number;
 }
 
 interface ContextEntry {

@@ -40,7 +40,7 @@ export interface Task {
   lastExecutor: string | null;
   createdAt: number;
   completedAt: number | null;
-  lastHeartbeatAt: number | null;
+  updatedAt: number;
   priority: string;
 }
 
@@ -84,6 +84,6 @@ export const ops: {
     status: unknown,
     executor: unknown,
     context: unknown,
-    lastHeartbeatAt: number | null
-  ): { lastHeartbeatAt: number | null };
+    updatedAt: number
+  ): { updatedAt: number };
 };

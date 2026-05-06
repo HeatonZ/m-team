@@ -57,8 +57,8 @@ export const TaskDetailModal: FC<TaskDetailModalProps> = ({ task, onClose, onUpd
           <span className="field-value">{formatTime(task.completedAt)}</span>
         </Field>
 
-        <Field label="最后心跳">
-          <span className="field-value">{formatTime(task.lastHeartbeatAt)}</span>
+        <Field label="更新时间">
+          <span className="field-value">{formatTime(task.updatedAt)}</span>
         </Field>
 
         <Field label="描述">

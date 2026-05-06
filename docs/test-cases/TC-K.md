@@ -24,9 +24,9 @@
 **测试步骤：**
 
 1. 发布任务
-2. 调用更新接口，同时传入 status、executor、completedAt、lastHeartbeatAt、lastExecutor
+2. 调用更新接口，同时传入 status、executor、completedAt、updatedAt、lastExecutor
 3. 直接查询数据库（绕过 ORM）
-4. 验证：completedAt 正确映射到 completed_at 列，lastHeartbeatAt 映射到 last_heartbeat_at 列，lastExecutor 映射到 last_executor 列，值均正确
+4. 验证：completedAt 正确映射到 completed_at 列，updatedAt 映射到 updated_at 列，lastExecutor 映射到 last_executor 列，值均正确
 
 ---
 

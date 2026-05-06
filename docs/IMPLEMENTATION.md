@@ -76,7 +76,7 @@ CREATE TABLE tasks (
   last_executor  TEXT,
   created_at     INTEGER NOT NULL,
   completed_at   INTEGER,
-  last_heartbeat_at INTEGER
+  updated_at     INTEGER NOT NULL
 );
 
 CREATE INDEX idx_tasks_status      ON tasks(status);

@@ -21,8 +21,8 @@ export const TaskCard: FC<TaskCardProps> = ({ task, onClick }) => {
         <span>{PRIORITY_LABELS[task.priority]}</span>
         <span>📢 {escHtml(task.publisher)}</span>
         {task.executor && <span>⚙️ {escHtml(task.executor)}</span>}
-        {task.lastHeartbeatAt && (
-          <span>💚 {formatTime(task.lastHeartbeatAt)}</span>
+        {task.updatedAt && (
+          <span>💚 {formatTime(task.updatedAt)}</span>
         )}
         {task.completedAt && (
           <span>🏁 {formatTime(task.completedAt)}</span>
