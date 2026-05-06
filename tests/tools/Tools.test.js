@@ -263,10 +263,14 @@ describe('mteam_relay_task', () => {
     const taskId = publishTask({ description: 'd', goal: 'g' });
     claimTask(taskId, 'alice');
     const result = await callTool(api, 'mteam_relay_task', {
-      taskId, agentId: 'alice', contextStep: '步骤一完成', contextOutput: { summary: 'done' },
+      taskId, agentId: 'alice', contextStep: '步骤一完成', contextOutput: { summary: 'done' }, description: '继续下一步',
     });
+    console.log('relay result:', JSON.stringify(result));
+    if (!result.ok) {
+      console.log('relay failed, data:', JSON.stringify(result.data));
+      expect(result.ok).toBe(true); // will fail here and show data
+    }
     const data = extract(result);
-    expect(result.ok).toBe(true);
     expect(data.task.status).toBe('pending');
   });
 
@@ -275,7 +279,7 @@ describe('mteam_relay_task', () => {
     const taskId = publishTask({ description: 'd', goal: 'g' });
     claimTask(taskId, 'alice');
     const result = await callTool(api, 'mteam_relay_task', {
-      taskId, agentId: 'alice', contextStep: 's', contextOutput: { summary: 'x', files: ['out.txt'] },
+      taskId, agentId: 'alice', contextStep: 's', contextOutput: { summary: 'x', files: ['out.txt'] }, description: '后续处理',
     });
     expect(result.ok).toBe(true);
     expect(extract(result).task.status).toBe('pending');

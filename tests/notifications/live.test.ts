@@ -340,6 +340,7 @@ describe('通知发送端到端', () => {
         taskId,
         agentId: 'executor1',
         contextStep: '第一步完成，等待下一步',
+        description: '继续下一步',
       });
       expect(relayResult).toMatchObject({ ok: true });
 

@@ -60,7 +60,7 @@ describe('TC-I：文件系统持久化', () => {
       const pubResult = await callTool(api, 'mteam_publish_task', { description: 'd', goal: 'g' });
       const taskId = (extract(pubResult) as { taskId: string }).taskId;
       await callTool(api, 'mteam_claim_task', { taskId, agentId: 'alice' });
-      await callTool(api, 'mteam_relay_task', { taskId, agentId: 'alice', contextStep: 'step1', contextOutput: { summary: 'done' } });
+      await callTool(api, 'mteam_relay_task', { taskId, agentId: 'alice', contextStep: 'step1', contextOutput: { summary: 'done' }, description: 'step1' });
 
       const taskFile = path.join(TEST_WORKSPACE, 'tasks', taskId, 'task.json');
       const content = JSON.parse(fs.readFileSync(taskFile, 'utf8'));

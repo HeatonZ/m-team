@@ -68,7 +68,7 @@
     "dotenv": "^17.4.2",
     "esbuild": "^0.24.0",
     "nock": "^14.0.14",
-    "openclaw": "^2026.5.3",
+    "openclaw": "^2026.5.4",
     "typescript": "^6.0.3",
     "vitest": "^4.1.5"
   },

@@ -131,7 +131,7 @@ describe('TC-D：取消任务流程', () => {
       const pubResult = await callTool(api, 'mteam_publish_task', { description: 'd', goal: 'g' });
       const taskId = (extract(pubResult) as { taskId: string }).taskId;
       await callTool(api, 'mteam_claim_task', { taskId, agentId: 'alice' });
-      await callTool(api, 'mteam_relay_task', { taskId, agentId: 'alice', contextStep: 'alice_step', contextOutput: {} });
+      await callTool(api, 'mteam_relay_task', { taskId, agentId: 'alice', contextStep: 'alice_step', contextOutput: {}, description: 'alice_step' });
 
       const result = await callTool(api, 'mteam_cancel_task', { taskId, publisher: 'user', reason: 'reason' });
 

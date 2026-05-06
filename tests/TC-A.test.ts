@@ -83,7 +83,8 @@ describe('TC-A：正常完成流程', () => {
       const relayResult = await callTool(api, 'mteam_relay_task', {
         taskId, agentId: 'alice',
         contextStep: '数据清洗',
-        contextOutput: { summary: '清洗5000行', files: ['清洗结果.json'] }
+        contextOutput: { summary: '清洗5000行', files: ['清洗结果.json'] },
+        description: '数据清洗',
       });
       const relayData = extract(relayResult) as { success: boolean; task: unknown };
       const relayTask = relayData.task as { status: string; executor: string; lastExecutor: string; context: unknown[] };
@@ -100,13 +101,14 @@ describe('TC-A：正常完成流程', () => {
       const pubResult = await callTool(api, 'mteam_publish_task', { description: 'd', goal: 'g' });
       const taskId = (extract(pubResult) as { taskId: string }).taskId;
       await callTool(api, 'mteam_claim_task', { taskId, agentId: 'alice' });
-      await callTool(api, 'mteam_relay_task', { taskId, agentId: 'alice', contextStep: '数据清洗', contextOutput: {} });
+      await callTool(api, 'mteam_relay_task', { taskId, agentId: 'alice', contextStep: '数据清洗', contextOutput: {}, description: '数据清洗' });
       await callTool(api, 'mteam_claim_task', { taskId, agentId: 'bob' });
 
       const relayResult = await callTool(api, 'mteam_relay_task', {
         taskId, agentId: 'bob',
         contextStep: '生成图表',
-        contextOutput: { summary: '生成3张图表', files: ['图表1.png', '图表2.png', '图表3.png'] }
+        contextOutput: { summary: '生成3张图表', files: ['图表1.png', '图表2.png', '图表3.png'] },
+        description: '生成图表',
       });
       const relayData = extract(relayResult) as { success: boolean; task: unknown };
       const relayTask = relayData.task as { status: string; executor: string; lastExecutor: string; context: unknown[] };
@@ -124,9 +126,9 @@ describe('TC-A：正常完成流程', () => {
       const pubResult = await callTool(api, 'mteam_publish_task', { description: 'd', goal: 'g' });
       const taskId = (extract(pubResult) as { taskId: string }).taskId;
       await callTool(api, 'mteam_claim_task', { taskId, agentId: 'alice' });
-      await callTool(api, 'mteam_relay_task', { taskId, agentId: 'alice', contextStep: '数据清洗', contextOutput: {} });
+      await callTool(api, 'mteam_relay_task', { taskId, agentId: 'alice', contextStep: '数据清洗', contextOutput: {}, description: '数据清洗' });
       await callTool(api, 'mteam_claim_task', { taskId, agentId: 'bob' });
-      await callTool(api, 'mteam_relay_task', { taskId, agentId: 'bob', contextStep: '生成图表', contextOutput: {} });
+      await callTool(api, 'mteam_relay_task', { taskId, agentId: 'bob', contextStep: '生成图表', contextOutput: {}, description: '生成图表' });
       await callTool(api, 'mteam_claim_task', { taskId, agentId: 'alice' });
 
       const completeResult = await callTool(api, 'mteam_complete_task', {
@@ -147,9 +149,9 @@ describe('TC-A：正常完成流程', () => {
       const pubResult = await callTool(api, 'mteam_publish_task', { description: 'd', goal: 'g' });
       const taskId = (extract(pubResult) as { taskId: string }).taskId;
       await callTool(api, 'mteam_claim_task', { taskId, agentId: 'alice' });
-      await callTool(api, 'mteam_relay_task', { taskId, agentId: 'alice', contextStep: '数据清洗', contextOutput: {} });
+      await callTool(api, 'mteam_relay_task', { taskId, agentId: 'alice', contextStep: '数据清洗', contextOutput: {}, description: '数据清洗' });
       await callTool(api, 'mteam_claim_task', { taskId, agentId: 'bob' });
-      await callTool(api, 'mteam_relay_task', { taskId, agentId: 'bob', contextStep: '生成图表', contextOutput: {} });
+      await callTool(api, 'mteam_relay_task', { taskId, agentId: 'bob', contextStep: '生成图表', contextOutput: {}, description: '生成图表' });
       await callTool(api, 'mteam_claim_task', { taskId, agentId: 'alice' });
       await callTool(api, 'mteam_complete_task', { taskId, contextStep: '最终提交', contextOutput: {} });
 
@@ -221,7 +223,8 @@ describe('TC-A：正常完成流程', () => {
       const relayResult = await callTool(api, 'mteam_relay_task', {
         taskId, agentId: 'alice',
         contextStep: '第一步',
-        contextOutput: { files: ['step1_out.json'] }
+        contextOutput: { files: ['step1_out.json'] },
+        description: '第一步',
       });
       const relayData = extract(relayResult) as { success: boolean; task: unknown };
       const relayTask = relayData.task as { status: string };

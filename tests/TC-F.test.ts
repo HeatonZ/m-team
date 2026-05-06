@@ -59,7 +59,7 @@ describe('TC-F：Cancelled 任务的宽容处理', () => {
       await callTool(api, 'mteam_claim_task', { taskId, agentId: 'alice' });
       await callTool(api, 'mteam_cancel_task', { taskId, publisher: 'user', reason: 'reason' });
 
-      const result = await callTool(api, 'mteam_relay_task', { taskId, agentId: 'alice', contextStep: 's', contextOutput: {} });
+      const result = await callTool(api, 'mteam_relay_task', { taskId, agentId: 'alice', contextStep: 's', contextOutput: {}, description: 's' });
       const data = extract(result) as { success: boolean; reason: string };
       assert.equal((extract(result) as { success: boolean }).success, false);
       assert.equal((extract(result) as { reason: string }).reason, 'TASK_CANCELLED');

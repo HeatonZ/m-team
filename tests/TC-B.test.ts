@@ -47,7 +47,8 @@ describe('TC-B：中转交接流程', () => {
       const relayResult = await callTool(api, 'mteam_relay_task', {
         taskId, agentId: 'alice',
         contextStep: '第一步',
-        contextOutput: { summary: 'done' }
+        contextOutput: { summary: 'done' },
+        description: '第一步',
       });
       const relayData = extract(relayResult) as { success: boolean; task: unknown };
       const task = relayData.task as { status: string; executor: string | null; lastExecutor: string; context: unknown[] };
@@ -63,7 +64,7 @@ describe('TC-B：中转交接流程', () => {
       const pubResult = await callTool(api, 'mteam_publish_task', { description: 'd', goal: 'g' });
       const taskId = (extract(pubResult) as { taskId: string }).taskId;
       await callTool(api, 'mteam_claim_task', { taskId, agentId: 'alice' });
-      await callTool(api, 'mteam_relay_task', { taskId, agentId: 'alice', contextStep: '第一步', contextOutput: {} });
+      await callTool(api, 'mteam_relay_task', { taskId, agentId: 'alice', contextStep: '第一步', contextOutput: {}, description: '第一步' });
 
       const claimResult = await callTool(api, 'mteam_claim_task', { taskId, agentId: 'bob' });
       const claimData = extract(claimResult) as { success: boolean; task: { executor: string; lastExecutor: string } };
@@ -77,7 +78,7 @@ describe('TC-B：中转交接流程', () => {
       const pubResult = await callTool(api, 'mteam_publish_task', { description: 'd', goal: 'g' });
       const taskId = (extract(pubResult) as { taskId: string }).taskId;
       await callTool(api, 'mteam_claim_task', { taskId, agentId: 'alice' });
-      await callTool(api, 'mteam_relay_task', { taskId, agentId: 'alice', contextStep: '第一步', contextOutput: {} });
+      await callTool(api, 'mteam_relay_task', { taskId, agentId: 'alice', contextStep: '第一步', contextOutput: {}, description: '第一步' });
       await callTool(api, 'mteam_claim_task', { taskId, agentId: 'bob' });
 
       const completeResult = await callTool(api, 'mteam_complete_task', {
@@ -100,7 +101,7 @@ describe('TC-B：中转交接流程', () => {
       const taskId = (extract(pubResult) as { taskId: string }).taskId;
 
       await callTool(api, 'mteam_claim_task', { taskId, agentId: 'alice' });
-      await callTool(api, 'mteam_relay_task', { taskId, agentId: 'alice', contextStep: 'alice_step1', contextOutput: {} });
+      await callTool(api, 'mteam_relay_task', { taskId, agentId: 'alice', contextStep: 'alice_step1', contextOutput: {}, description: 'alice_step1' });
 
       await callTool(api, 'mteam_claim_task', { taskId, agentId: 'bob' });
       await callTool(api, 'mteam_relay_task', { taskId, agentId: 'bob', contextStep: 'bob_step1', contextOutput: {} });
@@ -127,7 +128,7 @@ describe('TC-B：中转交接流程', () => {
       const pubResult = await callTool(api, 'mteam_publish_task', { description: 'd', goal: 'g' });
       const taskId = (extract(pubResult) as { taskId: string }).taskId;
       await callTool(api, 'mteam_claim_task', { taskId, agentId: 'alice' });
-      await callTool(api, 'mteam_relay_task', { taskId, agentId: 'alice', contextStep: 'done', contextOutput: {} });
+      await callTool(api, 'mteam_relay_task', { taskId, agentId: 'alice', contextStep: 'done', contextOutput: {}, description: 'done' });
 
       // alice 的旧 session 窗口调用 completeTask
       const completeResult = await callTool(api, 'mteam_complete_task', {
