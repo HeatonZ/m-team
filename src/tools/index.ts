@@ -20,6 +20,7 @@ import { register as registerUpdate, } from './update.js';
 import { register as registerComplete, } from './complete.js';
 import { register as registerRelay, } from './relay.js';
 import { register as registerRelinquish, } from './relinquish.js';
+import { register as registerReject, } from './reject.js';
 import { register as registerCancel, } from './cancel.js';
 import { register as registerClose, } from './close.js';
 import { registerGetPending, registerGetAgentActive, registerGetTask, registerGetAllTasks } from './query.js';
@@ -45,6 +46,7 @@ export function registerTools(api: OpenClawPluginApi, config: MTeamPluginConfig)
     registerPublish(api, config);
     registerClaim(api, config);
     registerUpdate(api, config);
+    registerReject(api, config);
     registerComplete(api, config);
     registerRelay(api, config);
     registerRelinquish(api, config);
