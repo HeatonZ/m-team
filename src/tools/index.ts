@@ -19,6 +19,8 @@ import {
   readNumberParam,
 } from 'openclaw/plugin-sdk/core';
 
+import { sanitizeTask, sanitizeTaskList } from './helpers.js';
+
 // textResult(text, details) 和 failedTextResult 运行时等价，
 // SDK 类型声明存在但 runtime 导出路径不在 package.json exports 里，
 // 故本地实现（与 SDK 行为一致）。
@@ -151,6 +153,8 @@ export function registerTools(api: OpenClawPluginApi, config: MTeamPluginConfig)
         if (!result.success) return failedTextResult(result.error ?? '操作失败', { success: result.success, reason: result.reason });
 
         const task = getTask(taskId) ?? result.task;
+        // 不返回完整 task（含 goal），只返回必要字段
+        const sanitized = task ? sanitizeTask(task) : undefined;
 
         if (task && config.notifications?.length) {
           try {
@@ -197,7 +201,7 @@ ${systemPrompt}`,
 
         const subagentResult = await subagentRun;
 
-        return jsonResult({ ...result, runId: subagentResult?.runId, sessionKey });
+        return jsonResult({ success: result.success, taskId: result.taskId, task: sanitized, runId: subagentResult?.runId, sessionKey });
       } catch (e: unknown) {
         throw e;
       }
@@ -483,7 +487,7 @@ ${systemPrompt}`,
       try {
         const agentId = readStringParam(rawParams, 'agentId', { required: true })!;
         const activeTask = getAgentActiveTask(agentId);
-        return jsonResult({ activeTask });
+        return jsonResult({ activeTask: activeTask ? sanitizeTask(activeTask) : null });
       } catch (e: unknown) {
         throw e;
       }
@@ -506,7 +510,7 @@ ${systemPrompt}`,
       try {
         const taskId = readStringParam(rawParams, 'taskId', { required: true })!;
         const task = getTask(taskId);
-        return jsonResult({ task });
+        return jsonResult({ task: task ? sanitizeTask(task) : null });
       } catch (e: unknown) {
         throw e;
       }
@@ -521,7 +525,7 @@ ${systemPrompt}`,
     async execute(_toolCallId: string): Promise<Awaited<ReturnType<typeof jsonResult>>> {
       try {
         const tasks = getAllTasks();
-        return jsonResult({ tasks });
+        return jsonResult({ tasks: sanitizeTaskList(tasks) });
       } catch (e: unknown) {
         throw e;
       }
