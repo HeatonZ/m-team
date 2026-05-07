@@ -302,6 +302,15 @@ export function registerAgentEndHook(api: OpenClawPluginApi): void {
         `success=${success} duration=${durationMs ?? '?'} msgs=${messages?.length ?? 0}`
     );
 
+    // ── 读取 task.json（两个分支都需要） ──
+    const pluginConfig = (api.pluginConfig ?? {}) as Record<string, unknown>;
+    const workspaceRoot: string = (pluginConfig.workspaceRoot as string) ?? '/mnt/d/code/m-team';
+    const task = readTaskFile(taskId, workspaceRoot);
+    if (!task) {
+      api.logger?.warn(`[m-team] agent_end: 无法读取任务 ${taskId} 的 task.json，跳过`);
+      return;
+    }
+
     // ── 异常结束 → fail ──
     if (!success) {
       const errorMsg = error ?? 'unknown_error';
@@ -326,13 +335,6 @@ export function registerAgentEndHook(api: OpenClawPluginApi): void {
     }
 
     // ── 正常结束 → LLM 判断 complete/relay ──
-    const pluginConfig = (api.pluginConfig ?? {}) as Record<string, unknown>;
-    const workspaceRoot: string = (pluginConfig.workspaceRoot as string) ?? '/mnt/d/code/m-team';
-    const task = readTaskFile(taskId, workspaceRoot);
-    if (!task) {
-      api.logger?.warn(`[m-team] agent_end: 无法读取任务 ${taskId} 的 task.json，跳过`);
-      return;
-    }
 
     const runId = randomUUID();
     const sessionId = event.runId ?? runId;
