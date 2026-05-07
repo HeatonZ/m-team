@@ -43,6 +43,14 @@ export function registerSessionGuardHook(
         };
       }
 
+      // 心跳 session 禁止发布新任务（publish 应由 executor 主动完成后触发，或 manager 主动发布）
+      if (toolName === 'mteam_publish_task' && sessionKey?.endsWith(':heartbeat')) {
+        return {
+          block: true,
+          blockReason: `心跳 session（${sessionKey}）禁止发布新任务`,
+        };
+      }
+
       // close / reject / cancel：只有 publisher 才能成功执行
       // 拦截非 publisher 的调用（参数中 publisher 与调用者 agentId 不一致）
       if (
