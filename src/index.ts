@@ -15,6 +15,7 @@ import path from 'node:path';
 import { setNotifications } from './notifications.js';
 import { registerTools } from './tools/index.js';
 import { registerSubagentEndedHook } from './hooks/subagentEnded.js';
+import { registerAgentEndHook } from './hooks/agentEnd.js';
 import { registerHeartbeatPromptContributionHook } from './hooks/heartbeatPromptContribution.js';
 import { registerSessionGuardHook } from './hooks/sessionGuard.js';
 import { registerAfterToolCallHook } from './hooks/afterToolCall.js';
@@ -97,6 +98,7 @@ const plugin = definePluginEntry({
     registerTools(api, config);
 
     registerSubagentEndedHook(api);
+    registerAgentEndHook(api);
     registerAfterToolCallHook(api);
     registerHeartbeatPromptContributionHook(api, {
       executors: config.executors ?? ['maker', 'fixer', 'scholar', 'captain'],
