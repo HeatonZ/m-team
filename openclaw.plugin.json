@@ -82,8 +82,7 @@
     }
   },
   "skills": [
-    "./skills/m-team-publisher",
-    "./skills/m-team-executor"
+    "./skills/m-team-publisher"
   ],
   "contracts": {
     "tools": [
