@@ -19,6 +19,7 @@ import type {
   PluginHookAgentContext,
 } from 'openclaw/plugin-sdk/core';
 import { failTask, completeTask, relayTask } from '../pool/operations.js';
+import { writeTaskLog } from '../pool/db.js';
 import type { Task } from '../schema/task.js';
 
 const LLM_TIMEOUT_MS = 30000;
@@ -181,6 +182,13 @@ export function registerAgentEndHook(api: OpenClawPluginApi): void {
     if (!success) {
       const errorMsg = error ?? 'unknown_error';
       const result = failTask(taskId, errorMsg, undefined, { outcome: 'error', error: errorMsg });
+      writeTaskLog({
+        taskId,
+        action: 'fail',
+        sessionKey: sessionKey ?? undefined,
+        agentId: agentId ?? undefined,
+        error: errorMsg,
+      });
       api.logger?.info(
         result.success
           ? `[m-team] agent_end: 任务 ${taskId} 标记失败`
@@ -215,6 +223,12 @@ export function registerAgentEndHook(api: OpenClawPluginApi): void {
       const result = relayTask(taskId, executorId, {
         step: '[agent_end] executor 正常结束，hook 判断需要 relay',
       });
+      writeTaskLog({
+        taskId,
+        action: 'relay',
+        sessionKey: sessionKey ?? undefined,
+        agentId: agentId ?? undefined,
+      });
       api.logger?.info(
         result.success
           ? `[m-team] agent_end: 任务 ${taskId} → relay`
@@ -223,6 +237,12 @@ export function registerAgentEndHook(api: OpenClawPluginApi): void {
     } else {
       const result = completeTask(taskId, {
         step: '[agent_end] executor 正常结束，hook 判断任务完成',
+      });
+      writeTaskLog({
+        taskId,
+        action: 'complete',
+        sessionKey: sessionKey ?? undefined,
+        agentId: agentId ?? undefined,
       });
       api.logger?.info(
         result.success

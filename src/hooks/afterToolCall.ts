@@ -2,7 +2,7 @@
  * M-Team Hooks — after_tool_call
  *
  * 统一记录所有 mteam_* 工具调用的操作日志。
- * 替代原来散落在每个 operations 函数末尾的 writeTaskLog 调用。
+ * agent_end hook 负责生命周期终态事件（complete/relay/fail）。
  */
 
 import type {
@@ -13,7 +13,6 @@ import type {
 import { writeTaskLog } from '../pool/db.js';
 
 // toolName → action mapping
-// 注意：mteam_fail_task 是 agent_end hook 内部调用，不注册工具但保留 map 条目
 const TOOL_ACTION_MAP: Record<string, string> = {
   mteam_publish_task: 'publish',
   mteam_claim_task: 'claim',
@@ -21,7 +20,6 @@ const TOOL_ACTION_MAP: Record<string, string> = {
   mteam_cancel_task: 'cancel',
   mteam_relinquish_task: 'relinquish',
   mteam_close_task: 'close',
-  mteam_fail_task: 'fail',
 };
 
 export function registerAfterToolCallHook(api: OpenClawPluginApi): void {
