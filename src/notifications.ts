@@ -400,6 +400,24 @@ export function formatRejectNotifications(
 // 通知格式化 — task（完成）/ close
 // ============================================================
 
+export function formatFailNotifications(
+  task: Task,
+  notifications: NotificationConfig[]
+): FormattedNotification[] {
+  return formatBasicNotification(
+    task,
+    notifications,
+    (cfg, _agent) => cfg.agents.includes(task.executor ?? task.lastExecutor ?? 'unknown'),
+    (task) => [
+      `❌ 任务失败 [${task.taskId}]`,
+      ``,
+      `🎯 ${task.goal}`,
+      `📝 ${task.description}`,
+      `执行者: ${task.executor ?? task.lastExecutor ?? 'unknown'}`
+    ]
+  );
+}
+
 export function formatTaskNotifications(
   task: Task,
   notifications: NotificationConfig[]

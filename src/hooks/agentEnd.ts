@@ -20,6 +20,13 @@ import type {
 } from 'openclaw/plugin-sdk/core';
 import { failTask, completeTask, relayTask } from '../pool/operations.js';
 import { writeTaskLog } from '../pool/db.js';
+import {
+  sendNotifications,
+  getNotifications,
+  formatFailNotifications,
+  formatRelayNotifications,
+  formatTaskNotifications,
+} from '../notifications.js';
 import type { Task } from '../schema/task.js';
 
 const LLM_TIMEOUT_MS = 30000;
@@ -189,6 +196,10 @@ export function registerAgentEndHook(api: OpenClawPluginApi): void {
         agentId: agentId ?? undefined,
         error: errorMsg,
       });
+      sendNotifications(
+        formatFailNotifications(task, getNotifications()),
+        api.logger ?? null
+      ).catch(err => api.logger?.error(`[m-team] fail 通知发送失败: ${String(err)}`));
       api.logger?.info(
         result.success
           ? `[m-team] agent_end: 任务 ${taskId} 标记失败`
@@ -229,6 +240,12 @@ export function registerAgentEndHook(api: OpenClawPluginApi): void {
         sessionKey: sessionKey ?? undefined,
         agentId: agentId ?? undefined,
       });
+      if (result.task) {
+        sendNotifications(
+          formatRelayNotifications(result.task, getNotifications()),
+          api.logger ?? null
+        ).catch(err => api.logger?.error(`[m-team] relay 通知发送失败: ${String(err)}`));
+      }
       api.logger?.info(
         result.success
           ? `[m-team] agent_end: 任务 ${taskId} → relay`
@@ -244,6 +261,12 @@ export function registerAgentEndHook(api: OpenClawPluginApi): void {
         sessionKey: sessionKey ?? undefined,
         agentId: agentId ?? undefined,
       });
+      if (result.task) {
+        sendNotifications(
+          formatTaskNotifications(result.task, getNotifications()),
+          api.logger ?? null
+        ).catch(err => api.logger?.error(`[m-team] complete 通知发送失败: ${String(err)}`));
+      }
       api.logger?.info(
         result.success
           ? `[m-team] agent_end: 任务 ${taskId} → complete`
