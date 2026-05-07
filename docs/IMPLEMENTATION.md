@@ -1,6 +1,6 @@
 # M-Team — 源码结构与技术细节
 
-> 版本：2.0 | 更新：2026-04-29
+> 版本：3.0 | 更新：2026-05-07
 > 参考：[ARCHITECTURE.md](./ARCHITECTURE.md)、[TASK.md](./TASK.md)
 
 ---
@@ -9,7 +9,7 @@
 
 ```
 src/
-├── index.js               # 插件入口（register + 重新导出）
+├── index.ts               # 插件入口（register + 重新导出）
 │
 ├── pool/
 │   ├── db.js             # SQLite 连接 + tasks 表初始化 + 序列化
@@ -17,14 +17,18 @@ src/
 │   └── operations.js     # 所有写操作
 │
 ├── schema/
-│   └── task.js           # Task 模型 + 验证 + 格式化（纯函数）
+│   └── task.ts           # Task 模型 + 验证 + 格式化（纯函数）
 │
 ├── tools/
-│   ├── index.js          # 全部 9 个工具注册（Typebox schema）
+│   ├── index.ts          # 全部 9 个工具注册（Typebox schema）
 │   └── helpers.js        # 参数读取 / jsonResult 封装
 │
-└── hooks/
-    └── subagentEnded.js  # subagent_ended hook 处理器
+├── hooks/
+│   ├── agentEnd.ts            # agent_end hook：fail / relay / complete 自动判断
+│   ├── afterToolCall.ts       # afterToolCall hook：publish/claim/relinquish/reject/cancel/close 日志+通知
+│   └── heartbeatPromptContribution.ts  # heartbeat_prompt_contribution：注入手色 prompt
+│
+└── notifications.ts      # 通知格式化函数（9 个）
 ```
 
 ### 模块职责
@@ -32,29 +36,42 @@ src/
 | 模块 | 职责 |
 |------|------|
 | `pool/db.js` | SQLite 连接、tasks 表初始化、CRUD helpers、task ↔ row 序列化 |
-| `pool/operations.js` | 所有写操作（publish/claim/update/cancel/relinquish/complete/fail）|
+| `pool/operations.js` | 所有写操作（publish/claim/relinquish/reject/cancel/close/complete/relay/fail）|
 | `pool/index.js` | 只读查询（getPending/getTask/getAllTasks/formatNotifications）|
-| `schema/task.js` | Task 模型定义、createTask、validateTask、格式化输出（纯函数，可单元测试）|
-| `tools/index.js` | 9 个工具的 Typebox 参数定义 + execute 实现 |
+| `schema/task.ts` | Task 模型定义、createTask、validateTask、格式化输出（纯函数，可单元测试）|
+| `tools/index.ts` | 9 个工具的 Typebox 参数定义 + execute 实现 |
 | `tools/helpers.js` | readStr/readNum/jsonResult 等工具函数 |
-| `hooks/subagentEnded.js` | subagent_ended hook，自动 complete/fail 任务 |
+| `hooks/agentEnd.ts` | agent_end hook，读对话记录判断 complete/relay/fail |
+| `hooks/afterToolCall.ts` | afterToolCall hook，6 个工具操作的日志+通知 |
+| `hooks/heartbeatPromptContribution.ts` | heartbeat_prompt_contribution，注入手色 prompt |
+| `notifications.ts` | 9 个通知格式化函数 |
 
 ---
 
 ## 运行时数据流
 
 ```
-src/index.js (register)
+src/index.ts (register)
      │
      ├─ registerTools(api, config)
-     │       └─ tools/index.js
+     │       └─ tools/index.ts
      │               └─ 调用 pool/operations.js 写操作
      │                       └─ pool/db.js (SQLite)
      │
-     └─ registerSubagentEndedHook(api)
-             └─ hooks/subagentEnded.js
-                     └─ 调用 pool/operations.js completeTask/failTask
-                             └─ pool/db.js (SQLite)
+     ├─ registerAgentEndHook(api)
+     │       └─ hooks/agentEnd.ts
+     │               ├─ 异常退出 → failTask
+     │               ├─ LLM 判断 relay → relayTask
+     │               └─ LLM 判断 complete → completeTask
+     │                       └─ pool/db.js (SQLite)
+     │
+     ├─ registerAfterToolCallHook(api)
+     │       └─ hooks/afterToolCall.ts
+     │               └─ publish/claim/relinquish/reject/cancel/close 写日志+通知
+     │
+     └─ registerHeartbeatPromptContributionHook(api)
+             └─ hooks/heartbeatPromptContribution.ts
+                     └─ 注入手色 heartbeat prompt
 ```
 
 ---
@@ -101,7 +118,7 @@ npm run build    # esbuild bundle 到 dist/index.js
 esbuild 配置：
 - `platform=node` + `format=esm`
 - `external: node:* / openclaw / openclaw/plugin-sdk`
-- bundle 大小约 122KB（含 @sinclair/typebox runtime）
+- bundle 大小约 68KB（含 @sinclair/typebox runtime）
 
 ---
 
@@ -126,6 +143,7 @@ npm run test:run # 单次运行
     "entries": {
       "m-team": {
         "enabled": true,
+        "hooks": { "allowConversationAccess": true },
         "config": {
           "workspace": {
             "root": "/home/hjl/.openclaw/m-team"
@@ -155,11 +173,12 @@ npm run test:run # 单次运行
 | 配置项 | 说明 |
 |--------|------|
 | `workspaceRoot` | 工作区根目录，tasks/ 和 queue/ 建在此下 |
-| `notifications` | 任务状态变更时通知（publish / claim / complete / relay / relinquish / cancel）|
+| `notifications` | 任务状态变更时通知（publish / claim / complete / relay / fail / relinquish / cancel / close / reject）|
 | `notifications[].agents` | 限定特定 agent 触发通知（publisher/executor 匹配才发）。通常填入所有需要接收通知的 agentId，如 `["manager", "maker", "executor1"]`，配置一个账号即可覆盖全队 |
 | `notifications[].appId` | Feishu 机器人的 app_id（provider=feishu 时必填） |
 | `notifications[].appSecret` | Feishu 机器人的 app_secret（provider=feishu 时必填） |
 | `notifications[].discordToken` | Discord 机器人的 bot token（provider=discord 时必填） |
+| `hooks.allowConversationAccess` | 必须为 `true`，否则 agent_end hook 静默跳过 |
 
 ---
 
@@ -174,7 +193,7 @@ npm run test:run # 单次运行
 安装步骤：
 ```bash
 npm install && npm run build
-openclaw plugins install ~/code/m-team --force
+openclaw plugins install /mnt/d/code/m-team --force
 openclaw gateway restart
 ```
 

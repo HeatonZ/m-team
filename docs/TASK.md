@@ -1,6 +1,6 @@
 # M-Team — 任务格式与 Tool API
 
-> 版本：2.1 | 更新：2026-04-29
+> 版本：3.0 | 更新：2026-05-07
 > 参考：[ARCHITECTURE.md](./ARCHITECTURE.md)、[SESSION.md](./SESSION.md)
 
 ---
@@ -24,7 +24,7 @@
   "lastExecutor": "agent_2",
   "createdAt": 1745620000000,
   "completedAt": null,
-  "updatedAt": 1745620000000,
+  "updatedAt": 1745620000000
 }
 ```
 
@@ -60,23 +60,20 @@
 ### 状态流转
 
 ```
-PENDING ──claim──► RUNNING ──complete──► COMPLETED ──close──► CLOSED（终态）
+PENDING ──claim──► RUNNING ──agent_end(complete)──► COMPLETED ──close──► CLOSED（终态）
     ▲                       │
-    │ relay                 │ fail（subagent_ended hook 触发）
+    │ relay                 │ fail（agent_end hook 触发）
     └──relinquish──────────►FAILED
 ```
 
 ---
 
-## Tool API（13 个）
+## Tool API（9 个）
 
 | Tool | 调用者 | 说明 |
 |------|--------|------|
 | `mteam_publish_task` | 管理者 | 发布新任务（goal 必填，不可更改） |
 | `mteam_claim_task` | 执行者 | 认领任务（SQLite 事务，原子操作） |
-| `mteam_update_task` | 执行者 | 只更新心跳或追加 context |
-| `mteam_complete_task` | 执行者 | 完成任务，标记 completed |
-| `mteam_relay_task` | 执行者 | 接力，追加 context 后变回 pending |
 | `mteam_reject_task` | Publisher | 验收不通过，驳回任务到 pending |
 | `mteam_cancel_task` | 管理者 | Publisher 取消任务（不可再 relay） |
 | `mteam_relinquish_task` | 执行者 | 主动放弃（放回 pending） |
@@ -85,6 +82,8 @@ PENDING ──claim──► RUNNING ──complete──► COMPLETED ──clo
 | `mteam_get_task` | 执行者 | 获取任务详情 |
 | `mteam_close_task` | Publisher | Publisher 验收通过，关闭任务（终态） |
 | `mteam_get_all_tasks` | 执行者 | 获取所有任务 |
+
+> **注意**：`complete_task`、`relay_task`、`update_task` 已移除。executor 执行完后不调用任何管理工具，complete/relay/fail 由 `agent_end` hook 在 session 结束时自动判断并执行。
 
 ---
 
@@ -134,51 +133,7 @@ mteam_claim_task({
  */
 ```
 
----
-
-### mteam_update_task
-
-只更新心跳或追加 context 步骤。**不**用于完成或 relay。
-
-```javascript
-// 只更新 updatedAt
-mteam_update_task({
-  taskId: "task_xxx",
-  agentId: "maker",
-  updatedAt: Date.now()
-})
-
-// Executor 追加 context 步骤（配合 complete/relay 使用，由 executor session 调用）
-mteam_update_task({
-  taskId: "task_xxx",
-  agentId: "maker",
-  contextStep: "联系供应商确认价格",
-  contextOutput: {
-    summary: "联系了5家，3家回复",
-    files: ["data/contact_log.md"]
-  }
-})
-```
-
-**注意**：`status` 字段不再由外部调用控制。完成用 `mteam_complete_task`，接力用 `mteam_relay_task`。
-
----
-
-### mteam_complete_task
-
-Executor 完成任务，标记 `completed`，发送通知。
-
-```javascript
-mteam_complete_task({
-  taskId: "task_xxx",
-  contextStep: "搜索1688供应商",
-  contextOutput: {
-    summary: "找到10家供应商",
-    files: ["data/suppliers.json"]
-  }
-})
-// 返回: { success: true, task: { ... } }
-```
+**executor 执行完后不调用任何工具**，直接结束 session。后续 complete/relay/fail 由 `agent_end` hook 处理。
 
 ---
 
@@ -198,27 +153,6 @@ mteam_reject_task({
 
 ---
 
-### mteam_relay_task
-
-Executor 完成当前步骤并交接给下一个 agent。追加 context 后任务变回 `pending`。
-
-```javascript
-mteam_relay_task({
-  taskId: "task_xxx",
-  agentId: "maker",
-  contextStep: "搜索1688供应商",
-  contextOutput: {
-    summary: "找到10家供应商",
-    files: ["data/suppliers.json"]
-  },
-  description: "联系供应商询价"
-})
-// 返回: { success: true, task: { ... } }
-// 调用后 status → pending，executor → null，description 更新，context 追加当前步骤
-```
-
----
-
 ### mteam_cancel_task
 
 Publisher 取消任务。取消后任务进入 `cancelled` 状态，不可 relay。
@@ -231,7 +165,7 @@ mteam_cancel_task({
 })
 ```
 
-**注意**：只有任务的原始 `publisher` 才能取消。`cancelled` 状态的任务可以被 `updateTask` 追加 context（用于记录取消原因），但不能进入 `running` 状态。
+**注意**：只有任务的原始 `publisher` 才能取消。`cancelled` 状态的任务不可进入 `running` 状态。
 
 ---
 
@@ -249,7 +183,7 @@ mteam_relinquish_task({
 
 **两种 relinquish 场景**：
 - **Executor session 主动放弃**：自己判断无法完成，调用 `relinquish_task({ executorId: "maker" })`
-- **Heartbeat session 检测到 executor session 已死**：通过 sessions_list 检查 updatedAt 超过 20 分钟，主动调用 `relinquish_task` 释放任务
+- **Heartbeat session 检测到 executor session 已死**：通过 sessions_list 检查 updatedAt 超过 40 分钟，主动调用 `relinquish_task` 释放任务
 
 ---
 
@@ -296,6 +230,8 @@ mteam_close_task({
 
 **注意**：`closed` 是终态，不可逆。
 
+---
+
 ## 并发竞态保护
 
 `claimTask` 使用 SQLite `BEGIN IMMEDIATE` 事务：
@@ -309,3 +245,17 @@ COMMIT;
 ```
 
 `BEGIN IMMEDIATE` 在开始时即获取写锁，如果锁被占用则直接失败，保证只有一个 agent 能认领同一任务。
+
+---
+
+## agent_end hook 终态判断
+
+Executor Session 结束时，`agent_end` hook 读取完整对话记录，自动判断并执行：
+
+| 条件 | 动作 | 状态变化 |
+|------|------|---------|
+| `success=false`（异常退出） | `failTask` | `running` → `failed` |
+| LLM 判断需 relay | `relayTask` | `running` → `pending` |
+| LLM 判断完成 | `completeTask` | `running` → `completed` |
+
+这三个操作都在 hook 内部直接调用 operations 函数（不经过工具层），每个调用点同时写日志 + 发通知。

@@ -1,6 +1,6 @@
 # M-Team — 双 Session 模型
 
-> 版本：2.2 | 更新：2026-05-06
+> 版本：3.0 | 更新：2026-05-07
 > 参考：[ARCHITECTURE.md](./ARCHITECTURE.md)、[TASK.md](./TASK.md)
 
 ---
@@ -53,43 +53,58 @@ agent:{agentId}:m-team:{taskId}
 
 Executor Session 独立运行，**不占用 Heartbeat Session**。
 
+**executor 不调用任何管理工具**。只管执行 description 规定的步骤，然后结束 session。后续的 complete/relay/fail 由 `agent_end` hook 自动判断。
+
 ---
 
-## subagent_ended Hook
+## agent_end Hook
 
-Executor Session 结束时，Plugin 自动处理：
+Executor Session 结束时，`agent_end` hook 自动触发，根据 session 结束方式做不同处理：
 
-```javascript
-api.on('subagent_ended', async (event) => {
-  const { targetSessionKey, outcome, error } = event;
+```typescript
+api.on('agent_end', async (event) => {
+  // event: { success, messages, taskId, agentId, sessionKey, error }
 
-  // 只处理 agent:{agentId}:m-team:{taskId} 格式的 session
-  if (!targetSessionKey?.startsWith('agent:')) return;
-  if (!targetSessionKey?.includes(':m-team:')) return;
-  const taskId = targetSessionKey.split(':')[3];
+  // 1. 解析 sessionKey，提取 taskId
+  if (!sessionKey?.startsWith('agent:') || !sessionKey?.includes(':m-team:')) return;
+  const taskId = sessionKey.split(':')[3];
 
-  if (outcome === 'ok' || outcome === 'reset') {
-    // executor 已通过 relay_task 或 complete_task 自行处理任务状态
-    // subagent_ended 只打 log，不重复操作
-    log(`任务 ${taskId} executor 已处理 (outcome=${outcome})`);
+  // 2. 异常结束（success=false）→ 直接 fail
+  if (!success) {
+    const errorMsg = error ?? 'unknown_error';
+    failTask(taskId, errorMsg, undefined, { outcome: 'error', error: errorMsg });
+    writeTaskLog({ taskId, action: 'fail', sessionKey, agentId, error: errorMsg });
+    sendNotifications(formatFailNotifications(task, errorMsg));
+    return;
+  }
+
+  // 3. 正常结束 → LLM 读对话记录判断 complete 还是 relay
+  const decision = await judgeByLlm(messages, task);
+
+  if (decision === 'relay') {
+    relayTask(taskId, executorId, { step: '[agent_end] executor 正常结束，hook 判断需要 relay' });
+    writeTaskLog({ taskId, action: 'relay', sessionKey, agentId });
+    sendNotifications(formatRelayNotifications(result.task));
   } else {
-    // session 非正常结束（崩溃/异常）→ failTask
-    failTask(taskId, error || outcome);
+    completeTask(taskId, { step: '[agent_end] executor 正常结束，hook 判断任务完成' });
+    writeTaskLog({ taskId, action: 'complete', sessionKey, agentId });
+    sendNotifications(formatTaskNotifications(result.task));
   }
 });
 ```
 
-**结果**：
+**三种结果**：
 
-| outcome | 动作 |
-|---------|------|
-| `ok` / `reset` | 只 log（executor 已自行 complete 或 relay） |
-| 其他 | `failTask(taskId)` — 标记失败 |
+| 条件 | 动作 | 写日志 | 发通知 |
+|------|------|--------|--------|
+| `success=false`（异常退出） | `failTask` | ✅ | `formatFailNotifications` |
+| LLM 判断 relay | `relayTask` | ✅ | `formatRelayNotifications` |
+| LLM 判断 complete | `completeTask` | ✅ | `formatTaskNotifications` |
 
 **关键设计**：
-- executor 调用 `mteam_complete_task` 或 `mteam_relay_task` 后，任务状态已在 DB 中更新
-- subagent_ended 只负责"session 异常退出"兜底，不干扰正常流程
-- relay 后任务已是 PENDING，completeTask 会因状态不是 RUNNING 而幂等跳过
+- executor 不调用 complete/relay/fail，只管执行然后结束
+- `agent_end` 读取 `event.messages`（完整对话历史）判断下一步
+- 写日志 + 发通知都在 hook 内完成，不走工具层
 
 ---
 
@@ -107,13 +122,15 @@ T0                mteam_claim_task()
                     ←─ 立即返回 runId/sessionKey
                   return { success, taskId, runId, sessionKey }
 
-Tn                                             [executor 完成任务]
-                                             subagent_ended hook
-                                               → completeTask(taskId)
+Tn                                             [executor 执行 description 步骤]
+                                             [executor 结束 session]
+
+                                             agent_end hook
+                                               → LLM 判断 complete / relay / fail
                                              session 关闭
 
 Tn+1              mteam_get_agent_active()      [session 已关闭]
-                    → status=completed
+                    → status=completed 或 pending
                     → 本轮结束，轮询下一轮
 ```
 
@@ -121,27 +138,25 @@ Tn+1              mteam_get_agent_active()      [session 已关闭]
 
 ## 接力（Relay）流程
 
-当 executor 判断任务还需要下一步时，执行 relay：
+当 executor 执行完后，agent_end hook 判断需要 relay 时执行：
 
 ```
-Executor Session                      Heartbeat Session（下轮）
-───────────────                      ───────────────────────
+Agent B 执行 description 步骤
+  → description 步骤已做，但仍需继续
+  → executor 结束 session
 
-mteam_relay_task({
-  taskId: "xxx",
-  agentId: "maker",
-  contextStep: "整理报价单",
-  contextOutput: { summary: "整理了报价对比", files: ["data/quotes.xlsx"] },
-  description: "发送报价给客户"
-})
-  → status=pending                   mteam_get_pending()
-  → executor=null                      → status=running
-  → lastExecutor="maker"              → executor=agent2
-  → description="下一步描述"
+agent_end hook
+  → relayTask(taskId, executorId, { step: '...', description: '下一步描述' })
+  → status=pending
+  → executor=null
+  → lastExecutor="maker"
+  → description="下一棒要执行的具体步骤描述"
   session 结束
 
-                                        [executor 2 开始执行]
-                                        mteam_update_task(...)
+下一轮 Heartbeat：
+  mteam_get_pending()
+    → 新 executor 认领
+    → 继续执行
 ```
 
 relay 时：
@@ -160,4 +175,4 @@ Heartbeat Session 每轮检查：
 1. **自己有 running 任务？** → 跳过认领
 2. **没有 running 任务？** → 查询 pending 任务并认领
 
-`updatedAt` 由任务操作（claim/relay/complete/fail/cancel）自动更新。超过 20 分钟 `updatedAt` 未更新的 running 任务视为疑似卡住，超过 40 分钟视为死任务，由下一轮 heartbeat 的 sessions_list 检查后自动 relinquish 或忽略。
+`updatedAt` 由任务操作（claim/relay/complete/fail/cancel）自动更新。超过 40 分钟 `updatedAt` 未更新的 running 任务视为死任务，由 heartbeat sessions_list 检查后自动 relinquish。
