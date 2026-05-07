@@ -33,13 +33,12 @@ const CLAIM_PROMPT = `## 心跳任务：认领新任务
    - **肯定适合** → 认领
    - **不确定 / 模糊** → 跳过，不要侥幸认领
 3. 若有合适的 → mteam_claim_task({ agentId, taskId })
-4. 若没有合适的 → 回复 "HEARTBEAT_OK"
+4. 若没有合适的 → 回复原因
 
 **goal 不在认领决策范围内**，goal 是复盘时用的标尺（任务完成后对照检查是否达成），认领时不需要看。
 
 **禁止：不要执行任务，不要调用 relay_task / complete_task / relinquish_task / update_task，只做认领。**
-
-回复内容只写 "HEARTBEAT_OK";`;
+`;
 
 // ============================================================
 // Publisher prompt（验收逻辑）
