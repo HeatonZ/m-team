@@ -6,6 +6,7 @@ import type { OpenClawPluginApi } from 'openclaw/plugin-sdk';
 import type { MTeamPluginConfig } from '../config.js';
 import { textResult } from './shared.js';
 import { updateTask } from '../pool/index.js';
+import type { ContextStepInput } from '../pool/index.js';
 import { TaskStatus } from '../schema/task.js';
 import { UpdateTaskParams } from '../types/tools.js';
 import type { UpdateTaskParamsInterface } from '../types/tools.js';
@@ -27,7 +28,7 @@ export function register(
         throw new Error(`Invalid status '${status}', must be one of: ${Object.values(TaskStatus).join(', ')}`);
       }
 
-      const contextEntry = contextStep
+      const contextEntry: ContextStepInput | null = contextStep
         ? { step: contextStep, output: contextOutput || {} }
         : null;
 

@@ -26,7 +26,7 @@ export function register(
       const { publisher, reason } = rawParams;
 
       const result = cancelTask(taskId, publisher, reason);
-      if (!result.success) return failedTextResult(result.error ?? '操作失败', { success: result.success, reason: result.reason });
+      if (!result.success) return failedTextResult(result.reason || '操作失败', { success: result.success, reason: result.reason });
 
       if (result.task && config.notifications?.length) {
         try {

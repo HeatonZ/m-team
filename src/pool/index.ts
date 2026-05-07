@@ -21,7 +21,7 @@ import {
   type RelayResult,
   type CompleteResult,
   type CloseResult,
-  type ContextEntryInput
+  type ContextStepInput
 } from './operations';
 
 // ============================================================
@@ -30,7 +30,7 @@ import {
 
 export { setWorkspaceRoot, DB_PATH };
 export { publishTask, claimTask, updateTask, relinquishTask, relayTask, cancelTask, completeTask, failTask, closeTask };
-export type { ClaimResult, CancelResult, RelinquishResult, RelayResult, CompleteResult, CloseResult, ContextEntryInput };
+export type { ClaimResult, CancelResult, RelinquishResult, RelayResult, CompleteResult, CloseResult, ContextStepInput };
 export { getTaskLogs } from './db';
 export type { TaskLog, TaskLogInput } from './db';
 

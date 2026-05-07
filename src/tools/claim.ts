@@ -26,7 +26,7 @@ export function register(
       readTaskId(rawParams, 'taskId', { required: true }); // 格式校验
 
       const result = claimTask(taskId, agentId);
-      if (!result.success) return failedTextResult(result.error ?? '操作失败', { success: result.success, reason: result.reason });
+      if (!result.success) return failedTextResult(result.reason || '操作失败', { success: result.success, reason: result.reason });
 
       const task = getTask(taskId) ?? result.task;
       const sanitized = task ? sanitizeTask(task) : undefined;

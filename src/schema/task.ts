@@ -148,6 +148,20 @@ export function validateTask(task: unknown): ValidationResult {
 }
 
 // ============================================================
+// Patch（用于 updateTaskRow）
+// ============================================================
+
+export interface TaskPatch {
+  status?: TaskStatus;
+  executor?: string | null;
+  lastExecutor?: string | null;
+  description?: string;
+  context?: string; // JSON stringified ContextEntry[]
+  completedAt?: number;
+  updatedAt?: number;
+}
+
+// ============================================================
 // 构造
 // ============================================================
 

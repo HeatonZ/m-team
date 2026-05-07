@@ -14,9 +14,15 @@ export const ContextOutputSchema = {
   },
 } as const;
 
-export interface ContextOutputSchemaInterface {
+/**
+ * 步骤输出 — 与 schema/task.ts 的 ContextStepOutput 保持一致
+ * 工具层直接引用此 Interface，不自己定义
+ */
+export interface ContextStepOutputInterface {
   summary?: string;
   files?: string[];
+  error?: string;
+  [key: string]: unknown;
 }
 
 // ─── 各工具参数 Schema + Interface ─────────────────────────────────────────
@@ -172,7 +178,7 @@ export interface CloseTaskParamsInterface {
 export interface CompleteTaskParamsInterface {
   taskId: string;
   contextStep: string;
-  contextOutput?: ContextOutputSchemaInterface;
+  contextOutput?: ContextStepOutputInterface;
 }
 
 export interface RejectTaskParamsInterface {
@@ -184,7 +190,7 @@ export interface RelayTaskParamsInterface {
   taskId: string;
   agentId: string;
   contextStep: string;
-  contextOutput?: ContextOutputSchemaInterface;
+  contextOutput?: ContextStepOutputInterface;
   description: string;
 }
 
@@ -199,7 +205,7 @@ export interface UpdateTaskParamsInterface {
   agentId?: string;
   status?: 'running' | 'completed' | 'failed' | 'pending' | 'cancelled';
   contextStep?: string;
-  contextOutput?: ContextOutputSchemaInterface;
+  contextOutput?: ContextStepOutputInterface;
   description?: string;
 }
 

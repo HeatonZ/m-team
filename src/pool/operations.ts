@@ -17,7 +17,9 @@ import {
   TaskStatus,
   TaskPriority,
   type Task,
+  type TaskPatch,
   type ContextStepEntry,
+  type ContextStepOutput,
   createTask
 } from '../schema/task';
 
@@ -129,15 +131,15 @@ export function claimTask(taskId: string, agentId: string): ClaimResult {
 // updateTask
 // ============================================================
 
-export interface ContextEntryInput {
+export interface ContextStepInput {
   step: string;
-  output?: Record<string, unknown>;
+  output?: ContextStepOutput;
 }
 
 export function updateTask(
   taskId: string,
   status: string | null,
-  contextEntry: ContextEntryInput | null,
+  contextEntry: ContextStepInput | null,
   description: string | null,
   updatedAt: number | null,
   executorId: string | null
@@ -155,7 +157,7 @@ export function updateTask(
         return task; // relay 被拒绝，保持 cancelled
       }
       if (status === TaskStatus.COMPLETED || status === TaskStatus.FAILED) {
-        const patch: Record<string, unknown> = { status: status as Task['status'], completedAt: Date.now(), updatedAt: Date.now() };
+        const patch: TaskPatch = { status: status as Task['status'], completedAt: Date.now(), updatedAt: Date.now() };
         updateTaskRow(taskId, patch);
         const updated = getTaskRow(taskId)!;
         syncTaskJson(updated);
@@ -181,7 +183,7 @@ export function updateTask(
 
     // relay：重新放回 pending
     if (status === TaskStatus.PENDING) {
-      const patch: Record<string, unknown> = {
+      const patch: TaskPatch = {
         status: TaskStatus.PENDING,
         executor: null,
         lastExecutor: task.executor ?? null,
@@ -207,7 +209,7 @@ export function updateTask(
 
     // 普通状态更新
     if (status) {
-      const patch: Record<string, unknown> = { status: status as Task['status'] };
+      const patch: TaskPatch = { status: status as Task['status'] };
       if (status === TaskStatus.COMPLETED || status === TaskStatus.FAILED) {
         patch.completedAt = Date.now();
       }
@@ -264,7 +266,7 @@ export function cancelTask(taskId: string, publisher: string, reason?: string): 
       return { success: false, task, reason: 'ALREADY_TERMINAL' };
     }
 
-    const patch: Record<string, unknown> = {
+    const patch: TaskPatch = {
       status: TaskStatus.CANCELLED,
       executor: null,
       completedAt: Date.now(),
@@ -314,7 +316,7 @@ export function relinquishTask(
       completedAt: Date.now()
     });
 
-    const patch: Record<string, unknown> = {
+    const patch: TaskPatch = {
       status: TaskStatus.PENDING,
       executor: null,
       lastExecutor: executorId,
@@ -344,7 +346,7 @@ export interface RelayResult {
 export function relayTask(
   taskId: string,
   executorId: string,
-  contextEntry: ContextEntryInput,
+  contextEntry: ContextStepInput,
   description?: string
 ): RelayResult {
   init();
@@ -368,12 +370,12 @@ export function relayTask(
       completedAt: Date.now()
     });
 
-    const patch: Record<string, unknown> = {
+    const patch: TaskPatch = {
       status: TaskStatus.PENDING,
       executor: null,
       lastExecutor: executorId,
       context: JSON.stringify(newContext),
-      ...(description !== undefined && { description }),
+      ...(description !== undefined && { description } as Partial<TaskPatch>),
       updatedAt: Date.now()
     };
 
@@ -399,7 +401,7 @@ export interface CompleteResult {
 
 export function completeTask(
   taskId: string,
-  contextEntry: ContextEntryInput | null,
+  contextEntry: ContextStepInput | null,
   fallbackEntry?: { outcome?: string; error?: string }
 ): CompleteResult {
   init();
@@ -413,7 +415,7 @@ export function completeTask(
       return { success: false, error: 'TASK_NOT_RUNNING', reason: `TASK_NOT_RUNNING_${task.status}` };
     }
 
-    const patch: Record<string, unknown> = {
+    const patch: TaskPatch = {
       status: TaskStatus.COMPLETED,
       completedAt: Date.now(),
       executor: null,
@@ -426,9 +428,9 @@ export function completeTask(
       newContext.push({
         type: 'step',
         executor: task.executor || 'unknown',
-        step: (entryToAdd as ContextEntryInput).step || (entryToAdd as { outcome?: string }).outcome || 'completed',
-        output: (typeof (entryToAdd as ContextEntryInput).output !== 'undefined'
-          ? (entryToAdd as ContextEntryInput).output
+        step: (entryToAdd as ContextStepInput).step || (entryToAdd as { outcome?: string }).outcome || 'completed',
+        output: (typeof (entryToAdd as ContextStepInput).output !== 'undefined'
+          ? (entryToAdd as ContextStepInput).output
           : (entryToAdd as { error?: string }).error ? { error: (entryToAdd as { error?: string }).error } : {}) as ContextStepEntry['output'],
         completedAt: Date.now()
       });
@@ -454,7 +456,7 @@ export function completeTask(
 export function failTask(
   taskId: string,
   errorMsg: string | null,
-  contextEntry?: ContextEntryInput,
+  contextEntry?: ContextStepInput,
   fallbackEntry?: { outcome?: string; error?: string }
 ): CompleteResult {
   init();
@@ -468,7 +470,7 @@ export function failTask(
       return { success: false, error: 'TASK_NOT_RUNNING', reason: `TASK_NOT_RUNNING_${task.status}` };
     }
 
-    const patch: Record<string, unknown> = {
+    const patch: TaskPatch = {
       status: TaskStatus.FAILED,
       completedAt: Date.now(),
       executor: null,
@@ -481,9 +483,9 @@ export function failTask(
       newContext.push({
         type: 'step',
         executor: task.executor || 'unknown',
-        step: (entryToAdd as ContextEntryInput).step || (entryToAdd as { outcome?: string }).outcome || 'failed',
-        output: (typeof (entryToAdd as ContextEntryInput).output !== 'undefined'
-          ? (entryToAdd as ContextEntryInput).output
+        step: (entryToAdd as ContextStepInput).step || (entryToAdd as { outcome?: string }).outcome || 'failed',
+        output: (typeof (entryToAdd as ContextStepInput).output !== 'undefined'
+          ? (entryToAdd as ContextStepInput).output
           : (entryToAdd as { error?: string }).error ? { error: (entryToAdd as { error?: string }).error } : { error: errorMsg }) as ContextStepEntry['output'],
         completedAt: Date.now()
       });
@@ -525,7 +527,7 @@ export function closeTask(taskId: string, publisher: string): CloseResult {
       return { success: false, task, reason: 'NOT_PUBLISHER' };
     }
 
-    const patch: Record<string, unknown> = {
+    const patch: TaskPatch = {
       status: TaskStatus.CLOSED,
       completedAt: Date.now(),
       executor: null

@@ -26,7 +26,7 @@ export function register(
       const { executorId, reason } = rawParams;
 
       const result = relinquishTask(taskId, executorId, reason ?? 'executor_relinquish');
-      if (!result.success) return failedTextResult(result.error ?? '操作失败', { success: result.success, reason: result.reason });
+      if (!result.success) return failedTextResult(result.reason || '操作失败', { success: result.success, reason: result.reason });
 
       if (result.success && result.task && config.notifications?.length) {
         try {

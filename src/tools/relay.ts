@@ -5,7 +5,7 @@
 import type { OpenClawPluginApi } from 'openclaw/plugin-sdk';
 import type { MTeamPluginConfig } from '../config.js';
 import { textResult, failedTextResult, readTaskId } from './shared.js';
-import { relayTask } from '../pool/index.js';
+import { ContextStepInput, relayTask } from '../pool/index.js';
 import { formatRelayNotifications } from '../notifications.js';
 import { sendNotifications } from '../notifications.js';
 import { RelayTaskParams } from '../types/tools.js';
@@ -25,9 +25,9 @@ export function register(
       const taskId = readTaskId(rawParams, 'taskId', { required: true })!;
       const { agentId, contextStep, contextOutput, description } = rawParams;
 
-      const contextEntry = { step: contextStep, output: contextOutput || {} };
+      const contextEntry: ContextStepInput = { step: contextStep, output: contextOutput || {} };
       const result = relayTask(taskId, agentId, contextEntry, description);
-      if (!result.success) return failedTextResult(result.error ?? '操作失败', { success: result.success, reason: result.reason });
+      if (!result.success) return failedTextResult(result.reason|| '操作失败', { success: result.success, reason: result.reason });
 
       if (result.task && config.notifications?.length) {
         try {

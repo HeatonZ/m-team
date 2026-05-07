@@ -6,7 +6,7 @@ import Database from 'better-sqlite3';
 import fs from 'node:fs';
 import path from 'node:path';
 import { TaskRow, serializeTask, deserializeTask } from '../schema/db-types';
-import type { Task } from '../schema/task';
+import type { Task, TaskPatch } from '../schema/task';
 
 let _db: Database.Database | null = null;
 
@@ -121,7 +121,7 @@ export function insertTask(task: Task): void {
   `).run(row);
 }
 
-export function updateTaskRow(taskId: string, patch: Record<string, unknown>): Task | null {
+export function updateTaskRow(taskId: string, patch: TaskPatch): Task | null {
   const db = getDb();
 
   const snakePatch: Record<string, unknown> = {};
