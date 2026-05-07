@@ -221,7 +221,7 @@ CONTEXT_OUTPUT: {"summary": "<步骤总结>", "files": ["<文件路径1>", ...]}
       `raw="${raw.slice(0, 300)}"`
     );
 
-    const relayMatch = raw.match(/DECISION:\s*RELAY\s*\n+下一步描述：(.+)/i);
+    const relayMatch = raw.match(/DECISION:\s*RELAY\b[\s\S]*?下一步描述：\s*(.+)/i);
     if (relayMatch) {
       const nextDesc = relayMatch[1].trim();
       const contextStep = extractField(raw, 'CONTEXT_STEP') || description || '执行步骤';
