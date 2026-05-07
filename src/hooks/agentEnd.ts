@@ -67,8 +67,8 @@ function formatMessages(messages: unknown[]): string {
 
     const label = role === 'user' ? 'USER' : role === 'assistant' ? 'AGENT' : `[${role}]`;
     // 截断过长内容，只保留核心
-    const truncated = content.length > 2000
-      ? content.slice(0, 2000) + '\n...（内容截断）'
+    const truncated = content.length > 4000
+      ? '...（前部内容截断）\n' + content.slice(-4000)
       : content;
     lines.push(`【${label}】${truncated}`);
   }
