@@ -160,7 +160,12 @@ export const GetTaskParams = {
 
 export const GetAllTasksParams = {
   type: 'object' as const,
-  properties: {} as const,
+  properties: {
+    status: {
+      type: 'string' as const,
+      description: '按状态筛选任务（pending / running / completed / failed / cancelled / closed）',
+    },
+  } as const,
   required: [] as const,
 } as const;
 
@@ -222,4 +227,5 @@ export interface GetTaskParamsInterface {
 }
 
 export interface GetAllTasksParamsInterface {
+  status?: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled' | 'closed';
 }

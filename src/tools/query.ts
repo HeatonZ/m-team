@@ -5,7 +5,7 @@
 
 import type { OpenClawPluginApi } from 'openclaw/plugin-sdk';
 import { textResult } from './shared.js';
-import { getPendingTasks, getAgentActiveTask, getTask, getAllTasks } from '../pool/index.js';
+import { getPendingTasks, getAgentActiveTask, getTask, getAllTasks, getTaskRowsByStatus } from '../pool/index.js';
 import { sanitizeTask, sanitizeTaskList, formatTaskLine } from './helpers.js';
 import {
   GetPendingParams,
@@ -79,10 +79,13 @@ export function registerGetAllTasks(api: OpenClawPluginApi): void {
   api.registerTool({
     name: 'mteam_get_all_tasks',
     label: '获取所有任务',
-    description: '获取所有任务',
+    description: '获取所有任务，可按状态筛选',
     parameters: GetAllTasksParams,
-    async execute(_toolCallId: string, _rawParams: GetAllTasksParamsInterface) {
-      const tasks = getAllTasks();
+    async execute(_toolCallId: string, rawParams: GetAllTasksParamsInterface) {
+      const { status } = rawParams;
+      const tasks = status
+        ? getTaskRowsByStatus(status)
+        : getAllTasks();
       return textResult('获取所有任务成功', { tasks: sanitizeTaskList(tasks) });
     },
   });
