@@ -55,6 +55,10 @@ export function register(
 任务已被心跳 session（${agentId}）认领，处于 RUNNING 状态。
 禁止调用 mteam_claim_task——任务不在 PENDING 状态，会失败。
 
+|【执行约束 — 必须遵守】
+- 你是 executor，不是 publisher。禁止调用 mteam_publish_task 创建新任务。
+- description 写什么就做什么，不拆分、不裂变、不创建子任务。
+- 做完后 relay 或 complete，不要干预任务结构。
 `;
 
       const subagentRun = api.runtime?.subagent?.run({
