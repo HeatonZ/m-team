@@ -3,7 +3,7 @@
  */
 
 import { readStringParam } from 'openclaw/plugin-sdk/core';
-import type { AnyAgentTool } from 'openclaw/plugin-sdk';
+import type { AnyAgentTool, OpenClawPluginApi } from 'openclaw/plugin-sdk';
 import { textResult, failedTextResult, readTaskId } from './shared.js';
 import { cancelTask } from '../pool/index.js';
 import { formatCancelNotifications } from '../notifications.js';
@@ -11,12 +11,13 @@ import type { NotificationConfig } from '../notifications.js';
 import { sendNotifications } from '../notifications.js';
 
 export function register(
-  api: { registerTool: (tool: AnyAgentTool) => void; logger: { info: (msg: string) => void; warn: (msg: string) => void } | null },
+  api: OpenClawPluginApi,
   config: { notifications?: NotificationConfig[] }
 ): void {
   api.logger?.info('[m-team] registering mteam_cancel_task');
   api.registerTool({
     name: 'mteam_cancel_task',
+    label: '取消任务',
     description: 'Publisher 取消任务（不可再 relay）',
     parameters: {
       type: 'object',

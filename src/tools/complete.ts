@@ -3,6 +3,7 @@
  */
 
 import { readStringParam } from 'openclaw/plugin-sdk/core';
+import type { OpenClawPluginApi } from 'openclaw/plugin-sdk';
 import type { AnyAgentTool } from 'openclaw/plugin-sdk';
 import { textResult, failedTextResult, readTaskId } from './shared.js';
 import { completeTask } from '../pool/index.js';
@@ -11,12 +12,13 @@ import type { NotificationConfig } from '../notifications.js';
 import { sendNotifications } from '../notifications.js';
 
 export function register(
-  api: { registerTool: (tool: AnyAgentTool) => void; logger: { info: (msg: string) => void; warn: (msg: string) => void } | null },
+  api: OpenClawPluginApi,
   config: { notifications?: NotificationConfig[] }
 ): void {
   api.logger?.info('[m-team] registering mteam_complete_task');
   api.registerTool({
     name: 'mteam_complete_task',
+    label: '完成任务',
     description: 'Executor 完成任务（带通知）',
     parameters: {
       type: 'object',

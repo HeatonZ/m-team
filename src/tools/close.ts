@@ -4,6 +4,7 @@
 
 import { readStringParam } from 'openclaw/plugin-sdk/core';
 import type { AnyAgentTool } from 'openclaw/plugin-sdk';
+import type { OpenClawPluginApi } from 'openclaw/plugin-sdk';
 import { textResult, failedTextResult, readTaskId } from './shared.js';
 import { closeTask } from '../pool/index.js';
 import { formatCloseNotifications } from '../notifications.js';
@@ -11,12 +12,13 @@ import type { NotificationConfig } from '../notifications.js';
 import { sendNotifications } from '../notifications.js';
 
 export function register(
-  api: { registerTool: (tool: AnyAgentTool) => void; logger: { info: (msg: string) => void; warn: (msg: string) => void } | null },
+  api: OpenClawPluginApi,
   config: { notifications?: NotificationConfig[] }
 ): void {
   api.logger?.info('[m-team] registering mteam_close_task');
   api.registerTool({
     name: 'mteam_close_task',
+    label: '验收关闭',
     description: 'Publisher 验收通过，关闭任务（终态）',
     parameters: {
       type: 'object',

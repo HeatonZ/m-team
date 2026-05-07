@@ -3,7 +3,8 @@
  */
 
 import type { AnyAgentTool } from 'openclaw/plugin-sdk';
-import { readStringParam } from 'openclaw/plugin-sdk/core';
+import type { OpenClawPluginApi } from 'openclaw/plugin-sdk';
+import type { AnyAgentTool } from 'openclaw/plugin-sdk';
 import { textResult, failedTextResult, readTaskId } from './shared.js';
 import { claimTask, getTask, relinquishTask } from '../pool/index.js';
 import { sanitizeTask } from './helpers.js';
@@ -12,16 +13,13 @@ import type { NotificationConfig } from '../notifications.js';
 import { sendNotifications } from '../notifications.js';
 
 export function register(
-  api: {
-    registerTool: (tool: AnyAgentTool) => void;
-    logger: { info: (msg: string) => void; error: (msg: string) => void; warn: (msg: string) => void } | null;
-    runtime?: { subagent?: { run: (opts: { sessionKey: string; message: string }) => Promise<{ runId: string | null }> } };
-  },
+  api: OpenClawPluginApi,
   config: { workspaceRoot?: string; notifications?: NotificationConfig[] }
 ): void {
   api.logger?.info('[m-team] registering mteam_claim_task');
   api.registerTool({
     name: 'mteam_claim_task',
+    label: '认领任务',
     description: '认领一个待处理任务（Plugin内部直接创建executor session）',
     parameters: {
       type: 'object',

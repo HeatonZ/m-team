@@ -4,6 +4,7 @@
 
 import { readStringParam } from 'openclaw/plugin-sdk/core';
 import type { AnyAgentTool } from 'openclaw/plugin-sdk';
+import type { OpenClawPluginApi } from 'openclaw/plugin-sdk';
 import { textResult, failedTextResult, readTaskId } from './shared.js';
 import { relinquishTask } from '../pool/index.js';
 import { formatRelinquishNotifications } from '../notifications.js';
@@ -11,12 +12,13 @@ import type { NotificationConfig } from '../notifications.js';
 import { sendNotifications } from '../notifications.js';
 
 export function register(
-  api: { registerTool: (tool: AnyAgentTool) => void; logger: { info: (msg: string) => void; warn: (msg: string) => void } | null },
+  api: OpenClawPluginApi,
   config: { notifications?: NotificationConfig[] }
 ): void {
   api.logger?.info('[m-team] registering mteam_relinquish_task');
   api.registerTool({
     name: 'mteam_relinquish_task',
+    label: '放弃任务',
     description: 'Executor 主动放弃当前任务（放回 pending）',
     parameters: {
       type: 'object',

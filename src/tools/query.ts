@@ -4,17 +4,16 @@
  */
 
 import { readStringParam } from 'openclaw/plugin-sdk/core';
-import type { AnyAgentTool } from 'openclaw/plugin-sdk';
+import type { OpenClawPluginApi } from 'openclaw/plugin-sdk';
 import { textResult } from './shared.js';
 import { getPendingTasks, getAgentActiveTask, getTask, getAllTasks } from '../pool/index.js';
 import { sanitizeTask, sanitizeTaskList, formatTaskLine } from './helpers.js';
 
-export function registerGetPending(
-  api: { registerTool: (tool: AnyAgentTool) => void; logger: { info: (msg: string) => void } | null }
-): void {
+export function registerGetPending(api: OpenClawPluginApi): void {
   api.logger?.info('[m-team] registering mteam_get_pending');
   api.registerTool({
     name: 'mteam_get_pending',
+    label: '获取待认领',
     description: '获取 agent 的待认领任务列表（该 agent 有进行中任务时返回空）',
     parameters: {
       type: 'object',
@@ -22,7 +21,7 @@ export function registerGetPending(
         agentId: { type: 'string', description: 'agentId' },
       },
       required: ['agentId'],
-    } as AnyAgentTool['parameters'],
+    },
     async execute(_toolCallId: string, rawParams: Record<string, unknown>) {
       const agentId = readStringParam(rawParams, 'agentId', { required: true })!;
       const pending = getPendingTasks(agentId);
@@ -40,12 +39,11 @@ export function registerGetPending(
   });
 }
 
-export function registerGetAgentActive(
-  api: { registerTool: (tool: AnyAgentTool) => void; logger: { info: (msg: string) => void } | null }
-): void {
+export function registerGetAgentActive(api: OpenClawPluginApi): void {
   api.logger?.info('[m-team] registering mteam_get_agent_active');
   api.registerTool({
     name: 'mteam_get_agent_active',
+    label: '获取进行中',
     description: '获取 agent 当前进行中的任务（一个 agent 不能同时做多个任务）',
     parameters: {
       type: 'object',
@@ -53,7 +51,7 @@ export function registerGetAgentActive(
         agentId: { type: 'string', description: 'agentId' },
       },
       required: ['agentId'],
-    } as AnyAgentTool['parameters'],
+    },
     async execute(_toolCallId: string, rawParams: Record<string, unknown>) {
       const agentId = readStringParam(rawParams, 'agentId', { required: true })!;
       const activeTask = getAgentActiveTask(agentId);
@@ -62,12 +60,11 @@ export function registerGetAgentActive(
   });
 }
 
-export function registerGetTask(
-  api: { registerTool: (tool: AnyAgentTool) => void; logger: { info: (msg: string) => void } | null }
-): void {
+export function registerGetTask(api: OpenClawPluginApi): void {
   api.logger?.info('[m-team] registering mteam_get_task');
   api.registerTool({
     name: 'mteam_get_task',
+    label: '获取任务详情',
     description: '获取任务详情',
     parameters: {
       type: 'object',
@@ -75,7 +72,7 @@ export function registerGetTask(
         taskId: { type: 'string', description: '任务ID' },
       },
       required: ['taskId'],
-    } as AnyAgentTool['parameters'],
+    },
     async execute(_toolCallId: string, rawParams: Record<string, unknown>) {
       const taskId = readStringParam(rawParams, 'taskId', { required: true })!;
       const task = getTask(taskId);
@@ -84,14 +81,13 @@ export function registerGetTask(
   });
 }
 
-export function registerGetAllTasks(
-  api: { registerTool: (tool: AnyAgentTool) => void; logger: { info: (msg: string) => void } | null }
-): void {
+export function registerGetAllTasks(api: OpenClawPluginApi): void {
   api.logger?.info('[m-team] registering mteam_get_all_tasks');
   api.registerTool({
     name: 'mteam_get_all_tasks',
+    label: '获取所有任务',
     description: '获取所有任务',
-    parameters: { type: 'object', properties: {} } as AnyAgentTool['parameters'],
+    parameters: { type: 'object', properties: {} },
     async execute(_toolCallId: string) {
       const tasks = getAllTasks();
       return textResult('获取所有任务成功', { tasks: sanitizeTaskList(tasks) });

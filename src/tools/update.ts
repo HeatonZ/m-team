@@ -4,18 +4,20 @@
 
 import { readStringParam } from 'openclaw/plugin-sdk/core';
 import type { AnyAgentTool } from 'openclaw/plugin-sdk';
+import type { OpenClawPluginApi } from 'openclaw/plugin-sdk';
 import { textResult } from './shared.js';
 import { updateTask } from '../pool/index.js';
 import { TaskStatus } from '../schema/task.js';
 
 
 export function register(
-  api: { registerTool: (tool: AnyAgentTool) => void; logger: { info: (msg: string) => void; warn: (msg: string) => void } | null },
-  config: { notifications?: NotificationConfig[] }
+  api: OpenClawPluginApi,
+  _config: Record<string, unknown>
 ): void {
   api.logger?.info('[m-team] registering mteam_update_task');
   api.registerTool({
     name: 'mteam_update_task',
+    label: '更新任务',
     description: '更新任务状态或追加步骤到 context',
     parameters: {
       type: 'object',

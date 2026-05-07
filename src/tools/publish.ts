@@ -4,6 +4,7 @@
 
 import { readStringParam } from 'openclaw/plugin-sdk/core';
 import type { AnyAgentTool } from 'openclaw/plugin-sdk';
+import type { OpenClawPluginApi } from 'openclaw/plugin-sdk';
 import { textResult } from './shared.js';
 import { publishTask, getTask } from '../pool/index.js';
 import { formatPublishNotifications } from '../notifications.js';
@@ -11,12 +12,13 @@ import type { NotificationConfig } from '../notifications.js';
 import { sendNotifications } from '../notifications.js';
 
 export function register(
-  api: { registerTool: (tool: AnyAgentTool) => void; logger: { info: (msg: string) => void; warn: (msg: string) => void } | null },
+  api: OpenClawPluginApi,
   config: { notifications?: NotificationConfig[] }
 ): void {
   api.logger?.info('[m-team] registering mteam_publish_task');
   api.registerTool({
     name: 'mteam_publish_task',
+    label: '发布任务',
     description: '发布任务到 M-Team 任务池',
     parameters: {
       type: 'object',

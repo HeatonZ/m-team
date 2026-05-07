@@ -5,19 +5,21 @@
 
 import { readStringParam } from 'openclaw/plugin-sdk/core';
 import type { AnyAgentTool } from 'openclaw/plugin-sdk';
-import { textResult } from './shared.js';
+import type { OpenClawPluginApi } from 'openclaw/plugin-sdk';
+import { textResult, readTaskId } from './shared.js';
 import { updateTask } from '../pool/index.js';
 import { formatRejectNotifications } from '../notifications.js';
 import type { NotificationConfig } from '../notifications.js';
 import { sendNotifications } from '../notifications.js';
 
 export function register(
-  api: { registerTool: (tool: AnyAgentTool) => void; logger: { info: (msg: string) => void; warn: (msg: string) => void } | null },
+  api: OpenClawPluginApi,
   config: { notifications?: NotificationConfig[] }
 ): void {
   api.logger?.info('[m-team] registering mteam_reject_task');
   api.registerTool({
     name: 'mteam_reject_task',
+    label: '驳回任务',
     description: 'Publisher 验收不通过，驳回任务到 pending 池子（仅 Publisher 使用）',
     parameters: {
       type: 'object',
