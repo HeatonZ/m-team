@@ -10,6 +10,7 @@ import { readStringParam } from 'openclaw/plugin-sdk/core';
 import type { PluginLogger } from 'openclaw/plugin-sdk';
 import type { NotificationConfig } from '../notifications.js';
 import { sendNotifications } from '../notifications.js';
+import type { FormattedNotification } from '../notifications.js';
 
 /**
  * SDK 标准成功返回：{ content: [{type:'text', text}], details }
@@ -25,15 +26,14 @@ export const failedTextResult = textResult;
 /**
  * 通用通知发送（自动 catch 异常，不阻塞主流程）
  */
-export async function notifyIfNeeded<T extends { task: unknown }>(
+export async function notifyIfNeeded(
   shouldNotify: boolean,
-  getNotifications: () => ReturnType<typeof import('../notifications.js').formatPublishNotifications>,
+  getNotifications: () => FormattedNotification[],
   logger: PluginLogger | null
 ): Promise<void> {
   if (!shouldNotify) return;
   try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await sendNotifications(getNotifications() as any, logger);
+    await sendNotifications(getNotifications(), logger);
   } catch (e) {
     logger?.warn('[m-team] 通知发送失败');
   }

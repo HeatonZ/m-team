@@ -2,14 +2,13 @@
  * mteam_relinquish_task 工具定义
  */
 
-import { readStringParam } from 'openclaw/plugin-sdk/core';
-import type { AnyAgentTool } from 'openclaw/plugin-sdk';
 import type { OpenClawPluginApi } from 'openclaw/plugin-sdk';
 import { textResult, failedTextResult, readTaskId } from './shared.js';
 import { relinquishTask } from '../pool/index.js';
 import { formatRelinquishNotifications } from '../notifications.js';
 import type { NotificationConfig } from '../notifications.js';
 import { sendNotifications } from '../notifications.js';
+import { RelinquishTaskParams } from '../types/plugin.js';
 
 export function register(
   api: OpenClawPluginApi,
@@ -20,19 +19,11 @@ export function register(
     name: 'mteam_relinquish_task',
     label: '放弃任务',
     description: 'Executor 主动放弃当前任务（放回 pending）',
-    parameters: {
-      type: 'object',
-      properties: {
-        taskId: { type: 'string', description: '任务ID' },
-        executorId: { type: 'string', description: '执行者 agentId' },
-        reason: { type: 'string', description: '放弃原因（会在 context step 中记录）' },
-      },
-      required: ['taskId', 'executorId'],
-    } as AnyAgentTool['parameters'],
+    parameters: RelinquishTaskParams,
     async execute(_toolCallId: string, rawParams: Record<string, unknown>) {
       const taskId = readTaskId(rawParams, 'taskId', { required: true })!;
-      const executorId = readStringParam(rawParams, 'executorId', { required: true })!;
-      const reason = readStringParam(rawParams, 'reason') ?? 'executor_relinquish';
+      const executorId = rawParams.executorId as string;
+      const reason = (rawParams.reason as string | undefined) ?? 'executor_relinquish';
 
       const result = relinquishTask(taskId, executorId, reason);
       if (!result.success) return failedTextResult(result.error ?? '操作失败', { success: result.success, reason: result.reason });

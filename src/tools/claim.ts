@@ -1,16 +1,14 @@
 /**
  * mteam_claim_task 工具定义
  */
-
-import type { AnyAgentTool } from 'openclaw/plugin-sdk';
 import type { OpenClawPluginApi } from 'openclaw/plugin-sdk';
-import type { AnyAgentTool } from 'openclaw/plugin-sdk';
 import { textResult, failedTextResult, readTaskId } from './shared.js';
 import { claimTask, getTask, relinquishTask } from '../pool/index.js';
 import { sanitizeTask } from './helpers.js';
 import { formatClaimNotifications } from '../notifications.js';
 import type { NotificationConfig } from '../notifications.js';
 import { sendNotifications } from '../notifications.js';
+import { ClaimTaskParams } from '../types/plugin.js';
 
 export function register(
   api: OpenClawPluginApi,
@@ -21,14 +19,7 @@ export function register(
     name: 'mteam_claim_task',
     label: '认领任务',
     description: '认领一个待处理任务（Plugin内部直接创建executor session）',
-    parameters: {
-      type: 'object',
-      properties: {
-        taskId: { type: 'string', description: '任务ID' },
-        agentId: { type: 'string', description: '认领者 agentId' },
-      },
-      required: ['taskId', 'agentId'],
-    } as AnyAgentTool['parameters'],
+    parameters: ClaimTaskParams,
     async execute(_toolCallId: string, rawParams: Record<string, unknown>) {
       const taskId = readTaskId(rawParams, 'taskId', { required: true })!;
       const agentId = readStringParam(rawParams, 'agentId', { required: true })!;

@@ -2,14 +2,13 @@
  * mteam_close_task 工具定义
  */
 
-import { readStringParam } from 'openclaw/plugin-sdk/core';
-import type { AnyAgentTool } from 'openclaw/plugin-sdk';
 import type { OpenClawPluginApi } from 'openclaw/plugin-sdk';
 import { textResult, failedTextResult, readTaskId } from './shared.js';
 import { closeTask } from '../pool/index.js';
 import { formatCloseNotifications } from '../notifications.js';
 import type { NotificationConfig } from '../notifications.js';
 import { sendNotifications } from '../notifications.js';
+import { CloseTaskParams } from '../types/plugin.js';
 
 export function register(
   api: OpenClawPluginApi,
@@ -20,17 +19,10 @@ export function register(
     name: 'mteam_close_task',
     label: '验收关闭',
     description: 'Publisher 验收通过，关闭任务（终态）',
-    parameters: {
-      type: 'object',
-      properties: {
-        taskId: { type: 'string', description: '任务ID' },
-        publisher: { type: 'string', description: '发布者（需与创建时 publisher 一致）' },
-      },
-      required: ['taskId', 'publisher'],
-    } as AnyAgentTool['parameters'],
+    parameters: CloseTaskParams,
     async execute(_toolCallId: string, rawParams: Record<string, unknown>) {
       const taskId = readTaskId(rawParams, 'taskId', { required: true })!;
-      const publisher = readStringParam(rawParams, 'publisher', { required: true })!;
+      const publisher = rawParams.publisher as string;
 
       const result = closeTask(taskId, publisher);
       if (!result.success) return failedTextResult(result.error ?? '操作失败', { success: result.success, reason: result.reason });

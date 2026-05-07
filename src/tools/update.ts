@@ -2,13 +2,12 @@
  * mteam_update_task 工具定义
  */
 
-import { readStringParam } from 'openclaw/plugin-sdk/core';
-import type { AnyAgentTool } from 'openclaw/plugin-sdk';
 import type { OpenClawPluginApi } from 'openclaw/plugin-sdk';
+import { readStringParam } from 'openclaw/plugin-sdk/core';
 import { textResult } from './shared.js';
 import { updateTask } from '../pool/index.js';
 import { TaskStatus } from '../schema/task.js';
-
+import { UpdateTaskParams } from '../types/plugin.js';
 
 export function register(
   api: OpenClawPluginApi,
@@ -19,33 +18,14 @@ export function register(
     name: 'mteam_update_task',
     label: '更新任务',
     description: '更新任务状态或追加步骤到 context',
-    parameters: {
-      type: 'object',
-      properties: {
-        taskId: { type: 'string', description: '任务ID' },
-        agentId: { type: 'string', description: '执行者 agentId（追加 context 时必填）' },
-        status: { type: 'string', description: '状态', enum: ['running', 'completed', 'failed', 'pending', 'cancelled'] },
-        contextStep: { type: 'string', description: '当前步骤描述' },
-        contextOutput: {
-          type: 'object',
-          description: '步骤输出',
-          properties: {
-            summary: { type: 'string', description: '步骤摘要' },
-            files: { type: 'array', items: { type: 'string' }, description: '任务文件夹内的相对路径' },
-          },
-        },
-        description: { type: 'string', description: '更新当前步骤描述（下一步做什么）' },
-      },
-      required: ['taskId'],
-    } as AnyAgentTool['parameters'],
+    parameters: UpdateTaskParams,
     async execute(_toolCallId: string, rawParams: Record<string, unknown>) {
       const taskId = readStringParam(rawParams, 'taskId', { required: true })!;
-      const agentId = readStringParam(rawParams, 'agentId');
-      const status = readStringParam(rawParams, 'status');
-      const contextStep = readStringParam(rawParams, 'contextStep');
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const contextOutput = rawParams.contextOutput as { summary?: string; files?: string } | undefined;
-      const description = readStringParam(rawParams, 'description');
+      const agentId = rawParams.agentId as string | undefined;
+      const status = rawParams.status as string | undefined;
+      const contextStep = rawParams.contextStep as string | undefined;
+      const contextOutput = rawParams.contextOutput as { summary?: string; files?: string[] } | undefined;
+      const description = rawParams.description as string | undefined;
 
       if (status !== undefined && !Object.values(TaskStatus).includes(status as TaskStatus)) {
         throw new Error(`Invalid status '${status}', must be one of: ${Object.values(TaskStatus).join(', ')}`);

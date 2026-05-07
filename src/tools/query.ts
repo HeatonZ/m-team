@@ -8,6 +8,12 @@ import type { OpenClawPluginApi } from 'openclaw/plugin-sdk';
 import { textResult } from './shared.js';
 import { getPendingTasks, getAgentActiveTask, getTask, getAllTasks } from '../pool/index.js';
 import { sanitizeTask, sanitizeTaskList, formatTaskLine } from './helpers.js';
+import {
+  GetPendingParams,
+  GetAgentActiveParams,
+  GetTaskParams,
+  GetAllTasksParams,
+} from '../types/plugin.js';
 
 export function registerGetPending(api: OpenClawPluginApi): void {
   api.logger?.info('[m-team] registering mteam_get_pending');
@@ -15,13 +21,7 @@ export function registerGetPending(api: OpenClawPluginApi): void {
     name: 'mteam_get_pending',
     label: '获取待认领',
     description: '获取 agent 的待认领任务列表（该 agent 有进行中任务时返回空）',
-    parameters: {
-      type: 'object',
-      properties: {
-        agentId: { type: 'string', description: 'agentId' },
-      },
-      required: ['agentId'],
-    },
+    parameters: GetPendingParams,
     async execute(_toolCallId: string, rawParams: Record<string, unknown>) {
       const agentId = readStringParam(rawParams, 'agentId', { required: true })!;
       const pending = getPendingTasks(agentId);
@@ -45,13 +45,7 @@ export function registerGetAgentActive(api: OpenClawPluginApi): void {
     name: 'mteam_get_agent_active',
     label: '获取进行中',
     description: '获取 agent 当前进行中的任务（一个 agent 不能同时做多个任务）',
-    parameters: {
-      type: 'object',
-      properties: {
-        agentId: { type: 'string', description: 'agentId' },
-      },
-      required: ['agentId'],
-    },
+    parameters: GetAgentActiveParams,
     async execute(_toolCallId: string, rawParams: Record<string, unknown>) {
       const agentId = readStringParam(rawParams, 'agentId', { required: true })!;
       const activeTask = getAgentActiveTask(agentId);
@@ -66,13 +60,7 @@ export function registerGetTask(api: OpenClawPluginApi): void {
     name: 'mteam_get_task',
     label: '获取任务详情',
     description: '获取任务详情',
-    parameters: {
-      type: 'object',
-      properties: {
-        taskId: { type: 'string', description: '任务ID' },
-      },
-      required: ['taskId'],
-    },
+    parameters: GetTaskParams,
     async execute(_toolCallId: string, rawParams: Record<string, unknown>) {
       const taskId = readStringParam(rawParams, 'taskId', { required: true })!;
       const task = getTask(taskId);
@@ -87,7 +75,7 @@ export function registerGetAllTasks(api: OpenClawPluginApi): void {
     name: 'mteam_get_all_tasks',
     label: '获取所有任务',
     description: '获取所有任务',
-    parameters: { type: 'object', properties: {} },
+    parameters: GetAllTasksParams,
     async execute(_toolCallId: string) {
       const tasks = getAllTasks();
       return textResult('获取所有任务成功', { tasks: sanitizeTaskList(tasks) });

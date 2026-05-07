@@ -2,14 +2,13 @@
  * mteam_complete_task 工具定义
  */
 
-import { readStringParam } from 'openclaw/plugin-sdk/core';
 import type { OpenClawPluginApi } from 'openclaw/plugin-sdk';
-import type { AnyAgentTool } from 'openclaw/plugin-sdk';
 import { textResult, failedTextResult, readTaskId } from './shared.js';
 import { completeTask } from '../pool/index.js';
 import { formatTaskNotifications } from '../notifications.js';
 import type { NotificationConfig } from '../notifications.js';
 import { sendNotifications } from '../notifications.js';
+import { CompleteTaskParams } from '../types/plugin.js';
 
 export function register(
   api: OpenClawPluginApi,
@@ -20,26 +19,10 @@ export function register(
     name: 'mteam_complete_task',
     label: '完成任务',
     description: 'Executor 完成任务（带通知）',
-    parameters: {
-      type: 'object',
-      properties: {
-        taskId: { type: 'string', description: '任务ID' },
-        contextStep: { type: 'string', description: '当前步骤描述（必填，必须说明这一步做了什么）' },
-        contextOutput: {
-          type: 'object',
-          description: '步骤输出',
-          properties: {
-            summary: { type: 'string', description: '步骤摘要' },
-            files: { type: 'array', items: { type: 'string' }, description: '任务文件夹内的相对路径' },
-          },
-        },
-      },
-      required: ['taskId', 'contextStep'],
-    } as AnyAgentTool['parameters'],
+    parameters: CompleteTaskParams,
     async execute(_toolCallId: string, rawParams: Record<string, unknown>) {
       const taskId = readTaskId(rawParams, 'taskId', { required: true })!;
-      const contextStep = readStringParam(rawParams, 'contextStep', { required: true })!;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const contextStep = rawParams.contextStep as string;
       const contextOutput = rawParams.contextOutput as { summary?: string; files?: string[] } | undefined;
 
       const contextEntry = { step: contextStep, output: contextOutput || {} };

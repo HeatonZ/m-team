@@ -3,14 +3,13 @@
  * Publisher 验收不通过，将任务打回 pending 池子
  */
 
-import { readStringParam } from 'openclaw/plugin-sdk/core';
-import type { AnyAgentTool } from 'openclaw/plugin-sdk';
 import type { OpenClawPluginApi } from 'openclaw/plugin-sdk';
 import { textResult, readTaskId } from './shared.js';
 import { updateTask } from '../pool/index.js';
 import { formatRejectNotifications } from '../notifications.js';
 import type { NotificationConfig } from '../notifications.js';
 import { sendNotifications } from '../notifications.js';
+import { RejectTaskParams } from '../types/plugin.js';
 
 export function register(
   api: OpenClawPluginApi,
@@ -21,22 +20,14 @@ export function register(
     name: 'mteam_reject_task',
     label: '驳回任务',
     description: 'Publisher 验收不通过，驳回任务到 pending 池子（仅 Publisher 使用）',
-    parameters: {
-      type: 'object',
-      properties: {
-        taskId: { type: 'string', description: '任务ID' },
-        reason: { type: 'string', description: '驳回原因' },
-      },
-      required: ['taskId', 'reason'],
-    } as AnyAgentTool['parameters'],
+    parameters: RejectTaskParams,
     async execute(_toolCallId: string, rawParams: Record<string, unknown>) {
-      const taskId = readStringParam(rawParams, 'taskId', { required: true })!;
-      const reason = readStringParam(rawParams, 'reason', { required: true })!;
+      const taskId = readTaskId(rawParams, 'taskId', { required: true })!;
+      const reason = rawParams.reason as string;
 
       const contextEntry = { step: reason, output: {} };
       const task = updateTask(taskId, 'pending', contextEntry, null, null, null);
 
-      // 通知 executor（驳回原因作为最后一步）
       if (config.notifications?.length && task) {
         try {
           const notifications = formatRejectNotifications(task, config.notifications);
