@@ -147,6 +147,7 @@ export function registerAgentEndDecisionHook(api: OpenClawPluginApi): void {
       // 非 m-team 格式的 session，不处理
       return;
     }
+    api.logger?.info(`[m-team] agent_end_decision 正在执行`);
 
     // 2. 只处理正常结束的情况
     // reason=complete + outcome=ok → executor 正常退出，需要判断
