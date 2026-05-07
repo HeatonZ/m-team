@@ -133,6 +133,17 @@ async function judgeByLlm(
       }).join('\n')
     : '(无 context 历史)';
 
+  // ── 输入日志 ──────────────────────────────────────────────────────────────
+  const startMs = Date.now();
+  const logTranscript = transcript.length > 500 ? transcript.slice(0, 500) + '\n...（截断）' : transcript;
+  const logContext = contextText.length > 400 ? contextText.slice(0, 400) + '\n...（截断）' : contextText;
+  console.error(
+    `[m-team] judgeByLlm 输入: taskId=${task.taskId} goal="${goal.slice(0, 80)}" ` +
+    `contextSteps=${context.length} msgs=${messages.length} description="${(description || '').slice(0, 100)}"`
+  );
+  console.error(`[m-team] judgeByLlm transcript(${transcript.length}): ${logTranscript.slice(0, 300)}`);
+  console.error(`[m-team] judgeByLlm context(${contextText.length}): ${logContext.slice(0, 200)}`);
+
   const prompt = `你是任务完成判断专家。以下是 M-Team 任务的完整上下文：
 
 === 任务目标（终态标尺）===
@@ -201,35 +212,61 @@ CONTEXT_OUTPUT: {"summary": "<步骤总结>", "files": ["<文件路径1>", ...]}
       .filter(Boolean)
       .join('\n');
 
+    const elapsedMs = Date.now() - startMs;
+
+    // ── LLM 原始输出日志 ──────────────────────────────────────────────────
+    console.error(
+      `[m-team] judgeByLlm 输出: taskId=${task.taskId} elapsed=${elapsedMs}ms ` +
+      `raw="${raw.slice(0, 300)}"`
+    );
+
     const relayMatch = raw.match(/DECISION:\s*RELAY\s*\n+下一步描述：(.+)/i);
     if (relayMatch) {
       const nextDesc = relayMatch[1].trim();
+      const contextStep = extractField(raw, 'CONTEXT_STEP') || description || '执行步骤';
+      const contextOutput = parseContextOutput(raw);
+      console.error(
+        `[m-team] judgeByLlm 判决: RELAY taskId=${task.taskId} nextDescription="${nextDesc.slice(0, 80)}" ` +
+        `contextStep="${contextStep.slice(0, 80)}"`
+      );
       return {
         decision: 'relay',
         nextDescription: nextDesc,
-        contextStep: extractField(raw, 'CONTEXT_STEP') || description || '执行步骤',
-        contextOutput: parseContextOutput(raw),
+        contextStep,
+        contextOutput,
       };
     }
 
     if (raw.toUpperCase().includes('DECISION:') && raw.toUpperCase().includes('COMPLETE')) {
+      const contextStep = extractField(raw, 'CONTEXT_STEP') || description || '执行步骤';
+      const contextOutput = parseContextOutput(raw);
+      console.error(
+        `[m-team] judgeByLlm 判决: COMPLETE taskId=${task.taskId} contextStep="${contextStep.slice(0, 80)}"`
+      );
       return {
         decision: 'complete',
-        contextStep: extractField(raw, 'CONTEXT_STEP') || description || '执行步骤',
-        contextOutput: parseContextOutput(raw),
+        contextStep,
+        contextOutput,
       };
     }
 
-    // 兜底：无法解析 → relay 回池子，description 保持不变让下一棒知道原本要做什么
+    // 兜底：无法解析 → relay 回池子
+    console.error(
+      `[m-team] judgeByLlm 判决: UNKNOWN（无法解析），强制 RELAY taskId=${task.taskId}`
+    );
     api.logger?.warn(`[m-team] agent_end LLM 判断结果无法解析 "${raw.slice(0, 200)}"，放回任务池`);
     return { decision: 'relay', contextStep: description || '执行步骤', contextOutput: {}, nextDescription: description };
   } catch (err) {
+    const elapsedMs = Date.now() - startMs;
+    console.error(
+      `[m-team] judgeByLlm 异常: taskId=${task.taskId} elapsed=${elapsedMs}ms error=${String(err)}`
+    );
     api.logger?.warn(`[m-team] agent_end LLM 判断失败: ${String(err)}，放回任务池`);
     return { decision: 'relay', contextStep: description || '执行步骤', contextOutput: {}, nextDescription: description };
   }
 }
 
-// ── 解析辅助 ────────────────────────────────────────────────────────────────
+// ── 解析辅助 ──────────────────────────────────────────────────────────────────
 
 function extractField(raw: string, field: string): string {
   const match = raw.match(new RegExp(`${field}:\\s*(.+?)(?:\\n|$)`, 'i'));
