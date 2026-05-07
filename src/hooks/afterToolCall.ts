@@ -13,18 +13,15 @@ import type {
 import { writeTaskLog } from '../pool/db.js';
 
 // toolName → action mapping
-// 注意：mteam_fail_task 是 subagent_ended hook 内部调用，不注册工具但保留 map 条目
+// 注意：mteam_fail_task 是 agent_end hook 内部调用，不注册工具但保留 map 条目
 const TOOL_ACTION_MAP: Record<string, string> = {
   mteam_publish_task: 'publish',
   mteam_claim_task: 'claim',
-  mteam_update_task: 'update',
   mteam_reject_task: 'reject',
   mteam_cancel_task: 'cancel',
   mteam_relinquish_task: 'relinquish',
-  mteam_relay_task: 'relay',
-  mteam_complete_task: 'complete',
-  mteam_fail_task: 'fail',
   mteam_close_task: 'close',
+  mteam_fail_task: 'fail',
 };
 
 export function registerAfterToolCallHook(api: OpenClawPluginApi): void {
@@ -64,24 +61,7 @@ export function registerAfterToolCallHook(api: OpenClawPluginApi): void {
         return;
       }
 
-      if (toolName === 'mteam_update_task') {
-        // update: params = { taskId, agentId, status, contextStep, description }
-        writeTaskLog({
-          taskId: taskId ?? 'unknown',
-          action,
-          sessionKey: sessionKey ?? null,
-          agentId: agentId ?? undefined,
-          params: {
-            status: params.status as string | undefined,
-            contextStep: params.contextStep as string | undefined,
-            description: params.description as string | undefined,
-          },
-          result: result as Record<string, unknown> | undefined,
-        });
-        return;
-      }
-
-      // claim / cancel / relinquish / relay / complete / fail / close
+      // claim / cancel / relinquish / close
       writeTaskLog({
         taskId: taskId ?? 'unknown',
         action,
