@@ -51,16 +51,10 @@ export function register(
 - 任务目录: ${taskWorkdir}
 - 工作区约束：所有文件操作（读、写、终端命令）必须在任务目录内进行
 
-|【必读】执行规范
-加载 m-team-executor skill（/skill m-team-executor），严格按照其中的决策框架和检查清单执行。
-
 |【任务认领状态】
 任务已被心跳 session（${agentId}）认领，处于 RUNNING 状态。
 禁止调用 mteam_claim_task——任务不在 PENDING 状态，会失败。
 
-|【禁止】
-- 在未调用任何工具的情况下自行结束会话（任务将永久卡在 running 状态）
-- 在 tool call 的 agentId 参数中传入 subagent 自己的 session agentId，必须传入 ${agentId}
 `;
 
       const subagentRun = api.runtime?.subagent?.run({
