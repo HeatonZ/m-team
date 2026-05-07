@@ -2,14 +2,14 @@
  * mteam_claim_task 工具定义
  */
 import type { OpenClawPluginApi } from 'openclaw/plugin-sdk';
-import { readStringParam } from 'openclaw/plugin-sdk/core';
+import type { MTeamPluginConfig } from '../config.js';
 import { textResult, failedTextResult, readTaskId } from './shared.js';
 import { claimTask, getTask, relinquishTask } from '../pool/index.js';
 import { sanitizeTask } from './helpers.js';
 import { formatClaimNotifications } from '../notifications.js';
 import { sendNotifications } from '../notifications.js';
+import type { ClaimTaskParamsInterface } from '../types/tools.js';
 import { ClaimTaskParams } from '../types/tools.js';
-import type { MTeamPluginConfig } from '../config.js';
 
 export function register(
   api: OpenClawPluginApi,
@@ -21,9 +21,9 @@ export function register(
     label: '认领任务',
     description: '认领一个待处理任务（Plugin内部直接创建executor session）',
     parameters: ClaimTaskParams,
-    async execute(_toolCallId: string, rawParams: Record<string, unknown>) {
-      const taskId = readTaskId(rawParams, 'taskId', { required: true })!;
-      const agentId = readStringParam(rawParams, 'agentId', { required: true })!;
+    async execute(_toolCallId: string, rawParams: ClaimTaskParamsInterface) {
+      const { taskId, agentId } = rawParams;
+      readTaskId(rawParams, 'taskId', { required: true }); // 格式校验
 
       const result = claimTask(taskId, agentId);
       if (!result.success) return failedTextResult(result.error ?? '操作失败', { success: result.success, reason: result.reason });

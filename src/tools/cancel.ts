@@ -3,16 +3,17 @@
  */
 
 import type { OpenClawPluginApi } from 'openclaw/plugin-sdk';
+import type { MTeamPluginConfig } from '../config.js';
 import { textResult, failedTextResult, readTaskId } from './shared.js';
 import { cancelTask } from '../pool/index.js';
 import { formatCancelNotifications } from '../notifications.js';
-import type { NotificationConfig } from '../notifications.js';
 import { sendNotifications } from '../notifications.js';
 import { CancelTaskParams } from '../types/tools.js';
+import type { CancelTaskParamsInterface } from '../types/tools.js';
 
 export function register(
   api: OpenClawPluginApi,
-  config: { notifications?: NotificationConfig[] }
+  config: MTeamPluginConfig
 ): void {
   api.logger?.info('[m-team] registering mteam_cancel_task');
   api.registerTool({
@@ -20,10 +21,9 @@ export function register(
     label: '取消任务',
     description: 'Publisher 取消任务（不可再 relay）',
     parameters: CancelTaskParams,
-    async execute(_toolCallId: string, rawParams: Record<string, unknown>) {
+    async execute(_toolCallId: string, rawParams: CancelTaskParamsInterface) {
       const taskId = readTaskId(rawParams, 'taskId', { required: true })!;
-      const publisher = rawParams.publisher as string;
-      const reason = rawParams.reason as string | undefined;
+      const { publisher, reason } = rawParams;
 
       const result = cancelTask(taskId, publisher, reason);
       if (!result.success) return failedTextResult(result.error ?? '操作失败', { success: result.success, reason: result.reason });

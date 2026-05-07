@@ -4,16 +4,17 @@
  */
 
 import type { OpenClawPluginApi } from 'openclaw/plugin-sdk';
+import type { MTeamPluginConfig } from '../config.js';
 import { textResult, readTaskId } from './shared.js';
 import { updateTask } from '../pool/index.js';
 import { formatRejectNotifications } from '../notifications.js';
-import type { NotificationConfig } from '../notifications.js';
 import { sendNotifications } from '../notifications.js';
 import { RejectTaskParams } from '../types/tools.js';
+import type { RejectTaskParamsInterface } from '../types/tools.js';
 
 export function register(
   api: OpenClawPluginApi,
-  config: { notifications?: NotificationConfig[] }
+  config: MTeamPluginConfig
 ): void {
   api.logger?.info('[m-team] registering mteam_reject_task');
   api.registerTool({
@@ -21,9 +22,9 @@ export function register(
     label: '驳回任务',
     description: 'Publisher 验收不通过，驳回任务到 pending 池子（仅 Publisher 使用）',
     parameters: RejectTaskParams,
-    async execute(_toolCallId: string, rawParams: Record<string, unknown>) {
+    async execute(_toolCallId: string, rawParams: RejectTaskParamsInterface) {
       const taskId = readTaskId(rawParams, 'taskId', { required: true })!;
-      const reason = rawParams.reason as string;
+      const { reason } = rawParams;
 
       const contextEntry = { step: reason, output: {} };
       const task = updateTask(taskId, 'pending', contextEntry, null, null, null);

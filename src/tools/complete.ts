@@ -3,16 +3,17 @@
  */
 
 import type { OpenClawPluginApi } from 'openclaw/plugin-sdk';
+import type { MTeamPluginConfig } from '../config.js';
 import { textResult, failedTextResult, readTaskId } from './shared.js';
 import { completeTask } from '../pool/index.js';
 import { formatTaskNotifications } from '../notifications.js';
-import type { NotificationConfig } from '../notifications.js';
 import { sendNotifications } from '../notifications.js';
 import { CompleteTaskParams } from '../types/tools.js';
+import type { CompleteTaskParamsInterface } from '../types/tools.js';
 
 export function register(
   api: OpenClawPluginApi,
-  config: { notifications?: NotificationConfig[] }
+  config: MTeamPluginConfig
 ): void {
   api.logger?.info('[m-team] registering mteam_complete_task');
   api.registerTool({
@@ -20,10 +21,9 @@ export function register(
     label: '完成任务',
     description: 'Executor 完成任务（带通知）',
     parameters: CompleteTaskParams,
-    async execute(_toolCallId: string, rawParams: Record<string, unknown>) {
+    async execute(_toolCallId: string, rawParams: CompleteTaskParamsInterface) {
       const taskId = readTaskId(rawParams, 'taskId', { required: true })!;
-      const contextStep = rawParams.contextStep as string;
-      const contextOutput = rawParams.contextOutput as { summary?: string; files?: string[] } | undefined;
+      const { contextStep, contextOutput } = rawParams;
 
       const contextEntry = { step: contextStep, output: contextOutput || {} };
       const result = completeTask(taskId, contextEntry);

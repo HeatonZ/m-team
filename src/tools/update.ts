@@ -3,15 +3,16 @@
  */
 
 import type { OpenClawPluginApi } from 'openclaw/plugin-sdk';
-import { readStringParam } from 'openclaw/plugin-sdk/core';
+import type { MTeamPluginConfig } from '../config.js';
 import { textResult } from './shared.js';
 import { updateTask } from '../pool/index.js';
 import { TaskStatus } from '../schema/task.js';
 import { UpdateTaskParams } from '../types/tools.js';
+import type { UpdateTaskParamsInterface } from '../types/tools.js';
 
 export function register(
   api: OpenClawPluginApi,
-  _config: Record<string, unknown>
+  _config: MTeamPluginConfig
 ): void {
   api.logger?.info('[m-team] registering mteam_update_task');
   api.registerTool({
@@ -19,13 +20,8 @@ export function register(
     label: '更新任务',
     description: '更新任务状态或追加步骤到 context',
     parameters: UpdateTaskParams,
-    async execute(_toolCallId: string, rawParams: Record<string, unknown>) {
-      const taskId = readStringParam(rawParams, 'taskId', { required: true })!;
-      const agentId = rawParams.agentId as string | undefined;
-      const status = rawParams.status as string | undefined;
-      const contextStep = rawParams.contextStep as string | undefined;
-      const contextOutput = rawParams.contextOutput as { summary?: string; files?: string[] } | undefined;
-      const description = rawParams.description as string | undefined;
+    async execute(_toolCallId: string, rawParams: UpdateTaskParamsInterface) {
+      const { taskId, agentId, status, contextStep, contextOutput, description } = rawParams;
 
       if (status !== undefined && !Object.values(TaskStatus).includes(status as TaskStatus)) {
         throw new Error(`Invalid status '${status}', must be one of: ${Object.values(TaskStatus).join(', ')}`);

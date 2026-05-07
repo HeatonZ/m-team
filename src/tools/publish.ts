@@ -3,16 +3,17 @@
  */
 
 import type { OpenClawPluginApi } from 'openclaw/plugin-sdk';
+import type { MTeamPluginConfig } from '../config.js';
 import { textResult } from './shared.js';
 import { publishTask, getTask } from '../pool/index.js';
 import { formatPublishNotifications } from '../notifications.js';
-import type { NotificationConfig } from '../notifications.js';
 import { sendNotifications } from '../notifications.js';
 import { PublishTaskParams } from '../types/tools.js';
+import type { PublishTaskParamsInterface } from '../types/tools.js';
 
 export function register(
   api: OpenClawPluginApi,
-  config: { notifications?: NotificationConfig[] }
+  config: MTeamPluginConfig
 ): void {
   api.logger?.info('[m-team] registering mteam_publish_task');
   api.registerTool({
@@ -20,18 +21,15 @@ export function register(
     label: '发布任务',
     description: '发布任务到 M-Team 任务池',
     parameters: PublishTaskParams,
-    async execute(_toolCallId: string, rawParams: Record<string, unknown>) {
-      const description = rawParams.description as string | undefined;
-      const goal = rawParams.goal as string | undefined;
-      const publisher = (rawParams.publisher as string | undefined) ?? 'user';
-      const priority = rawParams.priority as string | undefined;
+    async execute(_toolCallId: string, rawParams: PublishTaskParamsInterface) {
+      const { description, goal, publisher = 'user', priority, input } = rawParams;
 
       const taskId = publishTask({
-        description: description!,
-        goal: goal!,
-        input: rawParams.input as Record<string, unknown> | undefined,
+        description,
+        goal,
+        input,
         publisher,
-        priority: priority ?? undefined,
+        priority,
       });
 
       const task = getTask(taskId);

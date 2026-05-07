@@ -3,16 +3,17 @@
  */
 
 import type { OpenClawPluginApi } from 'openclaw/plugin-sdk';
+import type { MTeamPluginConfig } from '../config.js';
 import { textResult, failedTextResult, readTaskId } from './shared.js';
 import { relayTask } from '../pool/index.js';
 import { formatRelayNotifications } from '../notifications.js';
-import type { NotificationConfig } from '../notifications.js';
 import { sendNotifications } from '../notifications.js';
 import { RelayTaskParams } from '../types/tools.js';
+import type { RelayTaskParamsInterface } from '../types/tools.js';
 
 export function register(
   api: OpenClawPluginApi,
-  config: { notifications?: NotificationConfig[] }
+  config: MTeamPluginConfig
 ): void {
   api.logger?.info('[m-team] registering mteam_relay_task');
   api.registerTool({
@@ -20,15 +21,12 @@ export function register(
     label: '交接任务',
     description: 'Executor 完成当前步骤并交接给下一个 executor（追加 context 记录这一步，然后放回 pending 池子）',
     parameters: RelayTaskParams,
-    async execute(_toolCallId: string, rawParams: Record<string, unknown>) {
+    async execute(_toolCallId: string, rawParams: RelayTaskParamsInterface) {
       const taskId = readTaskId(rawParams, 'taskId', { required: true })!;
-      const agentId = rawParams.agentId as string;
-      const contextStep = rawParams.contextStep as string;
-      const contextOutput = rawParams.contextOutput as { summary?: string; files?: string[] } | undefined;
-      const description = rawParams.description as string;
+      const { agentId, contextStep, contextOutput, description } = rawParams;
 
       const contextEntry = { step: contextStep, output: contextOutput || {} };
-      const result = relayTask(taskId, agentId, contextEntry, undefined, description);
+      const result = relayTask(taskId, agentId, contextEntry, description);
       if (!result.success) return failedTextResult(result.error ?? '操作失败', { success: result.success, reason: result.reason });
 
       if (result.task && config.notifications?.length) {

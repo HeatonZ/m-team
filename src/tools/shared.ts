@@ -46,7 +46,7 @@ export async function notifyIfNeeded(
  * LLM 可能截断只取数字部分，此函数显式拒绝并给出完整格式示例
  */
 export function readTaskId(
-  rawParams: Record<string, unknown> | undefined,
+  rawParams: any,
   name: string,
   opts?: { required?: boolean }
 ): string | undefined {

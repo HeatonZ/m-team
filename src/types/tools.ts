@@ -14,19 +14,32 @@ export const ContextOutputSchema = {
   },
 } as const;
 
-// ─── 各工具参数 Schema ─────────────────────────────────────────────────────
+export interface ContextOutputSchemaInterface {
+  summary?: string;
+  files?: string[];
+}
+
+// ─── 各工具参数 Schema + Interface ─────────────────────────────────────────
 
 export const PublishTaskParams = {
   type: 'object' as const,
   properties: {
     goal: { type: 'string', description: '任务目标（executor 凭此判断任务是否适合自己，必须有区分度，不能只是标题）' },
     description: { type: 'string', description: '当前这一步做什么（每次只写一步，relay 时由上一个 executor 填写下一步）' },
-    input: { type: 'object', description: '初始输入数据', additionalProperties: true },
+    input: { type: 'object', description: '初始输入数据' },
     publisher: { type: 'string', description: '发布者，默认 "user"' },
     priority: { type: 'string', description: '优先级 high/normal/low，默认 normal', enum: ['high', 'normal', 'low'] },
   },
   required: ['goal', 'description'] as const,
 } as const;
+
+export interface PublishTaskParamsInterface {
+  goal: string;
+  description: string;
+  input?: { [k: string]: unknown };
+  publisher?: string;
+  priority?: 'high' | 'normal' | 'low';
+}
 
 export const ClaimTaskParams = {
   type: 'object' as const,
@@ -36,6 +49,11 @@ export const ClaimTaskParams = {
   },
   required: ['taskId', 'agentId'] as const,
 } as const;
+
+export interface ClaimTaskParamsInterface {
+  taskId: string;
+  agentId: string;
+}
 
 export const CancelTaskParams = {
   type: 'object' as const,
@@ -139,3 +157,63 @@ export const GetAllTasksParams = {
   properties: {} as const,
   required: [] as const,
 } as const;
+
+export interface CancelTaskParamsInterface {
+  taskId: string;
+  publisher: string;
+  reason?: string;
+}
+
+export interface CloseTaskParamsInterface {
+  taskId: string;
+  publisher: string;
+}
+
+export interface CompleteTaskParamsInterface {
+  taskId: string;
+  contextStep: string;
+  contextOutput?: ContextOutputSchemaInterface;
+}
+
+export interface RejectTaskParamsInterface {
+  taskId: string;
+  reason: string;
+}
+
+export interface RelayTaskParamsInterface {
+  taskId: string;
+  agentId: string;
+  contextStep: string;
+  contextOutput?: ContextOutputSchemaInterface;
+  description: string;
+}
+
+export interface RelinquishTaskParamsInterface {
+  taskId: string;
+  executorId: string;
+  reason?: string;
+}
+
+export interface UpdateTaskParamsInterface {
+  taskId: string;
+  agentId?: string;
+  status?: 'running' | 'completed' | 'failed' | 'pending' | 'cancelled';
+  contextStep?: string;
+  contextOutput?: ContextOutputSchemaInterface;
+  description?: string;
+}
+
+export interface GetPendingParamsInterface {
+  agentId: string;
+}
+
+export interface GetAgentActiveParamsInterface {
+  agentId: string;
+}
+
+export interface GetTaskParamsInterface {
+  taskId: string;
+}
+
+export interface GetAllTasksParamsInterface {
+}
