@@ -10,9 +10,9 @@ import fs from 'node:fs';
 const TYPES_DIR = path.resolve('src/types');
 const TOOLS_TS = path.resolve('src/types/tools.ts');
 
-// 用 tsx 直接 import ts 文件
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const tools = require('../src/types/tools.ts');
+// 用动态 import 加载 ts 文件（ESM 兼容）
+const toolsModule = await import('../src/types/tools.ts');
+const tools = toolsModule;
 
 const SCHEMAS = [
   'PublishTaskParams',
@@ -46,7 +46,7 @@ async function generate() {
       continue;
     }
     const schema = tools[name];
-    const tsInterface = await compile(schema, name, {
+    const tsInterface = await compile(schema, name + 'Interface', {
       bannerComment: '',
       style: { singleQuote: true },
     });

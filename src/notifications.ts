@@ -18,7 +18,7 @@ export interface NotificationConfig {
   discordToken?: string;
 }
 
-interface FormattedNotification {
+export interface FormattedNotification {
   provider: 'feishu' | 'discord';
   chatId?: string;       // Feishu groupId / open_id
   channelId?: string;    // Discord channelId

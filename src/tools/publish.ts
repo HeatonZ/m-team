@@ -2,7 +2,6 @@
  * mteam_publish_task 工具定义
  */
 
-import { readStringParam } from 'openclaw/plugin-sdk/core';
 import type { OpenClawPluginApi } from 'openclaw/plugin-sdk';
 import { textResult } from './shared.js';
 import { publishTask, getTask } from '../pool/index.js';

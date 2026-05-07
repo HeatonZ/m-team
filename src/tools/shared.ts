@@ -8,7 +8,6 @@
 
 import { readStringParam } from 'openclaw/plugin-sdk/core';
 import type { PluginLogger } from 'openclaw/plugin-sdk';
-import type { NotificationConfig } from '../notifications.js';
 import { sendNotifications } from '../notifications.js';
 import type { FormattedNotification } from '../notifications.js';
 

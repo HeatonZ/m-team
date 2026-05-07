@@ -2,11 +2,11 @@
  * mteam_claim_task 工具定义
  */
 import type { OpenClawPluginApi } from 'openclaw/plugin-sdk';
+import { readStringParam } from 'openclaw/plugin-sdk/core';
 import { textResult, failedTextResult, readTaskId } from './shared.js';
 import { claimTask, getTask, relinquishTask } from '../pool/index.js';
 import { sanitizeTask } from './helpers.js';
 import { formatClaimNotifications } from '../notifications.js';
-import type { NotificationConfig } from '../notifications.js';
 import { sendNotifications } from '../notifications.js';
 import { ClaimTaskParams } from '../types/tools.js';
 import type { MTeamPluginConfig } from '../config.js';
