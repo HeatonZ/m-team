@@ -13,9 +13,12 @@ import type {
 } from 'openclaw/plugin-sdk/core';
 
 export function registerAgentEndHook(api: OpenClawPluginApi): void {
+  // ⚠️ agent_end 是 conversation hook，非 bundled 插件需配置 allowConversationAccess: true
   api.on('agent_end', async (event: PluginHookAgentEndEvent, ctx: PluginHookAgentContext) => {
     const { runId, messages, success, error, durationMs } = event;
     const { sessionKey, sessionId, agentId, runId: ctxRunId } = ctx;
+
+    console.error(`[m-team] agent_end 触发: agentId=${agentId ?? 'n/a'} sessionKey=${sessionKey ?? 'n/a'} success=${success} duration=${durationMs}`);
     api.logger?.info(`hook agent_end ${sessionKey}`)
     // 尝试从 sessionKey 解析 taskId（格式: agent:{agentId}:m-team:{taskId}）
     let taskId: string | null = null;

@@ -13,13 +13,12 @@ import { failTask } from '../pool/operations.js';
 export function registerSubagentEndedHook(api: OpenClawPluginApi): void {
   api.on('subagent_ended', async (event: PluginHookSubagentEndedEvent) => {
     const { targetSessionKey, outcome, reason, error } = event;
-    api.logger?.info(`hook subagent_ended ${targetSessionKey}`)
 
     // 只处理 agent:<agentId>:m-team:<taskId> 格式的 session
     if (!targetSessionKey?.startsWith('agent:')) return;
     if (!targetSessionKey?.includes(':m-team:')) return;
 
-    // sessionKey 格式: agent:{agentId}:m-team:{taskId}
+    console.error(`[m-team] subagent_ended 触发: key=${targetSessionKey} outcome=${outcome} reason=${reason}`);
     const parts = targetSessionKey.split(':');
     // parts[0]=agent, parts[1]=agentId, parts[2]=m-team, parts[3]=taskId
     const taskId = parts[3];
