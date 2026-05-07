@@ -6,7 +6,7 @@
 import type { OpenClawPluginApi } from 'openclaw/plugin-sdk';
 import { textResult } from './shared.js';
 import { getPendingTasks, getAgentActiveTask, getTask, getAllTasks, getTaskRowsByStatus } from '../pool/index.js';
-import { sanitizeTask, sanitizeTaskList, formatTaskLine } from './helpers.js';
+import { sanitizeTask, sanitizeTaskList, formatTaskLine, formatTaskAsText, formatTaskListAsText } from './helpers.js';
 import {
   GetPendingParams,
   GetAgentActiveParams,
@@ -33,7 +33,7 @@ export function registerGetPending(api: OpenClawPluginApi): void {
       const sanitized = pending.map(sanitizeTask);
 
       if (sanitized.length === 0) {
-        return textResult('暂无待认领任务', { pending: [] });
+        return textResult('📭 暂无待认领任务', { pending: [] });
       }
 
       const lines = sanitized.map((t, i) => formatTaskLine(t, i + 1));
@@ -54,7 +54,10 @@ export function registerGetAgentActive(api: OpenClawPluginApi): void {
     async execute(_toolCallId: string, rawParams: GetAgentActiveParamsInterface) {
       const { agentId } = rawParams;
       const activeTask = getAgentActiveTask(agentId);
-      return textResult('获取进行中任务成功', { activeTask: activeTask ? sanitizeTask(activeTask) : null });
+      if (!activeTask) {
+        return textResult(`agent ${agentId} 当前无进行中任务`, { activeTask: null });
+      }
+      return textResult(formatTaskAsText(activeTask), { activeTask: sanitizeTask(activeTask) });
     },
   });
 }
@@ -69,7 +72,10 @@ export function registerGetTask(api: OpenClawPluginApi): void {
     async execute(_toolCallId: string, rawParams: GetTaskParamsInterface) {
       const { taskId } = rawParams;
       const task = getTask(taskId);
-      return textResult('获取任务详情成功', { task: task ? sanitizeTask(task) : null });
+      if (!task) {
+        return textResult(`任务 ${taskId} 不存在`, { task: null });
+      }
+      return textResult(formatTaskAsText(task), { task: sanitizeTask(task) });
     },
   });
 }
@@ -86,7 +92,13 @@ export function registerGetAllTasks(api: OpenClawPluginApi): void {
       const tasks = status
         ? getTaskRowsByStatus(status)
         : getAllTasks();
-      return textResult('获取所有任务成功', { tasks: sanitizeTaskList(tasks) });
+
+      if (tasks.length === 0) {
+        return textResult(status ? `📭 无 ${status} 状态的任务` : '📭 任务池为空', { tasks: [] });
+      }
+
+      const label = status ? `${status} 任务` : '全部任务';
+      return textResult(formatTaskListAsText(tasks, label), { tasks: sanitizeTaskList(tasks) });
     },
   });
 }

@@ -7,6 +7,7 @@ import type { OpenClawPluginApi } from 'openclaw/plugin-sdk';
 import type { MTeamPluginConfig } from '../config.js';
 import { textResult, readTaskId } from './shared.js';
 import { updateTask } from '../pool/index.js';
+import { formatTaskAsText } from './helpers.js';
 import { formatRejectNotifications } from '../notifications.js';
 import { sendNotifications } from '../notifications.js';
 import { RejectTaskParams } from '../types/tools.js';
@@ -38,7 +39,7 @@ export function register(
         }
       }
 
-      return textResult('任务已驳回', { task });
+      return textResult(`🔁 任务已驳回\n${task ? formatTaskAsText(task) : `任务 ${taskId}`}`, { task });
     },
   });
 }

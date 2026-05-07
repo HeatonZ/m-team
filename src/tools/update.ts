@@ -7,6 +7,7 @@ import type { MTeamPluginConfig } from '../config.js';
 import { textResult } from './shared.js';
 import { updateTask } from '../pool/index.js';
 import type { ContextStepInput } from '../pool/index.js';
+import { formatTaskAsText } from './helpers.js';
 import { TaskStatus } from '../schema/task.js';
 import { UpdateTaskParams } from '../types/tools.js';
 import type { UpdateTaskParamsInterface } from '../types/tools.js';
@@ -34,7 +35,7 @@ export function register(
 
       const task = updateTask(taskId, status ?? null, contextEntry, description ?? null, null, agentId ?? null);
 
-      return textResult('任务更新成功', { task });
+      return textResult(`⚙️ 任务已更新\n${task ? formatTaskAsText(task) : `任务 ${rawParams.taskId}`}`, { task });
     },
   });
 }

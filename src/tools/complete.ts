@@ -7,6 +7,7 @@ import type { MTeamPluginConfig } from '../config.js';
 import { textResult, failedTextResult, readTaskId } from './shared.js';
 import { completeTask } from '../pool/index.js';
 import type { ContextStepInput } from '../pool/index.js';
+import { formatTaskAsText } from './helpers.js';
 import { formatTaskNotifications } from '../notifications.js';
 import { sendNotifications } from '../notifications.js';
 import { CompleteTaskParams } from '../types/tools.js';
@@ -39,7 +40,7 @@ export function register(
         }
       }
 
-      return textResult('任务完成', { success: result.success, task: result.task });
+      return textResult(`✅ 任务完成\n${result.task ? formatTaskAsText(result.task) : taskId}`, { success: result.success, task: result.task });
     },
   });
 }

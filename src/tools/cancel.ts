@@ -6,6 +6,7 @@ import type { OpenClawPluginApi } from 'openclaw/plugin-sdk';
 import type { MTeamPluginConfig } from '../config.js';
 import { textResult, failedTextResult, readTaskId } from './shared.js';
 import { cancelTask } from '../pool/index.js';
+import { formatTaskAsText } from './helpers.js';
 import { formatCancelNotifications } from '../notifications.js';
 import { sendNotifications } from '../notifications.js';
 import { CancelTaskParams } from '../types/tools.js';
@@ -37,7 +38,7 @@ export function register(
         }
       }
 
-      return textResult('任务已取消', { success: result.success, task: result.task });
+      return textResult(`🚫 任务已取消\n${result.task ? formatTaskAsText(result.task) : taskId}`, { success: result.success, task: result.task });
     },
   });
 }

@@ -53,6 +53,11 @@ export function getAllTasks(): Task[] {
   return _db_getAllTaskRows();
 }
 
+export function getRunningTasks(): Task[] {
+  init();
+  return getTaskRowsByStatus(TaskStatus.RUNNING);
+}
+
 export function getPendingTasks(agentId?: string | null): Task[] {
   init();
   if (agentId && getAgentActiveTask(agentId)) return [];

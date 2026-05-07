@@ -5,7 +5,7 @@ import type { OpenClawPluginApi } from 'openclaw/plugin-sdk';
 import type { MTeamPluginConfig } from '../config.js';
 import { textResult, failedTextResult, readTaskId } from './shared.js';
 import { claimTask, getTask, relinquishTask } from '../pool/index.js';
-import { sanitizeTask } from './helpers.js';
+import { sanitizeTask, formatTaskAsText } from './helpers.js';
 import { formatClaimNotifications } from '../notifications.js';
 import { sendNotifications } from '../notifications.js';
 import type { ClaimTaskParamsInterface } from '../types/tools.js';
@@ -68,7 +68,7 @@ export function register(
 
       const subagentResult = await subagentRun;
 
-      return textResult('任务认领成功', {
+      return textResult(`✅ 任务认领成功\n${formatTaskAsText(task!)}`, {
         success: result.success,
         taskId: result.taskId,
         task: sanitized,

@@ -7,7 +7,7 @@
  */
 
 import type { Task } from '../schema/task.js';
-import { PRIORITY_LABELS } from '../schema/task.js';
+import { PRIORITY_LABELS, getStatusLabel } from '../schema/task.js';
 
 /**
  * 从 Task 对象中移除 goal 字段，返回安全的展示用对象
@@ -31,4 +31,67 @@ export function formatTaskLine(task: Omit<Task, 'goal'>, index: number): string 
   const priority = PRIORITY_LABELS[task.priority] ?? '🟡 中';
   const stepCount = task.context.length - 1;
   return `${index}. [${priority}] ${task.taskId} — ${task.description}${stepCount > 0 ? ` (已${stepCount}步)` : ''}`;
+}
+
+// ============================================================
+// text 内容格式化（OpenClaw agent 只看 content[].text，不看 details）
+// ============================================================
+
+/**
+ * 单个任务 → 文本（含全部关键字段，不隐藏 goal）
+ * 用于 mteam_get_task / mteam_get_agent_active 等查询单任务的返回
+ */
+export function formatTaskAsText(task: Task): string {
+  const status = getStatusLabel(task.status);
+  const priority = PRIORITY_LABELS[task.priority] ?? '🟡 中';
+  const stepCount = task.context.filter(e => e.type === 'step').length;
+
+  const lines = [
+    `📋 任务详情`,
+    `ID: ${task.taskId}`,
+    `状态: ${status}`,
+    `优先级: ${priority}`,
+    `目标: ${task.goal}`,
+    `当前步骤: ${task.description}`,
+    `发布者: ${task.publisher}`,
+  ];
+  if (task.executor) lines.push(`执行者: ${task.executor}`);
+  if (task.lastExecutor) lines.push(`上一步: ${task.lastExecutor}`);
+  lines.push(`已执行步骤: ${stepCount}`);
+  lines.push(`创建时间: ${new Date(task.createdAt).toISOString()}`);
+
+  // 最后一步 context
+  if (task.context.length > 0) {
+    const lastEntry = task.context[task.context.length - 1];
+    if (lastEntry.type === 'step') {
+      const step = lastEntry as { type: 'step'; executor: string; step: string; output?: { summary?: string; files?: string[]; error?: string } };
+      lines.push(`最后一步: [${step.executor}] ${step.step}`);
+      if (step.output?.summary) lines.push(`结果: ${step.output.summary}`);
+      if (step.output?.error) lines.push(`错误: ${step.output.error}`);
+    }
+  }
+
+  return lines.join('\n');
+}
+
+/**
+ * 任务列表 → 文本
+ * 用于 mteam_get_pending / mteam_get_all_tasks 等返回列表的工具
+ */
+export function formatTaskListAsText(tasks: Task[], label = '任务列表'): string {
+  if (tasks.length === 0) return `📭 ${label}为空`;
+
+  const lines = [`📋 ${label}（${tasks.length} 个）：`, ''];
+  for (let i = 0; i < tasks.length; i++) {
+    const t = tasks[i];
+    const status = getStatusLabel(t.status);
+    const priority = PRIORITY_LABELS[t.priority] ?? '🟡 中';
+    lines.push(`${i + 1}. [${priority}] ${status} ${t.taskId}`);
+    lines.push(`   📝 ${t.description}`);
+    if (t.executor) lines.push(`   👤 执行者: ${t.executor}`);
+    if (t.lastExecutor) lines.push(`   👤 上一步: ${t.lastExecutor}`);
+    lines.push('');
+  }
+
+  return lines.join('\n');
 }

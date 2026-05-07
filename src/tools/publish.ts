@@ -6,6 +6,7 @@ import type { OpenClawPluginApi } from 'openclaw/plugin-sdk';
 import type { MTeamPluginConfig } from '../config.js';
 import { textResult } from './shared.js';
 import { publishTask, getTask } from '../pool/index.js';
+import { formatTaskAsText } from './helpers.js';
 import { formatPublishNotifications } from '../notifications.js';
 import { sendNotifications } from '../notifications.js';
 import { PublishTaskParams } from '../types/tools.js';
@@ -42,7 +43,7 @@ export function register(
         }
       }
 
-      return textResult('任务发布成功', { taskId });
+      return textResult(`✅ 任务发布成功\n${task ? formatTaskAsText(task) : `ID: ${taskId}`}`, { taskId });
     },
   });
 }
