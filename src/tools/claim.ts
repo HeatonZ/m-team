@@ -58,7 +58,7 @@ export function register(
 |【执行约束 — 必须遵守】
 - 你是 executor，不是 publisher。禁止调用 mteam_publish_task 创建新任务。
 - description 写什么就做什么，不拆分、不裂变、不创建子任务。
-- 做完后 relay 或 complete，不要干预任务结构。
+- 做完后直接结束 session，agent_end hook 会自动判断 complete 还是 relay。
 `;
 
       const subagentRun = api.runtime?.subagent?.run({
