@@ -139,6 +139,7 @@ export function registerAgentEndDecisionHook(api: OpenClawPluginApi): void {
     _ctx: PluginHookSubagentContext,
   ) => {
     const { targetSessionKey, outcome, reason } = event;
+    api.logger?.info(`hook subagent_ended 1 ${targetSessionKey}`)
 
     // 1. 解析 taskId
     if (!targetSessionKey) return;

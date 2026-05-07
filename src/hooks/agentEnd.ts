@@ -16,7 +16,7 @@ export function registerAgentEndHook(api: OpenClawPluginApi): void {
   api.on('agent_end', async (event: PluginHookAgentEndEvent, ctx: PluginHookAgentContext) => {
     const { runId, messages, success, error, durationMs } = event;
     const { sessionKey, sessionId, agentId, runId: ctxRunId } = ctx;
-
+    api.logger?.info(`hook agent_end ${sessionKey}`)
     // 尝试从 sessionKey 解析 taskId（格式: agent:{agentId}:m-team:{taskId}）
     let taskId: string | null = null;
     if (sessionKey?.startsWith('agent:')) {
