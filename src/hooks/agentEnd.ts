@@ -104,12 +104,18 @@ interface JudgeParams {
   workspaceDir: string;
 }
 
+interface JudgeResult {
+  decision: 'complete' | 'relay';
+  /** relay 时建议的下一 description，complete 时为空 */
+  nextDescription?: string;
+}
+
 async function judgeByLlm(
   api: OpenClawPluginApi,
   task: Task,
   messages: unknown[],
   params: JudgeParams,
-): Promise<'complete' | 'relay'> {
+): Promise<JudgeResult> {
   const { goal, description, context } = task;
   const transcript = formatMessages(messages);
 
@@ -138,11 +144,22 @@ ${contextText}
 ${transcript}
 === 对话记录结束 ===
 
-请综合以上全部信息判断：执行者是否完成了任务目标？
-- 任务目标已达成，或 context 已包含完整执行路径 → COMPLETE
-- 任务目标未达成，还需要下一步 → RELAY
+请综合以上全部信息判断：
 
-只返回 COMPLETE 或 RELAY，不要任何解释。`.trim();
+**第一步**：执行者是否完成了任务目标？
+- 任务目标已达成，或 context 已包含完整执行路径 → DECISION: COMPLETE
+- 任务目标未达成，还需要下一步 → DECISION: RELAY
+
+**第二步（仅 RELAY 时）**：为下一棒 executor 生成下一步描述。
+- 根据 context 历史和对话记录，推断下一步具体要做什么
+- 用一句话描述下一步动作，简明扼要，便于下一 executor 直接认领执行
+- 如果 context 已完整，只需要简单描述"整理/汇总/交付"类收尾动作
+
+输出格式：
+DECISION: COMPLETE
+或者：
+DECISION: RELAY
+下一步描述：<一句话描述>`.trim();
 
   try {
     const result = await api.runtime.agent.runEmbeddedAgent({
@@ -170,16 +187,28 @@ ${transcript}
       silentExpected: true,
     });
 
-    const responseText = (result.payloads ?? [])
+    const raw = (result.payloads ?? [])
       .map(p => (p.text ?? '').trim())
       .filter(Boolean)
       .join('\n')
       .toUpperCase();
 
-    return responseText.includes('RELAY') ? 'relay' : 'complete';
+    const relayMatch = raw.match(/DECISION:\s*RELAY\s*\n+下一步描述：(.+)/i);
+    if (relayMatch) {
+      const nextDesc = relayMatch[1].trim();
+      return { decision: 'relay', nextDescription: nextDesc };
+    }
+
+    if (raw.includes('DECISION:') && raw.includes('COMPLETE')) {
+      return { decision: 'complete' };
+    }
+
+    // 兜底
+    api.logger?.warn(`[m-team] agent_end LLM 判断结果无法解析 "${raw}"，保守标记为 complete`);
+    return { decision: 'complete' };
   } catch (err) {
-    api.logger?.warn(`[m-team] agent_end LLM 判断失败: ${String(err)}，保守标记为完成`);
-    return 'complete';
+    api.logger?.warn(`[m-team] agent_end LLM 判断失败: ${String(err)}，保守标记为 complete`);
+    return { decision: 'complete' };
   }
 }
 
@@ -246,10 +275,10 @@ export function registerAgentEndHook(api: OpenClawPluginApi): void {
     });
 
     const executorId = task.executor || 'unknown';
-    if (decision === 'relay') {
+    if (decision.decision === 'relay') {
       const result = relayTask(taskId, executorId, {
         step: '[agent_end] executor 正常结束，hook 判断需要 relay',
-      });
+      }, decision.nextDescription);
       writeTaskLog({
         taskId,
         action: 'relay',
