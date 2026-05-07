@@ -63,7 +63,7 @@ export function register(
 
       const subagentRun = api.runtime?.subagent?.run({
         sessionKey,
-        message: `[M-Team Task #${taskId}] ${task?.description ?? ''}\n\n${systemPrompt}`,
+        message: `[M-Team Task #${taskId}] \n\n${systemPrompt}`,
       }).catch((_runErr: unknown) => {
         api.logger?.error('[m-team] subagent.run 异步启动失败，回滚任务状态');
         relinquishTask(taskId, agentId);

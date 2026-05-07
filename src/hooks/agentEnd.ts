@@ -110,21 +110,37 @@ async function judgeByLlm(
   messages: unknown[],
   params: JudgeParams,
 ): Promise<'complete' | 'relay'> {
-  const { goal, description } = task;
+  const { goal, description, context } = task;
   const transcript = formatMessages(messages);
 
-  const prompt = `你是任务完成判断专家。以下是 M-Team 任务执行者的完整对话记录：
+  // 将 context 数组格式化为可读文本
+  const contextText = context.length > 0
+    ? context.map((ctx, i) => {
+        if (ctx.type === 'input') {
+          return `[步骤 ${i}] 初始输入: ${JSON.stringify(ctx.data ?? {})}`;
+        }
+        return `[步骤 ${i}] 执行者: ${ctx.executor ?? '?'} | 步骤: ${ctx.step ?? '?'} | 输出: ${JSON.stringify(ctx.output ?? {})} | 完成时间: ${ctx.completedAt ? new Date(ctx.completedAt).toLocaleString() : '?'}`;
+      }).join('\n')
+    : '(无 context 历史)';
 
-任务描述（当前这一步做什么）：${description || '(无描述)'}
-任务目标（终态标尺）：${goal}
+  const prompt = `你是任务完成判断专家。以下是 M-Team 任务的完整上下文：
+
+=== 任务目标（终态标尺）===
+${goal}
+
+=== 当前步骤描述（description）===
+${description || '(无描述)'}
+
+=== Context 历史（所有已完成步骤）===
+${contextText}
 
 === 执行者对话记录 ===
 ${transcript}
 === 对话记录结束 ===
 
-请判断：执行者是否完成了任务目标？
-- 任务目标已达成 → COMPLETE
-- 任务目标未达成（还需继续） → RELAY
+请综合以上全部信息判断：执行者是否完成了任务目标？
+- 任务目标已达成，或 context 已包含完整执行路径 → COMPLETE
+- 任务目标未达成，还需要下一步 → RELAY
 
 只返回 COMPLETE 或 RELAY，不要任何解释。`.trim();
 
