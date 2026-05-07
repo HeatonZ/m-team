@@ -108,6 +108,10 @@ interface JudgeResult {
   decision: 'complete' | 'relay';
   /** relay 时建议的下一 description，complete 时为空 */
   nextDescription?: string;
+  /** 本次步骤在 context 里记录的摘要 */
+  contextStep: string;
+  /** 本次步骤的输出（files 等） */
+  contextOutput: Record<string, unknown>;
 }
 
 async function judgeByLlm(
@@ -157,8 +161,13 @@ ${transcript}
 
 输出格式：
 DECISION: COMPLETE
+CONTEXT_STEP: <本次步骤描述>
+CONTEXT_OUTPUT: {"summary": "<步骤总结>", "files": ["<文件路径1>", ...]}
+
 或者：
 DECISION: RELAY
+CONTEXT_STEP: <本次步骤描述>
+CONTEXT_OUTPUT: {"summary": "<步骤总结>", "files": ["<文件路径1>", ...]}
 下一步描述：<一句话描述>`.trim();
 
   try {
@@ -190,25 +199,50 @@ DECISION: RELAY
     const raw = (result.payloads ?? [])
       .map(p => (p.text ?? '').trim())
       .filter(Boolean)
-      .join('\n')
-      .toUpperCase();
+      .join('\n');
 
     const relayMatch = raw.match(/DECISION:\s*RELAY\s*\n+下一步描述：(.+)/i);
     if (relayMatch) {
       const nextDesc = relayMatch[1].trim();
-      return { decision: 'relay', nextDescription: nextDesc };
+      return {
+        decision: 'relay',
+        nextDescription: nextDesc,
+        contextStep: extractField(raw, 'CONTEXT_STEP') || description || '执行步骤',
+        contextOutput: parseContextOutput(raw),
+      };
     }
 
-    if (raw.includes('DECISION:') && raw.includes('COMPLETE')) {
-      return { decision: 'complete' };
+    if (raw.toUpperCase().includes('DECISION:') && raw.toUpperCase().includes('COMPLETE')) {
+      return {
+        decision: 'complete',
+        contextStep: extractField(raw, 'CONTEXT_STEP') || description || '执行步骤',
+        contextOutput: parseContextOutput(raw),
+      };
     }
 
     // 兜底
-    api.logger?.warn(`[m-team] agent_end LLM 判断结果无法解析 "${raw}"，保守标记为 complete`);
-    return { decision: 'complete' };
+    api.logger?.warn(`[m-team] agent_end LLM 判断结果无法解析 "${raw.slice(0, 200)}"，保守标记为 complete`);
+    return { decision: 'complete', contextStep: description || '执行步骤', contextOutput: {} };
   } catch (err) {
     api.logger?.warn(`[m-team] agent_end LLM 判断失败: ${String(err)}，保守标记为 complete`);
-    return { decision: 'complete' };
+    return { decision: 'complete', contextStep: description || '执行步骤', contextOutput: {} };
+  }
+}
+
+// ── 解析辅助 ────────────────────────────────────────────────────────────────
+
+function extractField(raw: string, field: string): string {
+  const match = raw.match(new RegExp(`${field}:\\s*(.+?)(?:\\n|$)`, 'i'));
+  return match ? match[1].trim() : '';
+}
+
+function parseContextOutput(raw: string): Record<string, unknown> {
+  const match = raw.match(/CONTEXT_OUTPUT:\s*(\{[\s\S]+?\})/i);
+  if (!match) return {};
+  try {
+    return JSON.parse(match[1]) as Record<string, unknown>;
+  } catch {
+    return {};
   }
 }
 
@@ -277,7 +311,8 @@ export function registerAgentEndHook(api: OpenClawPluginApi): void {
     const executorId = task.executor || 'unknown';
     if (decision.decision === 'relay') {
       const result = relayTask(taskId, executorId, {
-        step: '[agent_end] executor 正常结束，hook 判断需要 relay',
+        step: decision.contextStep,
+        output: decision.contextOutput,
       }, decision.nextDescription);
       writeTaskLog({
         taskId,
@@ -298,7 +333,8 @@ export function registerAgentEndHook(api: OpenClawPluginApi): void {
       );
     } else {
       const result = completeTask(taskId, {
-        step: '[agent_end] executor 正常结束，hook 判断任务完成',
+        step: decision.contextStep,
+        output: decision.contextOutput,
       });
       writeTaskLog({
         taskId,
