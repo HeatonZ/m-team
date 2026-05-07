@@ -86,7 +86,9 @@ const plugin = definePluginEntry({
       executors: config.executors ?? ['maker', 'fixer', 'scholar', 'captain'],
       publishers: config.publishers ?? [],
     });
-    registerSessionGuardHook(api);
+    registerSessionGuardHook(api, {
+      publishers: config.publishers ?? [],
+    });
 
     api.logger?.info('[m-team] 插件加载完成');
   }
