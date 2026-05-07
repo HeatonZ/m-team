@@ -13,7 +13,7 @@ import type {
 } from 'openclaw/plugin-sdk/core';
 
 export function registerSessionGuardHook(api: OpenClawPluginApi): void {
-  (api.on as (hook: string, handler: (...args: unknown[]) => unknown) => void)(
+  api.on(
     'before_tool_call',
     (
       event: PluginHookBeforeToolCallEvent,

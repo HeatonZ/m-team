@@ -28,7 +28,7 @@ const TOOL_ACTION_MAP: Record<string, string> = {
 };
 
 export function registerAfterToolCallHook(api: OpenClawPluginApi): void {
-  (api.on as (hook: string, handler: (...args: unknown[]) => unknown) => void)(
+  api.on(
     'after_tool_call',
     (
       event: PluginHookAfterToolCallEvent,
