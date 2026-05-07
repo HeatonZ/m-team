@@ -1,62 +1,193 @@
 /**
- * M-Team Hooks — agent_end handler
+ * M-Team Hook — agent_end (统一处理)
  *
- * 观察 agent turn 结束时的消息列表、success 状态、durationMs。
- * 目前仅打印日志，用于确认 executor session 是否会触发此 hook，
- * 以及 event 中是否包含足够的上下文（如 sessionKey 能否解析出 taskId）。
+ * 替代 subagent_ended + agentEndDecision。
+ * agent_end 触发于所有 agent turn 结束，通过 sessionKey 识别 m-team session。
+ *
+ * 逻辑：
+ *   success=false → failTask
+ *   success=true  → LLM 判断 complete vs relay
  */
 
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { randomUUID } from 'node:crypto';
 import type {
   OpenClawPluginApi,
   PluginHookAgentEndEvent,
   PluginHookAgentContext,
 } from 'openclaw/plugin-sdk/core';
+import { failTask, completeTask, relayTask } from '../pool/operations.js';
+import type { Task } from '../schema/task.js';
+
+const LLM_TIMEOUT_MS = 30000;
+
+// ── helpers ──────────────────────────────────────────────────────────────────
+
+function parseTaskId(sessionKey: string): string | null {
+  if (!sessionKey?.startsWith('agent:')) return null;
+  const parts = sessionKey.split(':');
+  const mTeamIdx = parts.indexOf('m-team');
+  if (mTeamIdx < 0 || !parts[mTeamIdx + 1]) return null;
+  return parts[mTeamIdx + 1];
+}
+
+function readTaskFile(taskId: string, workspaceRoot: string): Task | null {
+  const taskPath = path.join(workspaceRoot, 'tasks', taskId, 'task.json');
+  try {
+    const raw = fs.readFileSync(taskPath, 'utf8');
+    return JSON.parse(raw) as Task;
+  } catch {
+    return null;
+  }
+}
+
+interface JudgeParams {
+  runId: string;
+  sessionId: string;
+  sessionFile: string;
+  workspaceDir: string;
+}
+
+async function judgeByLlm(
+  api: OpenClawPluginApi,
+  task: Task,
+  params: JudgeParams,
+): Promise<'complete' | 'relay'> {
+  const { goal, context, description } = task;
+  const completedSteps = context
+    .filter(s => s.type === 'step')
+    .map(s => {
+      const outputStr = s.output && Object.keys(s.output).length > 0
+        ? ` → ${JSON.stringify(s.output)}`
+        : '';
+      return `- ${s.step}${outputStr}`;
+    })
+    .join('\n') || '(无执行步骤记录)';
+
+  const prompt = `你是任务完成判断专家。以下是一个 M-Team 任务的上下文：
+
+任务描述：${description || '(无描述)'}
+任务目标：${goal}
+已完成的步骤：
+${completedSteps}
+
+请判断：执行者是否完成了任务目标？
+- 如果任务目标已达成（执行者已产出最终结果），返回：COMPLETE
+- 如果任务目标未达成（还需要更多步骤才能达到目标），返回：RELAY
+
+只返回 COMPLETE 或 RELAY，不要任何解释。`.trim();
+
+  try {
+    const result = await api.runtime.agent.runEmbeddedAgent({
+      sessionId: params.sessionId,
+      sessionKey: void 0,
+      agentId: void 0,
+      messageProvider: void 0,
+      messageChannel: void 0,
+      sessionFile: params.sessionFile,
+      workspaceDir: params.workspaceDir,
+      agentDir: void 0,
+      config: api.config,
+      prompt,
+      provider: void 0,
+      model: void 0,
+      timeoutMs: LLM_TIMEOUT_MS,
+      runId: params.runId,
+      trigger: 'manual',
+      toolsAllow: [],
+      disableTools: true,
+      disableMessageTool: true,
+      bootstrapContextMode: 'lightweight',
+      verboseLevel: 'off',
+      reasoningLevel: 'off',
+      silentExpected: true,
+    });
+
+    const responseText = (result.payloads ?? [])
+      .map(p => (p.text ?? '').trim())
+      .filter(Boolean)
+      .join('\n')
+      .toUpperCase();
+
+    return responseText.includes('RELAY') ? 'relay' : 'complete';
+  } catch (err) {
+    api.logger?.warn(`[m-team] agent_end LLM 判断失败: ${String(err)}，保守标记为完成`);
+    return 'complete';
+  }
+}
+
+// ── hook register ────────────────────────────────────────────────────────────
 
 export function registerAgentEndHook(api: OpenClawPluginApi): void {
-  // ⚠️ agent_end 是 conversation hook，非 bundled 插件需配置 allowConversationAccess: true
+  // ⚠️ agent_end 是 conversation hook，非 bundled 插件需 allowConversationAccess: true
   api.on('agent_end', async (event: PluginHookAgentEndEvent, ctx: PluginHookAgentContext) => {
-    const { runId, messages, success, error, durationMs } = event;
-    const { sessionKey, sessionId, agentId, runId: ctxRunId } = ctx;
+    const { success, error, durationMs } = event;
+    const { sessionKey, agentId } = ctx;
 
-    console.error(`[m-team] agent_end 触发: agentId=${agentId ?? 'n/a'} sessionKey=${sessionKey ?? 'n/a'} success=${success} duration=${durationMs}`);
-    api.logger?.info(`hook agent_end ${sessionKey}`)
-    // 尝试从 sessionKey 解析 taskId（格式: agent:{agentId}:m-team:{taskId}）
-    let taskId: string | null = null;
-    if (sessionKey?.startsWith('agent:')) {
-      const parts = sessionKey.split(':');
-      // parts[0]=agent, parts[1]=agentId, parts[2]=m-team, parts[3]=taskId
-      if (parts[2] === 'm-team' && parts[3]) {
-        taskId = parts[3];
-      }
-    }
+    // 只处理 m-team session
+    if (!sessionKey?.startsWith('agent:')) return;
+    const taskId = parseTaskId(sessionKey);
+    if (!taskId) return;
 
-    api.logger?.info(
-      `[m-team] agent_end | ` +
-        `sessionKey=${sessionKey ?? 'n/a'} | ` +
-        `sessionId=${sessionId ?? 'n/a'} | ` +
-        `agentId=${agentId ?? 'n/a'} | ` +
-        `runId=${runId ?? ctxRunId ?? 'n/a'} | ` +
-        `taskId=${taskId ?? 'n/a'} | ` +
-        `success=${success} | ` +
-        `durationMs=${durationMs ?? 'n/a'} | ` +
-        `error=${error ?? 'none'} | ` +
-        `messages=${messages?.length ?? 0}条`
+    console.error(
+      `[m-team] agent_end: taskId=${taskId} agentId=${agentId ?? '?'} ` +
+        `success=${success} duration=${durationMs ?? '?'}`
     );
 
-    // 打印最后几条消息的摘要（方便调试）
-    if (messages && messages.length > 0) {
-      const summary = messages.slice(-3).map((m: unknown) => {
-        const msg = m as Record<string, unknown>;
-        const role = msg.role ?? 'unknown';
-        const content = Array.isArray(msg.content)
-          ? msg.content.map((c: unknown) => {
-              const block = c as Record<string, unknown>;
-              return block.type === 'text' ? (block.text as string).slice(0, 80) : block.type;
-            }).join('|')
-          : String(msg.content ?? '').slice(0, 80);
-        return `${role}:${content}`;
-      }).join(' || ');
-      api.logger?.info(`[m-team] agent_end messages summary: ${summary}`);
+    // ── 异常结束 → fail ──
+    if (!success) {
+      const errorMsg = error ?? 'unknown_error';
+      const result = failTask(taskId, errorMsg, undefined, { outcome: 'error', error: errorMsg });
+      api.logger?.info(
+        result.success
+          ? `[m-team] agent_end: 任务 ${taskId} 标记失败`
+          : `[m-team] agent_end: 任务 ${taskId} 无操作 (${result.reason})`
+      );
+      return;
+    }
+
+    // ── 正常结束 → LLM 判断 complete/relay ──
+    const pluginConfig = (api.pluginConfig ?? {}) as Record<string, unknown>;
+    const workspaceRoot: string = (pluginConfig.workspaceRoot as string) ?? '/mnt/d/code/m-team';
+    const task = readTaskFile(taskId, workspaceRoot);
+    if (!task) {
+      api.logger?.warn(`[m-team] agent_end: 无法读取任务 ${taskId} 的 task.json，跳过`);
+      return;
+    }
+
+    const runId = randomUUID();
+    const sessionId = event.runId ?? runId;
+    const sessionFile = path.join(os.tmpdir(), `m-team-judge-${runId}.json`);
+
+    api.logger?.info(`[m-team] agent_end: 开始判断任务 ${taskId}`);
+    const decision = await judgeByLlm(api, task, {
+      runId,
+      sessionId,
+      sessionFile,
+      workspaceDir: workspaceRoot,
+    });
+
+    const executorId = task.executor || 'unknown';
+    if (decision === 'relay') {
+      const result = relayTask(taskId, executorId, {
+        step: '[agent_end] executor 正常结束，hook 判断需要 relay',
+      });
+      api.logger?.info(
+        result.success
+          ? `[m-team] agent_end: 任务 ${taskId} → relay`
+          : `[m-team] agent_end: 任务 ${taskId} → relay 失败: ${result.reason}`
+      );
+    } else {
+      const result = completeTask(taskId, {
+        step: '[agent_end] executor 正常结束，hook 判断任务完成',
+      });
+      api.logger?.info(
+        result.success
+          ? `[m-team] agent_end: 任务 ${taskId} → complete`
+          : `[m-team] agent_end: 任务 ${taskId} → complete 失败: ${result.reason}`
+      );
     }
   });
 }
