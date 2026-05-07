@@ -220,12 +220,12 @@ CONTEXT_OUTPUT: {"summary": "<步骤总结>", "files": ["<文件路径1>", ...]}
       };
     }
 
-    // 兜底
-    api.logger?.warn(`[m-team] agent_end LLM 判断结果无法解析 "${raw.slice(0, 200)}"，保守标记为 complete`);
-    return { decision: 'complete', contextStep: description || '执行步骤', contextOutput: {} };
+    // 兜底：无法解析 → relay 回池子，不轻易标记完成
+    api.logger?.warn(`[m-team] agent_end LLM 判断结果无法解析 "${raw.slice(0, 200)}"，放回任务池`);
+    return { decision: 'relay', contextStep: description || '执行步骤', contextOutput: {}, nextDescription: '请检查上下文后继续执行' };
   } catch (err) {
-    api.logger?.warn(`[m-team] agent_end LLM 判断失败: ${String(err)}，保守标记为 complete`);
-    return { decision: 'complete', contextStep: description || '执行步骤', contextOutput: {} };
+    api.logger?.warn(`[m-team] agent_end LLM 判断失败: ${String(err)}，放回任务池`);
+    return { decision: 'relay', contextStep: description || '执行步骤', contextOutput: {}, nextDescription: '请检查上下文后继续执行' };
   }
 }
 
