@@ -193,7 +193,7 @@ CONTEXT_OUTPUT: {"summary": "<步骤总结>", "files": ["<文件路径1>", ...]}
       agentDir: `${api.config.agentsDir}/${task.executor}/agent`,
       config: api.config,
       prompt,
-      provider: 'minimax-portal',
+      provider: 'minimax',
       model: 'MiniMax-M2.7',
       authProfileId: 'minimax:cn',
       timeoutMs: LLM_TIMEOUT_MS,
