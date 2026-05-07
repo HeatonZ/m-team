@@ -8,7 +8,7 @@ import { relayTask } from '../pool/index.js';
 import { formatRelayNotifications } from '../notifications.js';
 import type { NotificationConfig } from '../notifications.js';
 import { sendNotifications } from '../notifications.js';
-import { RelayTaskParams } from '../types/plugin.js';
+import { RelayTaskParams } from '../types/tools.js';
 
 export function register(
   api: OpenClawPluginApi,

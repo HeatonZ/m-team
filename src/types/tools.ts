@@ -1,17 +1,10 @@
 /**
- * 插件级共用类型
+ * 工具参数 Schema — 单一来源
  */
 
 import type { NotificationConfig } from '../notifications.js';
 
-// ─── 插件配置 ────────────────────────────────────────────────────────────────
-
-export interface MTeamPluginConfig {
-  workspaceRoot?: string;
-  notifications?: NotificationConfig[];
-}
-
-// ─── 通用工具参数部件 ─────────────────────────────────────────────────────────
+// ─── 通用部件 ───────────────────────────────────────────────────────────────
 
 /** contextOutput — 步骤输出（complete/relay/update 共用） */
 export const ContextOutputSchema = {
@@ -21,9 +14,9 @@ export const ContextOutputSchema = {
     summary: { type: 'string', description: '步骤摘要' },
     files: { type: 'array', items: { type: 'string' }, description: '任务文件夹内的相对路径' },
   },
-};
+} as const;
 
-// ─── 各工具参数 Schema ────────────────────────────────────────────────────────
+// ─── 各工具参数 Schema ─────────────────────────────────────────────────────
 
 export const PublishTaskParams = {
   type: 'object' as const,

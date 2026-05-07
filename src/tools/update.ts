@@ -7,7 +7,7 @@ import { readStringParam } from 'openclaw/plugin-sdk/core';
 import { textResult } from './shared.js';
 import { updateTask } from '../pool/index.js';
 import { TaskStatus } from '../schema/task.js';
-import { UpdateTaskParams } from '../types/plugin.js';
+import { UpdateTaskParams } from '../types/tools.js';
 
 export function register(
   api: OpenClawPluginApi,

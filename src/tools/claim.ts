@@ -8,11 +8,12 @@ import { sanitizeTask } from './helpers.js';
 import { formatClaimNotifications } from '../notifications.js';
 import type { NotificationConfig } from '../notifications.js';
 import { sendNotifications } from '../notifications.js';
-import { ClaimTaskParams } from '../types/plugin.js';
+import { ClaimTaskParams } from '../types/tools.js';
+import type { MTeamPluginConfig } from '../config.js';
 
 export function register(
   api: OpenClawPluginApi,
-  config: { workspaceRoot?: string; notifications?: NotificationConfig[] }
+  config: MTeamPluginConfig
 ): void {
   api.logger?.info('[m-team] registering mteam_claim_task');
   api.registerTool({

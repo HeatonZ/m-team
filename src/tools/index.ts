@@ -6,7 +6,7 @@
  */
 
 import type { OpenClawPluginApi } from 'openclaw/plugin-sdk';
-import type { MTeamPluginConfig } from '../types/plugin.js';
+import type { MTeamPluginConfig } from '../config.js';
 import { sanitizeTask, sanitizeTaskList } from './helpers.js';
 
 import { register as registerPublish, } from './publish.js';

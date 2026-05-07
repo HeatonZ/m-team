@@ -8,7 +8,7 @@ import { cancelTask } from '../pool/index.js';
 import { formatCancelNotifications } from '../notifications.js';
 import type { NotificationConfig } from '../notifications.js';
 import { sendNotifications } from '../notifications.js';
-import { CancelTaskParams } from '../types/plugin.js';
+import { CancelTaskParams } from '../types/tools.js';
 
 export function register(
   api: OpenClawPluginApi,

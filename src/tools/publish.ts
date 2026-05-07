@@ -9,7 +9,7 @@ import { publishTask, getTask } from '../pool/index.js';
 import { formatPublishNotifications } from '../notifications.js';
 import type { NotificationConfig } from '../notifications.js';
 import { sendNotifications } from '../notifications.js';
-import { PublishTaskParams } from '../types/plugin.js';
+import { PublishTaskParams } from '../types/tools.js';
 
 export function register(
   api: OpenClawPluginApi,

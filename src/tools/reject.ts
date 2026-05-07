@@ -9,7 +9,7 @@ import { updateTask } from '../pool/index.js';
 import { formatRejectNotifications } from '../notifications.js';
 import type { NotificationConfig } from '../notifications.js';
 import { sendNotifications } from '../notifications.js';
-import { RejectTaskParams } from '../types/plugin.js';
+import { RejectTaskParams } from '../types/tools.js';
 
 export function register(
   api: OpenClawPluginApi,

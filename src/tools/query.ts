@@ -13,7 +13,7 @@ import {
   GetAgentActiveParams,
   GetTaskParams,
   GetAllTasksParams,
-} from '../types/plugin.js';
+} from '../types/tools.js';
 
 export function registerGetPending(api: OpenClawPluginApi): void {
   api.logger?.info('[m-team] registering mteam_get_pending');

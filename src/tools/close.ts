@@ -8,7 +8,7 @@ import { closeTask } from '../pool/index.js';
 import { formatCloseNotifications } from '../notifications.js';
 import type { NotificationConfig } from '../notifications.js';
 import { sendNotifications } from '../notifications.js';
-import { CloseTaskParams } from '../types/plugin.js';
+import { CloseTaskParams } from '../types/tools.js';
 
 export function register(
   api: OpenClawPluginApi,

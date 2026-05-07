@@ -8,7 +8,7 @@ import { completeTask } from '../pool/index.js';
 import { formatTaskNotifications } from '../notifications.js';
 import type { NotificationConfig } from '../notifications.js';
 import { sendNotifications } from '../notifications.js';
-import { CompleteTaskParams } from '../types/plugin.js';
+import { CompleteTaskParams } from '../types/tools.js';
 
 export function register(
   api: OpenClawPluginApi,

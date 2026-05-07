@@ -8,7 +8,7 @@ import { relinquishTask } from '../pool/index.js';
 import { formatRelinquishNotifications } from '../notifications.js';
 import type { NotificationConfig } from '../notifications.js';
 import { sendNotifications } from '../notifications.js';
-import { RelinquishTaskParams } from '../types/plugin.js';
+import { RelinquishTaskParams } from '../types/tools.js';
 
 export function register(
   api: OpenClawPluginApi,
