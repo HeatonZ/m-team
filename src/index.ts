@@ -35,6 +35,10 @@ import {
 } from './pool/index.js';
 import { TaskStatus, TaskPriority } from './schema/task.js';
 import type { NotificationConfig } from './notifications.js';
+import type { MTeamPluginConfig } from './types/plugin.js';
+
+// Re-export for tools
+export type { MTeamPluginConfig };
 
 // ============================================================
 // Plugin entry

@@ -94,7 +94,7 @@ export function registerHeartbeatPromptContributionHook(
   const executors = new Set(options.executors ?? ['maker', 'fixer', 'scholar', 'captain']);
   const publishers = new Set(options.publishers ?? []);
 
-  (api.on as (hook: string, handler: (...args: unknown[]) => unknown) => void)(
+  api.on(
     'heartbeat_prompt_contribution',
     (
       event: PluginHeartbeatPromptContributionEvent,

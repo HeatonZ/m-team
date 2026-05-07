@@ -3,15 +3,10 @@
  *
  * 每个工具独立文件，registerTools 按顺序注册所有工具。
  * 业务逻辑下沉到各自文件，index 只负责组合。
- *
- * 类型来源：
- *   AnyAgentTool / OpenClawPluginApi / PluginLogger → openclaw/plugin-sdk/core
- *   jsonResult / readStringParam               → openclaw/plugin-sdk/core
- *   业务逻辑（pool / notifications）            → ../pool, ../notifications
  */
 
 import type { OpenClawPluginApi } from 'openclaw/plugin-sdk';
-
+import type { MTeamPluginConfig } from '../types/plugin.js';
 import { sanitizeTask, sanitizeTaskList } from './helpers.js';
 
 import { register as registerPublish, } from './publish.js';
@@ -25,19 +20,13 @@ import { register as registerCancel, } from './cancel.js';
 import { register as registerClose, } from './close.js';
 import { registerGetPending, registerGetAgentActive, registerGetTask, registerGetAllTasks } from './query.js';
 
-import type { NotificationConfig } from '../notifications.js';
-
 // ─── re-export helpers 供子模块使用 ──────────────────────────────────────────
-// （shared.ts 无法 import helpers.ts，因 schema 类型依赖问题，保留在 tools 层统一导出）
 
 export { sanitizeTask, sanitizeTaskList };
 
 // ─── registerTools ───────────────────────────────────────────────────────────
 
-export interface MTeamPluginConfig {
-  workspaceRoot?: string;
-  notifications?: NotificationConfig[];
-}
+export { type MTeamPluginConfig };
 
 export function registerTools(api: OpenClawPluginApi, config: MTeamPluginConfig): void {
   try {
