@@ -121,19 +121,6 @@ export const RelinquishTaskParams = {
   required: ['taskId', 'executorId'] as const,
 } as const;
 
-export const UpdateTaskParams = {
-  type: 'object' as const,
-  properties: {
-    taskId: { type: 'string', description: '任务ID' },
-    agentId: { type: 'string', description: '执行者 agentId（追加 context 时必填）' },
-    status: { type: 'string', description: '状态', enum: ['running', 'completed', 'failed', 'pending', 'cancelled'] },
-    contextStep: { type: 'string', description: '当前步骤描述' },
-    contextOutput: ContextOutputSchema,
-    description: { type: 'string', description: '更新当前步骤描述（下一步做什么）' },
-  },
-  required: ['taskId'] as const,
-} as const;
-
 export const GetPendingParams = {
   type: 'object' as const,
   properties: {
@@ -203,15 +190,6 @@ export interface RelinquishTaskParamsInterface {
   taskId: string;
   executorId: string;
   reason?: string;
-}
-
-export interface UpdateTaskParamsInterface {
-  taskId: string;
-  agentId?: string;
-  status?: 'running' | 'completed' | 'failed' | 'pending' | 'cancelled';
-  contextStep?: string;
-  contextOutput?: ContextStepOutputInterface;
-  description?: string;
 }
 
 export interface GetPendingParamsInterface {

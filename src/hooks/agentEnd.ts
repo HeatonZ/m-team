@@ -6,7 +6,7 @@
  *
  * 逻辑：
  *   success=false → failTask
- *   success=true  → LLM 判断 complete vs relay
+ *   success=true  → LLM 读对话记录判断 complete vs relay
  */
 
 import fs from 'node:fs';
@@ -43,6 +43,52 @@ function readTaskFile(taskId: string, workspaceRoot: string): Task | null {
   }
 }
 
+/** 将 AgentMessage 数组格式化为可读的文本 */
+function formatMessages(messages: unknown[]): string {
+  const lines: string[] = [];
+
+  for (const msg of messages) {
+    const m = msg as Record<string, unknown>;
+    const role = String(m.role ?? 'unknown');
+
+    // 跳过 system 消息（钩子/框架注入的不相关）
+    if (role === 'system') continue;
+
+    const content = extractText(m.content);
+    if (!content) continue;
+
+    const label = role === 'user' ? 'USER' : role === 'assistant' ? 'AGENT' : `[${role}]`;
+    // 截断过长内容，只保留核心
+    const truncated = content.length > 2000
+      ? content.slice(0, 2000) + '\n...（内容截断）'
+      : content;
+    lines.push(`【${label}】${truncated}`);
+  }
+
+  return lines.join('\n\n') || '(对话记录为空)';
+}
+
+function extractText(content: unknown): string {
+  if (typeof content === 'string') return content;
+  if (typeof content === 'object' && content !== null) {
+    const c = content as Record<string, unknown>;
+    // 多模态 content: [{type: 'text', text: '...'}, ...]
+    if (Array.isArray(c)) {
+      return c
+        .filter((part: unknown) => {
+          const p = part as Record<string, unknown>;
+          return p?.type === 'text' || p?.type === 'input_text';
+        })
+        .map((part: unknown) => String((part as Record<string, unknown>).text ?? ''))
+        .join('');
+    }
+    // 单一 text 字段
+    if (typeof c.text === 'string') return c.text;
+    if (typeof c.content === 'string') return c.content;
+  }
+  return '';
+}
+
 interface JudgeParams {
   runId: string;
   sessionId: string;
@@ -53,29 +99,24 @@ interface JudgeParams {
 async function judgeByLlm(
   api: OpenClawPluginApi,
   task: Task,
+  messages: unknown[],
   params: JudgeParams,
 ): Promise<'complete' | 'relay'> {
-  const { goal, context, description } = task;
-  const completedSteps = context
-    .filter(s => s.type === 'step')
-    .map(s => {
-      const outputStr = s.output && Object.keys(s.output).length > 0
-        ? ` → ${JSON.stringify(s.output)}`
-        : '';
-      return `- ${s.step}${outputStr}`;
-    })
-    .join('\n') || '(无执行步骤记录)';
+  const { goal, description } = task;
+  const transcript = formatMessages(messages);
 
-  const prompt = `你是任务完成判断专家。以下是一个 M-Team 任务的上下文：
+  const prompt = `你是任务完成判断专家。以下是 M-Team 任务执行者的完整对话记录：
 
-任务描述：${description || '(无描述)'}
-任务目标：${goal}
-已完成的步骤：
-${completedSteps}
+任务描述（当前这一步做什么）：${description || '(无描述)'}
+任务目标（终态标尺）：${goal}
+
+=== 执行者对话记录 ===
+${transcript}
+=== 对话记录结束 ===
 
 请判断：执行者是否完成了任务目标？
-- 如果任务目标已达成（执行者已产出最终结果），返回：COMPLETE
-- 如果任务目标未达成（还需要更多步骤才能达到目标），返回：RELAY
+- 任务目标已达成 → COMPLETE
+- 任务目标未达成（还需继续） → RELAY
 
 只返回 COMPLETE 或 RELAY，不要任何解释。`.trim();
 
@@ -123,7 +164,7 @@ ${completedSteps}
 export function registerAgentEndHook(api: OpenClawPluginApi): void {
   // ⚠️ agent_end 是 conversation hook，非 bundled 插件需 allowConversationAccess: true
   api.on('agent_end', async (event: PluginHookAgentEndEvent, ctx: PluginHookAgentContext) => {
-    const { success, error, durationMs } = event;
+    const { success, error, durationMs, messages } = event;
     const { sessionKey, agentId } = ctx;
 
     // 只处理 m-team session
@@ -133,7 +174,7 @@ export function registerAgentEndHook(api: OpenClawPluginApi): void {
 
     console.error(
       `[m-team] agent_end: taskId=${taskId} agentId=${agentId ?? '?'} ` +
-        `success=${success} duration=${durationMs ?? '?'}`
+        `success=${success} duration=${durationMs ?? '?'} msgs=${messages?.length ?? 0}`
     );
 
     // ── 异常结束 → fail ──
@@ -161,8 +202,8 @@ export function registerAgentEndHook(api: OpenClawPluginApi): void {
     const sessionId = event.runId ?? runId;
     const sessionFile = path.join(os.tmpdir(), `m-team-judge-${runId}.json`);
 
-    api.logger?.info(`[m-team] agent_end: 开始判断任务 ${taskId}`);
-    const decision = await judgeByLlm(api, task, {
+    api.logger?.info(`[m-team] agent_end: 开始判断任务 ${taskId}（基于 ${messages?.length ?? 0} 条消息）`);
+    const decision = await judgeByLlm(api, task, messages ?? [], {
       runId,
       sessionId,
       sessionFile,
