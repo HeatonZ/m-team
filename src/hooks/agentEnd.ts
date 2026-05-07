@@ -221,26 +221,34 @@ CONTEXT_OUTPUT: {"summary": "<步骤总结>", "files": ["<文件路径1>", ...]}
       `raw="${raw.slice(0, 300)}"`
     );
 
-    const relayMatch = raw.match(/DECISION:\s*RELAY\b[\s\S]*?下一步描述：\s*(.+)/i);
-    if (relayMatch) {
-      const nextDesc = relayMatch[1].trim();
-      const contextStep = extractField(raw, 'CONTEXT_STEP') || description || '执行步骤';
-      const contextOutput = parseContextOutput(raw);
-      console.error(
-        `[m-team] judgeByLlm 判决: RELAY taskId=${task.taskId} nextDescription="${nextDesc.slice(0, 80)}" ` +
-        `contextStep="${contextStep.slice(0, 80)}"`
-      );
-      return {
-        decision: 'relay',
-        nextDescription: nextDesc,
-        contextStep,
-        contextOutput,
-      };
+    // ── 解析判决结果 ──────────────────────────────────────────────────────────
+
+    // 规范化：删除首尾空白，取最后一行防截断问题
+    const normalized = raw.trim();
+    const lastLine = normalized.split('\n').pop() ?? normalized;
+
+    // 检测 DECISION 类型（宽松匹配）
+    const hasComplete = /DECISION:\s*COMPLETE/i.test(normalized);
+    const hasRelay = /DECISION:\s*RELAY\b/i.test(normalized);
+
+    // 提取下一步描述（多级降级）
+    let nextDescription: string | undefined;
+    for (const pattern of [
+      /下一步描述[：:]\s*(.+)/i,
+      /NEXT[_\s]STEP[：:]\s*(.+)/i,
+      /下一步[：:]\s*(.+)/i,
+      /接下来[做干什么]+[：:]\s*(.+)/i,
+    ]) {
+      const m = normalized.match(pattern);
+      if (m?.[1]?.trim()) {
+        nextDescription = m[1].trim();
+        break;
+      }
     }
 
-    if (raw.toUpperCase().includes('DECISION:') && raw.toUpperCase().includes('COMPLETE')) {
-      const contextStep = extractField(raw, 'CONTEXT_STEP') || description || '执行步骤';
-      const contextOutput = parseContextOutput(raw);
+    if (hasComplete) {
+      const contextStep = extractField(normalized, 'CONTEXT_STEP') || description || '执行步骤';
+      const contextOutput = parseContextOutput(normalized);
       console.error(
         `[m-team] judgeByLlm 判决: COMPLETE taskId=${task.taskId} contextStep="${contextStep.slice(0, 80)}"`
       );
@@ -251,11 +259,26 @@ CONTEXT_OUTPUT: {"summary": "<步骤总结>", "files": ["<文件路径1>", ...]}
       };
     }
 
-    // 兜底：无法解析 → relay 回池子
+    if (hasRelay) {
+      const contextStep = extractField(normalized, 'CONTEXT_STEP') || description || '执行步骤';
+      const contextOutput = parseContextOutput(normalized);
+      const nextDesc = nextDescription ?? description;
+      console.error(
+        `[m-team] judgeByLlm 判决: RELAY taskId=${task.taskId} nextDescription="${nextDesc.slice(0, 80)}" `
+      );
+      return {
+        decision: 'relay',
+        nextDescription: nextDesc,
+        contextStep,
+        contextOutput,
+      };
+    }
+
+    // 兜底：无法解析 → relay 回池子，保留原描述
     console.error(
-      `[m-team] judgeByLlm 判决: UNKNOWN（无法解析），强制 RELAY taskId=${task.taskId}`
+      `[m-team] judgeByLlm 判决: UNKNOWN（无法解析 raw="${lastLine.slice(0, 150)}"），强制 RELAY`
     );
-    api.logger?.warn(`[m-team] agent_end LLM 判断结果无法解析 "${raw.slice(0, 200)}"，放回任务池`);
+    api.logger?.warn(`[m-team] agent_end LLM 判断结果无法解析 "${lastLine.slice(0, 200)}"，放回任务池`);
     return { decision: 'relay', contextStep: description || '执行步骤', contextOutput: {}, nextDescription: description };
   } catch (err) {
     const elapsedMs = Date.now() - startMs;
