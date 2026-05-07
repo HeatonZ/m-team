@@ -2,8 +2,6 @@
  * 工具参数 Schema — 单一来源
  */
 
-import type { NotificationConfig } from '../notifications.js';
-
 // ─── 通用部件 ───────────────────────────────────────────────────────────────
 
 /** contextOutput — 步骤输出（complete/relay/update 共用） */
