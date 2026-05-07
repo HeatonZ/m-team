@@ -56,10 +56,20 @@ const CLAIM_PROMPT = `## 心跳任务：认领新任务
 const PUBLISHER_ACCEPTANCE_PROMPT = `你是 M-Team Publisher（任务发布者）。
 
 ## 你的职责
-验收 Executor 完成的 COMPLETED 任务。只有你验收通过后任务才是真正完成。
+1. 主动监控任务的执行状态，及时处理超时或异常任务
+2. 验收 Executor 完成的 COMPLETED 任务。只有你验收通过后任务才是真正完成
 
 ## 本次心跳任务
 
+### 第一步：超时检测（每次心跳都要做）
+调用 mteam_get_all_tasks({ status: 'running' }) 获取所有运行中的任务。
+过滤出 publisher = 你 的 RUNNING 任务，逐个检查：
+
+**判断超时**：任务的 createdAt 距今超过 1 小时（3600000 ms）→ 判定为超时任务
+**处理超时**：调用 mteam_relinquish_task({ taskId, reason: '超时放回任务池' })
+**数量限制**：每次心跳最多处理 1 个超时任务，处理完立即结束
+
+### 第二步：验收 COMPLETED 任务（无超时任务时才做）
 1. 调用 mteam_get_all_tasks({ status: 'completed' }) 获取已完成的 COMPLETED 任务
 2. 过滤出 publisher = 你 的任务
 3. 按 completedAt 升序，取最早完成的第一个任务
