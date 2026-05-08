@@ -94,9 +94,13 @@ function hasTerminalLogForSession(taskId: string, sessionKey: string, workspaceR
   }
 }
 
-function findSessionTranscriptPath(sessionKey: string, agentId: string | undefined, workspaceRoot: string): string | null {
+function findSessionTranscriptPath(
+  sessionKey: string,
+  agentId: string | undefined,
+  agentDir: string | undefined,
+): string | null {
   const candidates = [
-    path.join(workspaceRoot, '.openclaw', 'sessions'),
+    ...(agentDir ? [path.join(agentDir, '.openclaw', 'sessions')] : []),
     path.join(os.homedir(), '.openclaw', 'sessions'),
     '/tmp/openclaw/sessions',
   ];
@@ -488,7 +492,24 @@ export function registerSubagentEndedHook(api: OpenClawPluginApi): void {
         return;
       }
 
-      const transcriptPath = findSessionTranscriptPath(sessionKey, agentId ?? undefined, workspaceRoot);
+      const executorAgentDir = (() => {
+        const cfg = api.config as Record<string, unknown> | undefined;
+        const agents = cfg?.agents as Record<string, unknown> | undefined;
+        const byId = (agents?.[agentId ?? ''] as Record<string, unknown> | undefined)
+          ?? ((agents?.named as Record<string, unknown> | undefined)?.[agentId ?? ''] as Record<string, unknown> | undefined);
+        const raw = byId?.agentDir;
+        return typeof raw === 'string' && raw.trim() ? raw.trim() : undefined;
+      })();
+
+      const transcriptPath = findSessionTranscriptPath(
+        sessionKey,
+        agentId ?? undefined,
+        executorAgentDir,
+      );
+      console.error(
+        `[m-team][subagent_ended] transcript lookup taskId=${taskId} agentId=${agentId ?? '?'} ` +
+        `agentDir=${executorAgentDir ?? '(none)'} transcriptPath=${transcriptPath ?? '(not_found)'}`
+      );
       const transcriptMessages = readSessionTranscript(transcriptPath ?? undefined);
       const runId = randomUUID();
       const judgeSessionFile = path.join(os.tmpdir(), `m-team-subagent-ended-judge-${runId}.json`);
