@@ -42,8 +42,6 @@ license: MIT
 2. **问题**：如果没完成，说明卡在哪
 3. **建议**：如果需要下一棒，说明下一步做什么（动词开头）
 
-**描述下一步时用"找够 N 个"，禁止"前 N 个"。**
-
 ## 结束方式
 
 完成 description 规定的内容后，直接结束 session。agent_end hook 读对话记录判断 complete 或 relay，不需要调用任何 task 管理工具。
