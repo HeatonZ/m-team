@@ -4,3 +4,8 @@ dist
 queue/
 .env
 package-lock.json
+# local generated skill mirrors / workspace caches
+.codebuddy/
+.continue/
+.hermes/
+skills/lark-*/
