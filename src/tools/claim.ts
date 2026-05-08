@@ -59,6 +59,9 @@ export function register(
 【目标（goal）】
 ${task?.goal ?? '（无）'}
 
+【执行历史（context）】
+${contextHistory}
+
 【工作区约束】
 所有文件操作（读、写、终端命令）必须在任务目录内进行。
 
@@ -67,8 +70,8 @@ ${task?.goal ?? '（无）'}
 禁止调用 mteam_claim_task——任务不在 PENDING 状态，会失败。
 
 【执行流程】
-1. 先调用 mteam_get_task 查任务最新详情（description + context）
-2. 根据 description 执行当前步骤
+1. 根据上方执行历史确认当前步骤是否已在历史中完成
+2. 根据 description 执行当前步骤（先查任务详情确认最新 description）
 3. 做完后直接结束 session，agent_end hook 会自动判断 complete 还是 relay
 
 【执行约束 — 必须遵守】
