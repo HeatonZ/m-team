@@ -51,6 +51,14 @@ export function registerSessionGuardHook(
         };
       }
 
+      // publish：只有配置中的 publishers 才能发布任务
+      if (toolName === 'mteam_publish_task' && !publishers.has(agentId)) {
+        return {
+          block: true,
+          blockReason: `mteam_publish_task 只能由 publishers 配置中的 agent 调用，你（${agentId}）不在 publishers 列表中`,
+        };
+      }
+
       // close / reject / cancel：只有 publisher 才能成功执行
       // 拦截非 publisher 的调用（参数中 publisher 与调用者 agentId 不一致）
       if (
