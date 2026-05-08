@@ -51,6 +51,20 @@ function readTaskFile(taskId: string, workspaceRoot: string): Task | null {
   }
 }
 
+function isExecutorSessionForTask(sessionKey: string | undefined, agentId: string | undefined, taskId: string): boolean {
+  if (!sessionKey || !agentId) return false;
+  return sessionKey === `agent:${agentId}:m-team:${taskId}`;
+}
+
+function getRelayDescription(decision: JudgeResult): string | undefined {
+  if (!decision.nextDescription) return undefined;
+  const next = decision.nextDescription.trim();
+  const prev = (decision.previousDescription || '').trim();
+  if (!next) return undefined;
+  if (next === prev) return undefined;
+  return next;
+}
+
 /** 将 AgentMessage 数组格式化为可读的文本 */
 function formatMessages(messages: unknown[]): string {
   const lines: string[] = [];
@@ -504,6 +518,29 @@ export function registerAgentEndHook(api: OpenClawPluginApi): void {
     });
 
     const executorId = task.executor || 'unknown';
+    if (!isExecutorSessionForTask(sessionKey, agentId, taskId)) {
+      writeTaskLog({
+        taskId,
+        action: 'relay',
+        sessionKey: sessionKey ?? undefined,
+        agentId: agentId ?? undefined,
+        result: {
+          success: false,
+          reason: 'INVALID_EXECUTOR_SESSION',
+          decision: 'relay',
+          contextStep: decision.contextStep,
+          contextOutput: decision.contextOutput,
+          previousDescription: decision.previousDescription,
+          descriptionChanged: false,
+          parseStatus: decision.parseStatus,
+          rawJudgeTail: decision.rawJudgeTail,
+        },
+      });
+      console.error(
+        `[m-team][agent_end] task=${taskId} invalid executor session sessionKey=${sessionKey ?? '?'} agentId=${agentId ?? '?'}`
+      );
+      return;
+    }
     if (decision.decision === 'relay') {
       if (decision.parseStatus === 'same_description_blocked') {
         const result = failTask(taskId, 'same_description_blocked', undefined, {
@@ -546,10 +583,11 @@ export function registerAgentEndHook(api: OpenClawPluginApi): void {
             : `[m-team] agent_end: 任务 ${taskId} → blocked/fail 失败: ${result.reason}`
         );
       } else {
+        const relayDescription = getRelayDescription(decision);
         const result = relayTask(taskId, executorId, {
           step: decision.contextStep,
           output: decision.contextOutput,
-        }, decision.nextDescription);
+        }, relayDescription);
         writeTaskLog({
           taskId,
           action: 'relay',
