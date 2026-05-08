@@ -31,6 +31,7 @@ export function registerSessionGuardHook(
     ): PluginHookBeforeToolCallResult => {
       const { toolName, params } = event;
       const { sessionKey, agentId } = ctx;
+      const isExecutorTaskSession = Boolean(sessionKey?.startsWith(`agent:${agentId}:m-team:task_`));
 
       // 心跳 session 禁止调用 complete / fail（这两种由 agent_end hook 统一处理）
       if (
@@ -48,6 +49,16 @@ export function registerSessionGuardHook(
         return {
           block: true,
           blockReason: `心跳 session（${sessionKey}）禁止发布新任务`,
+        };
+      }
+
+      // executor task session 禁止主动 relinquish 当前任务。
+      // 正常交接应由 agent_end hook 在 session 结束后统一判断 relay/complete；
+      // executor 提前 relinquish 会把任务改成 pending，导致 agent_end relay 失败（TASK_NOT_RUNNING_pending）。
+      if (toolName === 'mteam_relinquish_task' && isExecutorTaskSession) {
+        return {
+          block: true,
+          blockReason: `executor session（${sessionKey}）禁止主动调用 mteam_relinquish_task。请完成当前步骤后直接结束 session，由 agent_end hook 自动 relay/complete。`,
         };
       }
 
