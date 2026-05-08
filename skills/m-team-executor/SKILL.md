@@ -1,7 +1,6 @@
 ---
 name: m-team-executor
-description: Use when executing M-Team tasks. Provides execution guidance for completing the current step properly.
-license: MIT
+description: "Use when executing M-Team tasks —认领任务后按 description 执行当前步骤。提供执行指引、红线约束和做完时的交接写法。"
 ---
 
 # M-Team Executor
@@ -41,6 +40,8 @@ license: MIT
 1. **结果**：完成了什么（具体数据/文件/结论）
 2. **问题**：如果没完成，说明卡在哪
 3. **建议**：如果需要下一棒，说明下一步做什么（动词开头）
+
+**描述下一步时用"找够 N 个"，禁止"前 N 个"。**
 
 ## 结束方式
 
