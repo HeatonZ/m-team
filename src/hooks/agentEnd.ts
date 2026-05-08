@@ -512,7 +512,9 @@ export function registerAgentEndHook(api: OpenClawPluginApi): void {
       });
       console.error(
         `[m-team][agent_end] task=${taskId} decision=RELAY changed=${decision.descriptionChanged} ` +
-        `parseStatus=${decision.parseStatus} next="${(decision.nextDescription || '').slice(0, 120)}"`
+        `parseStatus=${decision.parseStatus} previous="${(decision.previousDescription || '').slice(0, 120)}" ` +
+        `next="${(decision.nextDescription || '').slice(0, 120)}" ` +
+        `relaySuccess=${result.success} relayReason=${result.reason || decision.reason}`
       );
       if (result.task) {
         sendNotifications(
