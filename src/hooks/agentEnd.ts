@@ -303,11 +303,11 @@ CONTEXT_OUTPUT: {"summary": "<步骤总结>", "files": ["<文件路径1>", ...]}
           `parseStatus=${parseStatus} nextDescription="${(nextDesc || '').slice(0, 80)}"`
         );
         return {
-          decision: 'complete',
+          decision: 'relay',
           nextDescription: undefined,
           contextStep,
           contextOutput,
-          reason: 'LLM 生成的下一步描述与当前 description 完全相同，禁止 relay',
+          reason: 'LLM 生成的下一步描述与当前 description 完全相同，禁止原样 relay',
           previousDescription: description || '',
           descriptionChanged: false,
           parseStatus: 'same_description_blocked',
@@ -505,45 +505,87 @@ export function registerAgentEndHook(api: OpenClawPluginApi): void {
 
     const executorId = task.executor || 'unknown';
     if (decision.decision === 'relay') {
-      const result = relayTask(taskId, executorId, {
-        step: decision.contextStep,
-        output: decision.contextOutput,
-      }, decision.nextDescription);
-      writeTaskLog({
-        taskId,
-        action: 'relay',
-        sessionKey: sessionKey ?? undefined,
-        agentId: agentId ?? undefined,
-        result: {
-          success: result.success,
-          reason: result.reason || decision.reason,
-          decision: 'relay',
-          contextStep: decision.contextStep,
-          contextOutput: decision.contextOutput,
-          nextDescription: decision.nextDescription,
-          previousDescription: decision.previousDescription,
-          descriptionChanged: decision.descriptionChanged,
-          parseStatus: decision.parseStatus,
-          rawJudgeTail: decision.rawJudgeTail,
-        },
-      });
-      console.error(
-        `[m-team][agent_end] task=${taskId} decision=RELAY changed=${decision.descriptionChanged} ` +
-        `parseStatus=${decision.parseStatus} previous="${(decision.previousDescription || '').slice(0, 120)}" ` +
-        `next="${(decision.nextDescription || '').slice(0, 120)}" ` +
-        `relaySuccess=${result.success} relayReason=${result.reason || decision.reason}`
-      );
-      if (result.task) {
-        sendNotifications(
-          formatRelayNotifications(result.task, getNotifications()),
-          api.logger ?? null
-        ).catch(err => api.logger?.error(`[m-team] relay 通知发送失败: ${String(err)}`));
+      if (decision.parseStatus === 'same_description_blocked') {
+        const result = failTask(taskId, 'same_description_blocked', undefined, {
+          outcome: 'blocked',
+          error: 'same_description_blocked',
+        });
+        writeTaskLog({
+          taskId,
+          action: 'fail',
+          sessionKey: sessionKey ?? undefined,
+          agentId: agentId ?? undefined,
+          result: {
+            success: result.success,
+            reason: result.reason || decision.reason,
+            decision: 'relay',
+            contextStep: decision.contextStep,
+            contextOutput: decision.contextOutput,
+            nextDescription: decision.nextDescription,
+            previousDescription: decision.previousDescription,
+            descriptionChanged: decision.descriptionChanged,
+            parseStatus: decision.parseStatus,
+            rawJudgeTail: decision.rawJudgeTail,
+          },
+        });
+        console.error(
+          `[m-team][agent_end] task=${taskId} decision=BLOCKED same_description -> failTask reason=${result.reason} ` +
+          `prev="${(decision.previousDescription || '').slice(0, 100)}" ` +
+          `next="${(decision.nextDescription || '').slice(0, 100)}" ` +
+          `contextStep="${decision.contextStep.slice(0, 100)}"`
+        );
+        if (result.task) {
+          sendNotifications(
+            formatFailNotifications(result.task, getNotifications()),
+            api.logger ?? null
+          ).catch(err => api.logger?.error(`[m-team] fail 通知发送失败: ${String(err)}`));
+        }
+        api.logger?.info(
+          result.success
+            ? `[m-team] agent_end: 任务 ${taskId} → blocked/fail`
+            : `[m-team] agent_end: 任务 ${taskId} → blocked/fail 失败: ${result.reason}`
+        );
+      } else {
+        const result = relayTask(taskId, executorId, {
+          step: decision.contextStep,
+          output: decision.contextOutput,
+        }, decision.nextDescription);
+        writeTaskLog({
+          taskId,
+          action: 'relay',
+          sessionKey: sessionKey ?? undefined,
+          agentId: agentId ?? undefined,
+          result: {
+            success: result.success,
+            reason: result.reason || decision.reason,
+            decision: 'relay',
+            contextStep: decision.contextStep,
+            contextOutput: decision.contextOutput,
+            nextDescription: decision.nextDescription,
+            previousDescription: decision.previousDescription,
+            descriptionChanged: decision.descriptionChanged,
+            parseStatus: decision.parseStatus,
+            rawJudgeTail: decision.rawJudgeTail,
+          },
+        });
+        console.error(
+          `[m-team][agent_end] task=${taskId} decision=RELAY changed=${decision.descriptionChanged} ` +
+          `parseStatus=${decision.parseStatus} previous="${(decision.previousDescription || '').slice(0, 120)}" ` +
+          `next="${(decision.nextDescription || '').slice(0, 120)}" ` +
+          `relaySuccess=${result.success} relayReason=${result.reason || decision.reason}`
+        );
+        if (result.task) {
+          sendNotifications(
+            formatRelayNotifications(result.task, getNotifications()),
+            api.logger ?? null
+          ).catch(err => api.logger?.error(`[m-team] relay 通知发送失败: ${String(err)}`));
+        }
+        api.logger?.info(
+          result.success
+            ? `[m-team] agent_end: 任务 ${taskId} → relay`
+            : `[m-team] agent_end: 任务 ${taskId} → relay 失败: ${result.reason}`
+        );
       }
-      api.logger?.info(
-        result.success
-          ? `[m-team] agent_end: 任务 ${taskId} → relay`
-          : `[m-team] agent_end: 任务 ${taskId} → relay 失败: ${result.reason}`
-      );
     } else {
       const result = completeTask(taskId, {
         step: decision.contextStep,
