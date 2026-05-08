@@ -1,6 +1,6 @@
 ---
 name: m-team-executor
-description: "Use when executing M-Team tasks —认领任务后按 description 执行当前步骤。提供执行指引、红线约束和做完时的交接写法。"
+description: "Use when executing M-Team tasks — 任务 description 执行。提供执行指引、红线约束和做完时的交接写法。"
 ---
 
 # M-Team Executor
