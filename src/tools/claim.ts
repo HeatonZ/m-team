@@ -45,9 +45,13 @@ export function register(
 
       // 拼接 context 历史，供 executor 了解之前做到了哪一步
       const contextHistory = task?.context
-        ?.map((c: { step?: string; output?: unknown; executor?: string; completedAt?: number }, i: number) =>
-          `  步骤${i + 1} [${c.executor ?? 'unknown'}]: ${c.step ?? ''}`
-        )
+        ?.map((c: { step?: string; output?: unknown; executor?: string; completedAt?: number }, i: number) => {
+          const stepStr = c.step ? `动作: ${c.step}` : '';
+          const outputStr = c.output
+            ? `结果: ${typeof c.output === 'string' ? c.output : JSON.stringify(c.output)}`
+            : '';
+          return `  步骤${i + 1} [${c.executor ?? 'unknown'}]\n    ${stepStr}${outputStr ? '\n    ' + outputStr : ''}`;
+        })
         .join('\n') ?? '（无历史步骤）';
 
       const systemPrompt = `
