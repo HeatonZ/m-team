@@ -47,7 +47,7 @@ mteam_get_all_tasks()
 agent:{agentId}:m-team:{taskId}
 ```
 
-**executor 不调用任何管理工具**。只管执行 description 规定的步骤，然后结束 session。后续的 complete/relay/fail 由 `agent_end` hook 自动判断。
+**executor 不调用任何管理工具**。只管执行 description 规定的步骤，然后结束 session。后续的 complete/relay/fail 由 `session_end` hook 自动判断。
 
 **执行流程**：
 1. 先调用 `mteam_get_task` 查任务详情（含执行历史 + 当前 description）
@@ -57,38 +57,39 @@ agent:{agentId}:m-team:{taskId}
 
 ---
 
-## agent_end Hook
+## session_end Hook
 
-Executor Session 结束时，`agent_end` hook 自动触发，根据 session 结束方式做不同处理：
+Executor Session 真正结束时，`session_end` hook 自动触发，只处理 task executor session，并按 session 终止类型收口：
 
 ```typescript
-api.on('agent_end', async (event) => {
-  // event: { success, messages, taskId, agentId, sessionKey, error }
+api.on('session_end', async (event, ctx) => {
+  const { sessionKey, agentId, sessionId } = ctx;
+  const taskId = parseTaskId(sessionKey);
+  if (!taskId) return;
+  if (!isExecutorSessionForTask(sessionKey, agentId, taskId)) return;
 
-  // 1. 解析 sessionKey，提取 taskId
-  if (!sessionKey?.startsWith('agent:') || !sessionKey?.includes(':m-team:')) return;
-  const taskId = sessionKey.split(':')[3];
+  // 非终态结束（压缩、idle、reset 等）一律跳过，避免误判
+  if (NON_TERMINAL_SESSION_END_REASONS.has(event.reason)) return;
 
-  // 2. 异常结束（success=false）→ 直接 fail
-  if (!success) {
-    const errorMsg = error ?? 'unknown_error';
-    failTask(taskId, errorMsg, undefined, { outcome: 'error', error: errorMsg });
-    writeTaskLog({ taskId, action: 'fail', sessionKey, agentId, error: errorMsg });
-    sendNotifications(formatFailNotifications(task, errorMsg));
+  // 同一 session 已有 complete / relay / fail 日志时，跳过重复收口
+  if (hasTerminalLogForSession(taskId, sessionKey, workspaceRoot)) return;
+
+  const transcriptMessages = readSessionTranscript(event.sessionFile);
+  if (transcriptMessages.length === 0) {
+    failTask(taskId, 'SESSION_TRANSCRIPT_EMPTY');
+    writeTaskLog({ taskId, action: 'fail', sessionKey, agentId });
     return;
   }
 
-  // 3. 正常结束 → LLM 读对话记录判断 complete 还是 relay
-  const decision = await judgeByLlm(messages, task);
+  const decision = await judgeByLlm(transcriptMessages, task);
 
-  if (decision === 'relay') {
-    relayTask(taskId, executorId, { step: '[agent_end] executor 正常结束，hook 判断需要 relay' });
+  if (decision.decision === 'relay') {
+    // 若 nextDescription 与当前 description 完全相同，禁止原样 relay，直接 fail
+    relayTask(taskId, executorId, { step: decision.contextStep, output: decision.contextOutput }, relayDescription);
     writeTaskLog({ taskId, action: 'relay', sessionKey, agentId });
-    sendNotifications(formatRelayNotifications(result.task));
   } else {
-    completeTask(taskId, { step: '[agent_end] executor 正常结束，hook 判断任务完成' });
+    completeTask(taskId, { step: decision.contextStep, output: decision.contextOutput });
     writeTaskLog({ taskId, action: 'complete', sessionKey, agentId });
-    sendNotifications(formatTaskNotifications(result.task));
   }
 });
 ```
@@ -97,18 +98,21 @@ api.on('agent_end', async (event) => {
 
 | 条件 | 动作 | 写日志 | 发通知 |
 |------|------|--------|--------|
-| `success=false`（异常退出） | `failTask` | ✅ | `formatFailNotifications` |
+| `event.reason in {compaction,idle,daily,deleted,reset,unknown}` | 跳过 | ❌ | ❌ |
+| transcript 为空 | `failTask` | ✅ | `formatFailNotifications` |
 | LLM 判断 relay | `relayTask` | ✅ | `formatRelayNotifications` |
 | LLM 判断 complete | `completeTask` | ✅ | `formatTaskNotifications` |
 
 **关键设计**：
 - executor 不调用 complete/relay/fail，只管执行然后结束
-- `agent_end` 读取 `event.messages`（完整对话历史）判断下一步
-- 写日志 + 发通知都在 hook 内完成，不走工具层
+- `session_end` 读取 `event.sessionFile` 重建完整 transcript，不依赖 `agent_end.messages`
+- 只处理 `agent:{agentId}:m-team:{taskId}` 这种 executor task session
+- 同一 session 已经出现 terminal task_log 时直接跳过，避免双重 complete / relay / fail
+- 非终态结束原因直接跳过，避免 compaction / reset 误触发收口
 
 **Relay 时下一步描述格式要求**：
 
-`agent_end` hook 判断需要 relay 时，LLM 生成的下一步描述必须包含 4 个要素：
+`session_end` hook 判断需要 relay 时，LLM 生成的下一步描述必须包含 4 个要素：
 
 | 要素 | 说明 | 示例 |
 |------|------|------|
@@ -138,35 +142,33 @@ T0                mteam_claim_task()
                     ├─ claimTask() (SQLite)
                     └─ api.runtime.subagent.run()
                          sessionKey="agent:agent1:m-team:task123"
-                         message="[M-Team Task...]"
-                    ←─ 立即返回 runId/sessionKey
-                  return { success, taskId, runId, sessionKey }
 
-Tn                                             [executor 执行 description 步骤]
-                                             [executor 结束 session]
+T1                                                  执行 description 规定的步骤
+T2                                                  完成后直接结束 session
+T3                （无需参与）                      session_end hook 触发
+                                                     ├─ reason=compaction/idle/reset/... → skip
+                                                     ├─ transcript 为空 → failTask()
+                                                     ├─ LLM 判断 RELAY → relayTask()
+                                                     └─ LLM 判断 COMPLETE → completeTask()
 
-                                             agent_end hook
-                                               → LLM 判断 complete / relay / fail
-                                             session 关闭
-
-Tn+1              mteam_get_agent_active()      [session 已关闭]
-                    → status=completed 或 pending
-                    → 本轮结束，轮询下一轮
+T4                下次 heartbeat 看池子状态
+                    ├─ 如果被 relay → 重新认领继续做
+                    └─ 如果已 complete → publisher 验收 close/reject
 ```
 
 ---
 
 ## 接力（Relay）流程
 
-当 executor 执行完后，agent_end hook 判断需要 relay 时执行：
+当 executor 执行完后，`session_end` hook 判断需要 relay 时执行：
 
 ```
 Agent B 执行 description 步骤
   → description 步骤已做，但仍需继续
   → executor 结束 session
 
-agent_end hook
-  → relayTask(taskId, executorId, { step: '...', description: '下一步描述' })
+`session_end` hook
+  → relayTask(taskId, executorId, { step: '...', output: {...} }, relayDescription)
   → status=pending
   → executor=null
   → lastExecutor="maker"
