@@ -204,7 +204,6 @@ CONTEXT_OUTPUT: {"summary": "<步骤总结>", "files": ["<文件路径1>", ...]}
       messageChannel: void 0,
       sessionFile: params.sessionFile,
       workspaceDir: params.workspaceDir,
-      agentDir: `${api.config.agentsDir}/${task.executor}/agent`,
       config: api.config,
       prompt,
       provider: 'minimax',
