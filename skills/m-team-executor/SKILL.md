@@ -1,6 +1,6 @@
 ---
 name: m-team-executor
-description: Use when executing M-Team tasks. Provides step execution guidance, completion criteria, and session end behavior.
+description: Use when executing M-Team tasks. Provides execution guidance for completing the current step properly.
 license: MIT
 ---
 
@@ -14,56 +14,36 @@ license: MIT
 
 ## 执行流程
 
-1. **认领后先查任务详情**：调用 mteam_get_task 获取最新 description 和 context
+1. **认领后先查任务详情**：调用 mteam_get_task 获取 description 和 context
 2. **执行当前步骤**：按 description 要求完成
-3. **做完直接结束 session**：agent_end hook 自动判断 complete 或 relay
+3. **做完直接结束 session**：hook 读对话判断 complete 或 relay
 
-## 步骤执行指引
+## 如何执行好当前步骤
 
-每步执行前先问自己三个问题：
+### 接受任务时
 
-```
-① 完成标准是什么？有没有 STOP 条件？
-② 产出包含哪三个要素？
-③ 还需要其他支持才能继续吗？
-```
+先确认三点：
+- 我清楚这一步要达成什么结果
+- 我知道成功产出的样子（文件/数据/结论）
+- 我知道什么情况算失败或无法继续
 
-### 交接要求
+### 执行中
 
-需要下一棒接力时，最后一条消息必须包含：
+遇到错误不要猜测，按顺序处理：
+1. 错误信息是什么？
+2. 我能做什么来修正？
+3. 修正后重试，不行就放弃，不要反复重试超过 3 次
 
-1. **已完成**：这步产出了什么（结论/文件/数据）
-2. **下一步**：下一棒要做什么（动词开头，1-3句话）
-3. **关键上下文**：下一棒需要但不一定能自己查到的信息
+### 做完时
 
-### 下一步描述模板
+在最后一条消息中给出交接信息，供 hook 判断：
 
-```
-{动作} {目标}，筛选 {条件}，{数量逻辑}
-```
+1. **结果**：完成了什么（具体数据/文件/结论）
+2. **问题**：如果没完成，说明卡在哪
+3. **建议**：如果需要下一棒，说明下一步做什么（动词开头）
 
-| 要素 | 写法 | 示例 |
-|------|------|------|
-| 动作 | 动词开头 | 继续搜索、筛选、抓取、生成 |
-| 目标 | 操作对象 | 宠物玩具、商品详情页 |
-| 条件 | 过滤维度 | costPrice ≤ 5 RMB |
-| 数量逻辑 | **找够 N 个**，不够就继续 | 找够剩余 3 个 |
-
-**数量逻辑禁止"前 N 个"——"前 N 个"会误导 executor 以为只需扫描开头就够。**
-
-### 坏味道
-
-- "继续" → 没说要继续做什么
-- "下一步" → 没写具体动作
-- "数量不够继续找" → 没说要找多少个
-- "做剩下的" → 没说要做什么、有多少剩余
-- "前 N 个" → executor 可能以为只需扫描开头就停
-
-### 好味道
-
-- "继续搜索...找够剩余 N 个" → 明确数量缺口
-- "抓取商品详情页，提取标题、价格、规格" → 动词开头，清晰
+**描述下一步时用"找够 N 个"，禁止"前 N 个"。**
 
 ## 结束方式
 
-完成 description 规定的内容后，直接结束 session。agent_end hook 读对话记录判断 complete 还是 relay，不需要调用任何 task 管理工具。
+完成 description 规定的内容后，直接结束 session。agent_end hook 读对话记录判断 complete 或 relay，不需要调用任何 task 管理工具。
