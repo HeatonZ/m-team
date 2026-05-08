@@ -112,6 +112,16 @@ interface JudgeResult {
   contextStep: string;
   /** 本次步骤的输出（files 等） */
   contextOutput: Record<string, unknown>;
+  /** LLM 判决理由 */
+  reason: string;
+  /** relay 前旧描述 */
+  previousDescription: string;
+  /** relay 后描述是否变化 */
+  descriptionChanged: boolean;
+  /** 判决解析状态，用于 dashboard 诊断 */
+  parseStatus: 'ok' | 'llm_output_missing' | 'next_description_missing' | 'json_parse_failed' | 'timeout' | 'unknown_decision';
+  /** LLM 原始输出尾部，用于排查截断/解析问题 */
+  rawJudgeTail: string;
 }
 
 async function judgeByLlm(
@@ -186,11 +196,13 @@ ${transcript}
 
 输出格式：
 DECISION: COMPLETE
+REASON: <为什么判断目标已达成>
 CONTEXT_STEP: <本次步骤描述>
 CONTEXT_OUTPUT: {"summary": "<步骤总结>", "files": ["<文件路径1>", ...]}
 
 或者：
 DECISION: RELAY
+REASON: <为什么还需要下一棒>
 CONTEXT_STEP: <本次步骤描述>
 CONTEXT_OUTPUT: {"summary": "<步骤总结>", "files": ["<文件路径1>", ...]}
 下一步描述：<一句话描述>`.trim();
@@ -262,6 +274,7 @@ CONTEXT_OUTPUT: {"summary": "<步骤总结>", "files": ["<文件路径1>", ...]}
     if (hasComplete) {
       const contextStep = extractField(normalized, 'CONTEXT_STEP') || description || '执行步骤';
       const contextOutput = parseContextOutput(normalized);
+      const reason = extractField(normalized, 'REASON') || 'LLM 判定任务目标已达成';
       console.error(
         `[m-team] judgeByLlm 判决: COMPLETE taskId=${task.taskId} contextStep="${contextStep.slice(0, 80)}"`
       );
@@ -269,6 +282,11 @@ CONTEXT_OUTPUT: {"summary": "<步骤总结>", "files": ["<文件路径1>", ...]}
         decision: 'complete',
         contextStep,
         contextOutput,
+        reason,
+        previousDescription: description || '',
+        descriptionChanged: false,
+        parseStatus: 'ok',
+        rawJudgeTail: normalized.slice(-1000),
       };
     }
 
@@ -276,14 +294,23 @@ CONTEXT_OUTPUT: {"summary": "<步骤总结>", "files": ["<文件路径1>", ...]}
       const contextStep = extractField(normalized, 'CONTEXT_STEP') || description || '执行步骤';
       const contextOutput = parseContextOutput(normalized);
       const nextDesc = nextDescription ?? description;
+      const descriptionChanged = Boolean(nextDescription && nextDescription !== description);
+      const parseStatus = nextDescription ? 'ok' : 'next_description_missing';
+      const reason = extractField(normalized, 'REASON') || 'LLM 判定任务目标未达成，需要下一棒继续';
       console.error(
-        `[m-team] judgeByLlm 判决: RELAY taskId=${task.taskId} nextDescription="${nextDesc.slice(0, 80)}" `
+        `[m-team] judgeByLlm 判决: RELAY taskId=${task.taskId} changed=${descriptionChanged} ` +
+        `parseStatus=${parseStatus} nextDescription="${(nextDesc || '').slice(0, 80)}" `
       );
       return {
         decision: 'relay',
         nextDescription: nextDesc,
         contextStep,
         contextOutput,
+        reason,
+        previousDescription: description || '',
+        descriptionChanged,
+        parseStatus,
+        rawJudgeTail: normalized.slice(-1000),
       };
     }
 
@@ -292,14 +319,36 @@ CONTEXT_OUTPUT: {"summary": "<步骤总结>", "files": ["<文件路径1>", ...]}
       `[m-team] judgeByLlm 判决: UNKNOWN（无法解析 raw="${lastLine.slice(0, 150)}"），强制 RELAY`
     );
     api.logger?.warn(`[m-team] agent_end LLM 判断结果无法解析 "${lastLine.slice(0, 200)}"，放回任务池`);
-    return { decision: 'relay', contextStep: description || '执行步骤', contextOutput: {}, nextDescription: description };
+    return {
+      decision: 'relay',
+      contextStep: description || '执行步骤',
+      contextOutput: {},
+      nextDescription: description,
+      reason: 'LLM 判决输出无法解析，兜底放回任务池',
+      previousDescription: description || '',
+      descriptionChanged: false,
+      parseStatus: raw.trim() ? 'unknown_decision' : 'llm_output_missing',
+      rawJudgeTail: normalized.slice(-1000),
+    };
   } catch (err) {
     const elapsedMs = Date.now() - startMs;
+    const errorText = String(err);
+    const parseStatus = /timeout|timed out/i.test(errorText) ? 'timeout' : 'unknown_decision';
     console.error(
-      `[m-team] judgeByLlm 异常: taskId=${task.taskId} elapsed=${elapsedMs}ms error=${String(err)}`
+      `[m-team] judgeByLlm 异常: taskId=${task.taskId} elapsed=${elapsedMs}ms error=${errorText}`
     );
-    api.logger?.warn(`[m-team] agent_end LLM 判断失败: ${String(err)}，放回任务池`);
-    return { decision: 'relay', contextStep: description || '执行步骤', contextOutput: {}, nextDescription: description };
+    api.logger?.warn(`[m-team] agent_end LLM 判断失败: ${errorText}，放回任务池`);
+    return {
+      decision: 'relay',
+      contextStep: description || '执行步骤',
+      contextOutput: {},
+      nextDescription: description,
+      reason: `LLM 判断失败：${errorText.slice(0, 300)}`,
+      previousDescription: description || '',
+      descriptionChanged: false,
+      parseStatus,
+      rawJudgeTail: errorText.slice(-1000),
+    };
   }
 }
 
@@ -402,6 +451,13 @@ export function registerAgentEndHook(api: OpenClawPluginApi): void {
         action: 'fail',
         sessionKey: sessionKey ?? undefined,
         agentId: agentId ?? undefined,
+        result: {
+          success: result.success,
+          reason: result.reason || errorMsg,
+          decision: 'fail',
+          parseStatus: 'ok',
+          error: errorMsg,
+        },
         error: errorMsg,
       });
       sendNotifications(
@@ -441,8 +497,23 @@ export function registerAgentEndHook(api: OpenClawPluginApi): void {
         action: 'relay',
         sessionKey: sessionKey ?? undefined,
         agentId: agentId ?? undefined,
-        result: { success: result.success, reason: result.reason, contextStep: decision.contextStep, nextDescription: decision.nextDescription },
+        result: {
+          success: result.success,
+          reason: result.reason || decision.reason,
+          decision: 'relay',
+          contextStep: decision.contextStep,
+          contextOutput: decision.contextOutput,
+          nextDescription: decision.nextDescription,
+          previousDescription: decision.previousDescription,
+          descriptionChanged: decision.descriptionChanged,
+          parseStatus: decision.parseStatus,
+          rawJudgeTail: decision.rawJudgeTail,
+        },
       });
+      console.error(
+        `[m-team][agent_end] task=${taskId} decision=RELAY changed=${decision.descriptionChanged} ` +
+        `parseStatus=${decision.parseStatus} next="${(decision.nextDescription || '').slice(0, 120)}"`
+      );
       if (result.task) {
         sendNotifications(
           formatRelayNotifications(result.task, getNotifications()),
@@ -464,8 +535,22 @@ export function registerAgentEndHook(api: OpenClawPluginApi): void {
         action: 'complete',
         sessionKey: sessionKey ?? undefined,
         agentId: agentId ?? undefined,
-        result: { success: result.success, reason: result.reason, contextStep: decision.contextStep },
+        result: {
+          success: result.success,
+          reason: result.reason || decision.reason,
+          decision: 'complete',
+          contextStep: decision.contextStep,
+          contextOutput: decision.contextOutput,
+          previousDescription: decision.previousDescription,
+          descriptionChanged: false,
+          parseStatus: decision.parseStatus,
+          rawJudgeTail: decision.rawJudgeTail,
+        },
       });
+      console.error(
+        `[m-team][agent_end] task=${taskId} decision=COMPLETE parseStatus=${decision.parseStatus} ` +
+        `contextStep="${decision.contextStep.slice(0, 120)}"`
+      );
       if (result.task) {
         sendNotifications(
           formatTaskNotifications(result.task, getNotifications()),

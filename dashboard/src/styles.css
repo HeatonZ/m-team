@@ -362,3 +362,47 @@ h2 {
   min-width: 60px;
   text-align: center;
 }
+
+.log-row-warning {
+  background: rgba(239, 68, 68, 0.12);
+}
+
+.log-details {
+  margin-top: 8px;
+  color: #e7e9ea;
+}
+
+.log-details summary {
+  cursor: pointer;
+  color: #93c5fd;
+  font-size: 12px;
+}
+
+.log-detail-grid {
+  margin-top: 8px;
+  display: grid;
+  gap: 6px;
+  max-width: 680px;
+}
+
+.log-detail-grid > div {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr);
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid #2f3336;
+  border-radius: 6px;
+  background: #111827;
+}
+
+.log-detail-grid strong {
+  color: #8899a6;
+}
+
+.log-detail-grid span,
+.log-detail-grid pre {
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+}

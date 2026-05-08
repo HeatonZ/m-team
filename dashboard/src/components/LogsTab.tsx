@@ -29,6 +29,70 @@ function formatTime(ts: number): string {
   return d.toLocaleString('zh-CN', { hour12: false });
 }
 
+function asText(value: unknown): string {
+  if (value === null || value === undefined || value === '') return '-';
+  if (typeof value === 'string') return value;
+  return JSON.stringify(value, null, 2);
+}
+
+function getResultDetails(result: Record<string, unknown> | null): Record<string, unknown> | null {
+  if (!result) return null;
+  const details = result.details;
+  if (details && typeof details === 'object' && !Array.isArray(details)) {
+    return details as Record<string, unknown>;
+  }
+  return result;
+}
+
+function isRelayWithoutNextUpdate(log: TaskLog): boolean {
+  const details = getResultDetails(log.result);
+  return log.action === 'relay' && details?.descriptionChanged === false;
+}
+
+function renderResultSummary(log: TaskLog) {
+  const details = getResultDetails(log.result);
+  if (!details) return '-';
+
+  const success = details.success;
+  const reason = asText(details.reason ?? details.error);
+  const parseStatus = asText(details.parseStatus);
+  const warning = isRelayWithoutNextUpdate(log);
+
+  if (warning) {
+    return <span style={{ color: '#ef4444', fontWeight: 600 }}>⚠️ Relay 但下一步未更新 · {parseStatus}</span>;
+  }
+
+  if (success === true) {
+    return <span style={{ color: '#22c55e' }}>✓ {reason}</span>;
+  }
+  if (success === false) {
+    return <span style={{ color: '#ef4444' }}>✗ {reason}</span>;
+  }
+  return <span>{reason}</span>;
+}
+
+function renderDecisionDetails(log: TaskLog) {
+  const details = getResultDetails(log.result);
+  if (!details || !['relay', 'complete', 'fail'].includes(log.action)) return null;
+
+  return (
+    <details className="log-details" open={isRelayWithoutNextUpdate(log)}>
+      <summary>agent_end 判决详情</summary>
+      <div className="log-detail-grid">
+        <div><strong>判决</strong><span>{asText(details.decision ?? log.action)}</span></div>
+        <div><strong>解析状态</strong><span>{asText(details.parseStatus)}</span></div>
+        <div><strong>description变化</strong><span>{details.descriptionChanged === true ? '是' : details.descriptionChanged === false ? '否' : '-'}</span></div>
+        <div><strong>原因</strong><span>{asText(details.reason)}</span></div>
+        <div><strong>本轮摘要</strong><span>{asText(details.contextStep)}</span></div>
+        <div><strong>旧description</strong><span>{asText(details.previousDescription)}</span></div>
+        <div><strong>下一步</strong><span>{asText(details.nextDescription)}</span></div>
+        <div><strong>本轮产物</strong><pre>{asText(details.contextOutput)}</pre></div>
+        <div><strong>原始输出尾部</strong><pre>{asText(details.rawJudgeTail)}</pre></div>
+      </div>
+    </details>
+  );
+}
+
 export const LogsTab: FC = () => {
   const [logs, setLogs] = useState<TaskLog[]>([]);
   const [loading, setLoading] = useState(false);
@@ -111,7 +175,7 @@ export const LogsTab: FC = () => {
             </thead>
             <tbody>
               {logs.map(log => (
-                <tr key={log.id} style={{ borderBottom: '1px solid #eee' }}>
+                <tr key={log.id} className={isRelayWithoutNextUpdate(log) ? 'log-row-warning' : ''} style={{ borderBottom: '1px solid #eee' }}>
                   <td style={{ padding: '0.4rem', whiteSpace: 'nowrap' }}>{formatTime(log.createdAt)}</td>
                   <td style={{ padding: '0.4rem' }}>
                     <span style={{
@@ -130,13 +194,8 @@ export const LogsTab: FC = () => {
                     {log.sessionKey ?? '-'}
                   </td>
                   <td style={{ padding: '0.4rem' }}>
-                    {log.result ? (
-                      log.result.details?.success === true ? (
-                        <span style={{ color: '#22c55e' }}>✓ {log.result.details?.reason ?? ''}</span>
-                      ) : (
-                        <span style={{ color: '#ef4444' }}>✗ {log.result.details?.reason ?? log.result.details?.error ?? ''}</span>
-                      )
-                    ) : '-'}
+                    {renderResultSummary(log)}
+                    {renderDecisionDetails(log)}
                   </td>
                 </tr>
               ))}
