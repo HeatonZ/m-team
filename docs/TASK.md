@@ -1,6 +1,6 @@
 # M-Team — 任务格式与 Tool API
 
-> 版本：3.0 | 更新：2026-05-07
+> 版本：3.1 | 更新：2026-05-08
 > 参考：[ARCHITECTURE.md](./ARCHITECTURE.md)、[SESSION.md](./SESSION.md)
 
 ---
@@ -139,15 +139,24 @@ mteam_claim_task({
 
 ### mteam_reject_task
 
-Publisher 验收不通过，驳回任务到 `pending` 池子，同时通知原执行者。
+Publisher 验收不通过，驳回任务到 `pending` 池子。
 
 ```javascript
 mteam_reject_task({
   taskId: "task_xxx",
-  reason: "缺少价格信息，请补充后再提交"
+  reason: "验收驳回：仅找到1个商品，不够5个。下一步：继续搜索，筛选 costPrice ≤ 5 RMB，找够剩余 4 个"
 })
 // 返回: { success: true, task: { ..., status: "pending" } }
 ```
+
+**驳回原因格式（必须包含两部分）**：
+1. **问题**：具体哪里不对
+2. **下一步**：下一棒要做什么（动作+目标+条件+数量逻辑）
+
+**内部行为**：
+- 从 reason 中解析"下一步"内容（支持 `下一步：` 或 `下一步描述：` 前缀）
+- 解析出的下一步更新到 `task.description`，让下一棒 executor 直接看到
+- 驳回原因本身写入 `contextStep`（记录在 context 历史里）
 
 **注意**：驳回后任务回到 pending 池子，任何执行者都可再次认领。验收通过用 `mteam_close_task`（终态）。
 

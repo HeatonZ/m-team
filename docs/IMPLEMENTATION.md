@@ -1,6 +1,6 @@
 # M-Team — 源码结构与技术细节
 
-> 版本：3.0 | 更新：2026-05-07
+> 版本：3.1 | 更新：2026-05-08
 > 参考：[ARCHITECTURE.md](./ARCHITECTURE.md)、[TASK.md](./TASK.md)
 
 ---

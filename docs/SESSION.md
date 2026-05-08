@@ -1,6 +1,6 @@
 # M-Team — 双 Session 模型
 
-> 版本：3.0 | 更新：2026-05-07
+> 版本：3.1 | 更新：2026-05-08
 > 参考：[ARCHITECTURE.md](./ARCHITECTURE.md)、[TASK.md](./TASK.md)
 
 ---
@@ -47,13 +47,13 @@ mteam_get_all_tasks()
 agent:{agentId}:m-team:{taskId}
 ```
 
-- `taskId`：任务 ID
-- `agentId`：认领该任务的 agent
-- `timestamp`：创建时间戳（毫秒），保证 relay 后重新 claim 不会 sessionKey 冲突
-
-Executor Session 独立运行，**不占用 Heartbeat Session**。
-
 **executor 不调用任何管理工具**。只管执行 description 规定的步骤，然后结束 session。后续的 complete/relay/fail 由 `agent_end` hook 自动判断。
+
+**执行流程**：
+1. 先调用 `mteam_get_task` 查任务详情（含执行历史 + 当前 description）
+2. 根据执行历史确认当前步骤是否已在历史中完成
+3. 根据 description 执行当前步骤
+4. 做完后直接结束 session
 
 ---
 
@@ -93,7 +93,7 @@ api.on('agent_end', async (event) => {
 });
 ```
 
-**三种结果**：
+**四种结果**：
 
 | 条件 | 动作 | 写日志 | 发通知 |
 |------|------|--------|--------|
@@ -105,6 +105,26 @@ api.on('agent_end', async (event) => {
 - executor 不调用 complete/relay/fail，只管执行然后结束
 - `agent_end` 读取 `event.messages`（完整对话历史）判断下一步
 - 写日志 + 发通知都在 hook 内完成，不走工具层
+
+**Relay 时下一步描述格式要求**：
+
+`agent_end` hook 判断需要 relay 时，LLM 生成的下一步描述必须包含 4 个要素：
+
+| 要素 | 说明 | 示例 |
+|------|------|------|
+| 动作 | 动词开头 | 继续搜索、筛选、抓取、生成 |
+| 目标 | 要操作的对象 | 宠物玩具、商品详情页、图片 |
+| 条件 | 明确的过滤维度 | costPrice ≤ 5 RMB、规格数 ≤ 8 |
+| 数量逻辑 | **"找够 N 个"**，禁止"前 N 个" | 找够剩余 3 个 |
+
+坏味道（出现即预警）：
+- "继续搜索更多" → 没说要找多少个 ❌
+- "做下一步" → 没写具体动作 ❌
+- "数量不够继续找" → 没说要找多少个 ❌
+
+好味道：
+- "继续搜索宠物玩具，筛选 costPrice ≤ 5 RMB、规格数 ≤ 8，**找够剩余 3 个**" ✅
+- "抓取商品详情页，提取标题、价格、规格数" ✅
 
 ---
 
