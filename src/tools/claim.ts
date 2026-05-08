@@ -43,17 +43,6 @@ export function register(
       const sessionKey = `agent:${agentId}:m-team:${taskId}`;
       const taskWorkdir = `${config.workspaceRoot ?? '/mnt/d/code/m-team'}/tasks/${taskId}`;
 
-      // 拼接 context 历史，供 executor 了解之前做到了哪一步
-      const contextHistory = task?.context
-        ?.map((c: { step?: string; output?: unknown; executor?: string; completedAt?: number }, i: number) => {
-          const stepStr = c.step ? `动作: ${c.step}` : '';
-          const outputStr = c.output
-            ? `结果: ${typeof c.output === 'string' ? c.output : JSON.stringify(c.output)}`
-            : '';
-          return `  步骤${i + 1} [${c.executor ?? 'unknown'}]\n    ${stepStr}${outputStr ? '\n    ' + outputStr : ''}`;
-        })
-        .join('\n') ?? '（无历史步骤）';
-
       const systemPrompt = `
 【任务信息】
 - 任务ID: ${taskId}
@@ -63,9 +52,6 @@ export function register(
 【目标（goal）】
 ${task?.goal ?? '（无）'}
 
-【执行历史（context）】
-${contextHistory}
-
 【工作区约束】
 所有文件操作（读、写、终端命令）必须在任务目录内进行。
 
@@ -74,9 +60,10 @@ ${contextHistory}
 禁止调用 mteam_claim_task——任务不在 PENDING 状态，会失败。
 
 【执行流程】
-1. 根据上方执行历史确认当前步骤是否已在历史中完成
-2. 根据 description 执行当前步骤（先查任务详情确认最新 description）
-3. 做完后直接结束 session，agent_end hook 会自动判断 complete 还是 relay
+1. 先调用 mteam_get_task 查任务详情（含执行历史 + 当前 description）
+2. 根据上方执行历史确认当前步骤是否已在历史中完成
+3. 根据 description 执行当前步骤
+4. 做完后直接结束 session，agent_end hook 会自动判断 complete 还是 relay
 
 【执行约束 — 必须遵守】
 - 你是 executor，不是 publisher。禁止调用 mteam_publish_task 创建新任务。
