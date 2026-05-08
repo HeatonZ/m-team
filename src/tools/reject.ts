@@ -13,6 +13,24 @@ import { sendNotifications } from '../notifications.js';
 import { RejectTaskParams } from '../types/tools.js';
 import type { RejectTaskParamsInterface } from '../types/tools.js';
 
+/**
+ * 从驳回原因中解析出下一步描述。
+ * 格式：验收驳回：{问题}。下一步：{描述}
+ * 或：验收驳回：{问题}。下一步描述：{描述}
+ */
+function parseNextDescription(reason: string): string | null {
+  // 匹配 "下一步：" 或 "下一步描述：" 后的内容
+  const patterns = [
+    /下一步描述[：:]\s*(.+)/i,
+    /下一步[：:]\s*(.+)/i,
+  ];
+  for (const pattern of patterns) {
+    const match = reason.match(pattern);
+    if (match) return match[1].trim();
+  }
+  return null;
+}
+
 export function register(
   api: OpenClawPluginApi,
   config: MTeamPluginConfig
@@ -27,8 +45,11 @@ export function register(
       const taskId = readTaskId(rawParams, 'taskId', { required: true })!;
       const { reason } = rawParams;
 
+      // 从 reason 中解析下一步描述，用于更新 task.description
+      const nextDescription = parseNextDescription(reason);
+
       const contextEntry = { step: reason, output: {} };
-      const task = updateTask(taskId, 'pending', contextEntry, null, null, null);
+      const task = updateTask(taskId, 'pending', contextEntry, nextDescription, null, null);
 
       if (config.notifications?.length && task) {
         try {
