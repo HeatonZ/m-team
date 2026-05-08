@@ -55,10 +55,6 @@ ${task?.goal ?? '（无）'}
 【工作区约束】
 所有文件操作（读、写、终端命令）必须在任务目录内进行。
 
-【认领状态】
-任务已被心跳 session（${agentId}）认领，处于 RUNNING 状态。
-禁止调用 mteam_claim_task——任务不在 PENDING 状态，会失败。
-
 【执行流程】
 1. 先调用 mteam_get_task 查任务详情（含执行历史 + 当前 description）
 2. 根据上方执行历史确认当前步骤是否已在历史中完成
