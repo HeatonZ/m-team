@@ -60,14 +60,18 @@ export function formatTaskAsText(task: Task): string {
   lines.push(`已执行步骤: ${stepCount}`);
   lines.push(`创建时间: ${new Date(task.createdAt).toISOString()}`);
 
-  // 最后一步 context
+  // 完整执行历史（含每步结果）
   if (task.context.length > 0) {
-    const lastEntry = task.context[task.context.length - 1];
-    if (lastEntry.type === 'step') {
-      const step = lastEntry as { type: 'step'; executor: string; step: string; output?: { summary?: string; files?: string[]; error?: string } };
-      lines.push(`最后一步: [${step.executor}] ${step.step}`);
-      if (step.output?.summary) lines.push(`结果: ${step.output.summary}`);
-      if (step.output?.error) lines.push(`错误: ${step.output.error}`);
+    const steps = task.context.filter(e => e.type === 'step');
+    if (steps.length > 0) {
+      lines.push(`\n【执行历史】共 ${steps.length} 步`);
+      steps.forEach((entry, idx) => {
+        const step = entry as { type: 'step'; executor: string; step: string; output?: { summary?: string; files?: string[]; error?: string } };
+        lines.push(`\n步骤${idx + 1} [${step.executor}]: ${step.step}`);
+        if (step.output?.summary) lines.push(`  结果: ${step.output.summary}`);
+        if (step.output?.error) lines.push(`  错误: ${step.output.error}`);
+        if (step.output?.files?.length) lines.push(`  文件: ${step.output.files.join(', ')}`);
+      });
     }
   }
 
