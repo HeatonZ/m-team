@@ -441,6 +441,7 @@ export function registerAgentEndHook(api: OpenClawPluginApi): void {
         action: 'relay',
         sessionKey: sessionKey ?? undefined,
         agentId: agentId ?? undefined,
+        result: { success: result.success, reason: result.reason, contextStep: decision.contextStep, nextDescription: decision.nextDescription },
       });
       if (result.task) {
         sendNotifications(
@@ -463,6 +464,7 @@ export function registerAgentEndHook(api: OpenClawPluginApi): void {
         action: 'complete',
         sessionKey: sessionKey ?? undefined,
         agentId: agentId ?? undefined,
+        result: { success: result.success, reason: result.reason, contextStep: decision.contextStep },
       });
       if (result.task) {
         sendNotifications(
