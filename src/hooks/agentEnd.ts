@@ -402,7 +402,7 @@ export function registerAgentEndHook(api: OpenClawPluginApi): void {
         action: 'fail',
         sessionKey: sessionKey ?? undefined,
         agentId: agentId ?? undefined,
-        result: { outcome: 'error', error: errorMsg },
+        error: errorMsg,
       });
       sendNotifications(
         formatFailNotifications(task, getNotifications()),
