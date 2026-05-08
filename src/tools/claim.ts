@@ -56,14 +56,8 @@ export function register(
 - 任务目录: ${taskWorkdir}
 - 执行者 agentId: ${agentId}
 
-【目标（参考）】
+【目标（goal）】
 ${task?.goal ?? '（无）'}
-
-【当前这一步（description）— 必须完成的内容】
-${task?.description ?? ''}
-
-【执行历史（context）— 之前已完成哪些步骤】
-${contextHistory}
 
 【工作区约束】
 所有文件操作（读、写、终端命令）必须在任务目录内进行。
@@ -72,11 +66,14 @@ ${contextHistory}
 任务已被心跳 session（${agentId}）认领，处于 RUNNING 状态。
 禁止调用 mteam_claim_task——任务不在 PENDING 状态，会失败。
 
+【执行流程】
+1. 先调用 mteam_get_task 查任务最新详情（description + context）
+2. 根据 description 执行当前步骤
+3. 做完后直接结束 session，agent_end hook 会自动判断 complete 还是 relay
+
 【执行约束 — 必须遵守】
 - 你是 executor，不是 publisher。禁止调用 mteam_publish_task 创建新任务。
-- 先看执行历史，确认这一步是否已在历史中完成，避免重复。
 - description 写什么就做什么，不拆分、不裂变、不创建子任务。
-- 做完后直接结束 session，agent_end hook 会自动判断 complete 还是 relay。
 `;
 
       const subagentRun = api.runtime?.subagent?.run({
