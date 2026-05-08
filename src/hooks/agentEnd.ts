@@ -29,7 +29,7 @@ import {
 } from '../notifications.js';
 import type { Task } from '../schema/task.js';
 
-const LLM_TIMEOUT_MS = 30000;
+const LLM_TIMEOUT_MS = 60000;
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -297,6 +297,23 @@ CONTEXT_OUTPUT: {"summary": "<步骤总结>", "files": ["<文件路径1>", ...]}
       const descriptionChanged = Boolean(nextDescription && nextDescription !== description);
       const parseStatus = nextDescription ? 'ok' : 'next_description_missing';
       const reason = extractField(normalized, 'REASON') || 'LLM 判定任务目标未达成，需要下一棒继续';
+      if (nextDescription && nextDescription === description) {
+        console.error(
+          `[m-team] judgeByLlm 判决: RELAY-BLOCKED SAME_DESCRIPTION taskId=${task.taskId} ` +
+          `parseStatus=${parseStatus} nextDescription="${(nextDesc || '').slice(0, 80)}"`
+        );
+        return {
+          decision: 'complete',
+          nextDescription: undefined,
+          contextStep,
+          contextOutput,
+          reason: 'LLM 生成的下一步描述与当前 description 完全相同，禁止 relay',
+          previousDescription: description || '',
+          descriptionChanged: false,
+          parseStatus: 'same_description_blocked',
+          rawJudgeTail: normalized.slice(-1000),
+        };
+      }
       console.error(
         `[m-team] judgeByLlm 判决: RELAY taskId=${task.taskId} changed=${descriptionChanged} ` +
         `parseStatus=${parseStatus} nextDescription="${(nextDesc || '').slice(0, 80)}" `
