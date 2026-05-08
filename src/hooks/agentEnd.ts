@@ -310,12 +310,58 @@ function extractField(raw: string, field: string): string {
   return match ? match[1].trim() : '';
 }
 
+/**
+ * 从 LLM 输出中提取 CONTEXT_OUTPUT JSON。
+ * 使用栈匹配处理任意层级嵌套的 {}，
+ * 解析失败时记录原始文本供排查。
+ */
 function parseContextOutput(raw: string): Record<string, unknown> {
-  const match = raw.match(/CONTEXT_OUTPUT:\s*(\{[\s\S]+?\})/i);
-  if (!match) return {};
+  // 记录原始片段，方便调试排查
+  const snippet = raw.slice(0, 500);
+  console.error(`[m-team] parseContextOutput 输入: "${snippet}"`);
+
+  const colonIdx = raw.indexOf('CONTEXT_OUTPUT:');
+  if (colonIdx === -1) {
+    console.error('[m-team] parseContextOutput: 未找到 CONTEXT_OUTPUT:，返回 {}');
+    return {};
+  }
+
+  const afterLabel = raw.slice(colonIdx + 'CONTEXT_OUTPUT:'.length);
+  const trimmed = afterLabel.trim();
+  if (!trimmed.startsWith('{')) {
+    console.error(`[m-team] parseContextOutput: CONTEXT_OUTPUT: 后不是 {，返回 {}`);
+    return {};
+  }
+
+  // 栈匹配：正确处理嵌套 {}
+  let depth = 0;
+  let end = -1;
+  for (let i = 0; i < trimmed.length; i++) {
+    const ch = trimmed[i];
+    if (ch === '{') {
+      if (depth === 0) depth = 1; // 从第一个 { 开始计数
+      else depth++;
+    } else if (ch === '}') {
+      depth--;
+      if (depth === 0) {
+        end = i + 1;
+        break;
+      }
+    }
+  }
+
+  if (end === -1) {
+    console.error('[m-team] parseContextOutput: JSON 括号不匹配，返回 {}');
+    return {};
+  }
+
+  const jsonStr = trimmed.slice(0, end);
   try {
-    return JSON.parse(match[1]) as Record<string, unknown>;
-  } catch {
+    const result = JSON.parse(jsonStr) as Record<string, unknown>;
+    console.error(`[m-team] parseContextOutput: 解析成功 result=${JSON.stringify(result).slice(0, 200)}`);
+    return result;
+  } catch (err) {
+    console.error(`[m-team] parseContextOutput: JSON.parse 失败="${jsonStr.slice(0, 200)}" error=${err}`);
     return {};
   }
 }
