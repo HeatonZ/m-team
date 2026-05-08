@@ -7,7 +7,7 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { setWorkspaceRoot, getAllTasks, getPendingTasks, getRunningTasks, getCompletedTasks, getFailedTasks, getCancelledTasks, getClosedTasks, getTask as getTaskById, updateTaskRow, getTaskLogs, STATUS_LABELS, PRIORITY_LABELS } from './src/db.ts';
+import { setWorkspaceRoot, getAllTasks, getPendingTasks, getRunningTasks, getCompletedTasks, getFailedTasks, getCancelledTasks, getClosedTasks, getTask as getTaskById, updateTaskRow, getTaskLogs, countTaskLogs, STATUS_LABELS, PRIORITY_LABELS } from './src/db.ts';
 
 const _scriptPath = import.meta.url
   ? fileURLToPath(import.meta.url)
@@ -107,13 +107,18 @@ async function handle(req, res) {
         return json(res, 200, task);
       }
 
-      // GET /api/logs?taskId=...&action=...&limit=200
+      // GET /api/logs?taskId=...&action=...&page=1&pageSize=20
       if (seg === '/logs' && req.method === 'GET') {
         const taskId = url.searchParams.get('taskId') || undefined;
         const action = url.searchParams.get('action') || undefined;
-        const limit = Math.min(500, Math.max(1, parseInt(url.searchParams.get('limit') || '200', 10)));
-        const logs = getTaskLogs(taskId, action, limit);
-        return json(res, 200, { logs });
+        const page = Math.max(1, parseInt(url.searchParams.get('page') || '1', 10));
+        const fallbackLimit = parseInt(url.searchParams.get('limit') || '20', 10);
+        const pageSize = Math.min(100, Math.max(1, parseInt(url.searchParams.get('pageSize') || String(fallbackLimit), 10)));
+        const offset = (page - 1) * pageSize;
+        const total = countTaskLogs(taskId, action);
+        const logs = getTaskLogs(taskId, action, pageSize, offset);
+        const totalPages = Math.ceil(total / pageSize);
+        return json(res, 200, { logs, total, page, pageSize, totalPages });
       }
 
       return json(res, 404, { error: 'not found' });

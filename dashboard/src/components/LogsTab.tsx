@@ -99,30 +99,39 @@ export const LogsTab: FC = () => {
   const [filterTaskId, setFilterTaskId] = useState('');
   const [filterAction, setFilterAction] = useState('');
   const [inputTaskId, setInputTaskId] = useState('');
+  const [page, setPage] = useState(1);
+  const [pageSize] = useState(20);
+  const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await fetchLogs(
-        filterTaskId || undefined,
-        filterAction || undefined
-      );
-      setLogs(data);
+      const data = await fetchLogs({
+        taskId: filterTaskId || undefined,
+        action: filterAction || undefined,
+        page,
+        pageSize,
+      });
+      setLogs(data.logs);
+      setTotal(data.total);
+      setTotalPages(data.totalPages);
     } finally {
       setLoading(false);
     }
-  }, [filterTaskId, filterAction]);
+  }, [filterTaskId, filterAction, page, pageSize]);
 
   useEffect(() => { load(); }, [load]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
+    setPage(1);
     setFilterTaskId(inputTaskId.trim());
   };
 
   return (
     <div className="section">
-      <h2>📋 操作日志 <span style={{ fontWeight: 'normal', fontSize: '0.8em' }}>({logs.length}条)</span></h2>
+      <h2>📋 操作日志 <span style={{ fontWeight: 'normal', fontSize: '0.8em' }}>({total}条)</span></h2>
 
       <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
         <form onSubmit={handleSearch} style={{ display: 'flex', gap: '0.5rem' }}>
@@ -138,7 +147,7 @@ export const LogsTab: FC = () => {
 
         <select
           value={filterAction}
-          onChange={e => setFilterAction(e.target.value)}
+          onChange={e => { setPage(1); setFilterAction(e.target.value); }}
           style={{ padding: '0.3rem 0.6rem', border: '1px solid #ccc', borderRadius: '4px' }}
         >
           <option value="">全部操作</option>
@@ -147,7 +156,7 @@ export const LogsTab: FC = () => {
           ))}
         </select>
 
-        <button onClick={() => { setInputTaskId(''); setFilterTaskId(''); setFilterAction(''); }} className="tab">
+        <button onClick={() => { setInputTaskId(''); setFilterTaskId(''); setFilterAction(''); setPage(1); }} className="tab">
           重置
         </button>
 
@@ -201,6 +210,23 @@ export const LogsTab: FC = () => {
               ))}
             </tbody>
           </table>
+          <div className="pagination">
+            <button
+              onClick={() => setPage(p => Math.max(1, p - 1))}
+              disabled={page <= 1 || loading}
+            >
+              上一页
+            </button>
+            <span className="page-info">
+              第 {page} 页 / 共 {Math.max(1, totalPages)} 页 · 本页 {logs.length} 条 · 共 {total} 条
+            </span>
+            <button
+              onClick={() => setPage(p => Math.min(Math.max(1, totalPages), p + 1))}
+              disabled={page >= Math.max(1, totalPages) || loading}
+            >
+              下一页
+            </button>
+          </div>
         </div>
       )}
     </div>

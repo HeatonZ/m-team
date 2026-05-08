@@ -198,7 +198,29 @@ export interface TaskLog {
   createdAt: number;
 }
 
-export function getTaskLogs(taskId?: string, action?: string, limit = 200): TaskLog[] {
+export function countTaskLogs(taskId?: string, action?: string): number {
+  const db = getDb();
+  let sql = 'SELECT COUNT(*) AS count FROM task_logs';
+  const conditions: string[] = [];
+  const args: unknown[] = [];
+
+  if (taskId) {
+    conditions.push('task_id = ?');
+    args.push(taskId);
+  }
+  if (action) {
+    conditions.push('action = ?');
+    args.push(action);
+  }
+  if (conditions.length > 0) {
+    sql += ' WHERE ' + conditions.join(' AND ');
+  }
+
+  const row = db.prepare(sql).get(...args) as { count: number };
+  return row.count;
+}
+
+export function getTaskLogs(taskId?: string, action?: string, limit = 200, offset = 0): TaskLog[] {
   const db = getDb();
   let sql = 'SELECT * FROM task_logs';
   const conditions: string[] = [];
@@ -215,8 +237,8 @@ export function getTaskLogs(taskId?: string, action?: string, limit = 200): Task
   if (conditions.length > 0) {
     sql += ' WHERE ' + conditions.join(' AND ');
   }
-  sql += ' ORDER BY created_at DESC LIMIT ?';
-  args.push(limit);
+  sql += ' ORDER BY created_at DESC LIMIT ? OFFSET ?';
+  args.push(limit, offset);
 
   const rows = db.prepare(sql).all(...args) as Array<{
     id: number; task_id: string; action: string; session_key: string | null;
