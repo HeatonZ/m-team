@@ -67,7 +67,6 @@ export function registerAfterToolCallHook(api: OpenClawPluginApi): void {
         agentId: (params.agentId as string) ?? agentId ?? undefined,
         params: params as Record<string, unknown> | undefined,
         result: result as Record<string, unknown> | undefined,
-        error: error ?? undefined,
       });
     },
   );
