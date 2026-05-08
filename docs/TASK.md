@@ -192,7 +192,7 @@ mteam_relinquish_task({
 
 **两种 relinquish 场景**：
 - **Executor session 主动放弃**：自己判断无法完成，调用 `relinquish_task({ executorId: "maker" })`
-- **Heartbeat session 检测到 executor session 已死**：通过 sessions_list 检查 updatedAt 超过 40 分钟，主动调用 `relinquish_task` 释放任务
+- **Publisher 心跳检测到死任务**：running 任务的 updatedAt 超过 1 小时，主动调用 `relinquish_task` 释放任务
 
 ---
 

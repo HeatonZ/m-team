@@ -190,9 +190,12 @@ relay 时：
 
 ## 任务卡死检测
 
-Heartbeat Session 每轮检查：
+Publisher 心跳每轮检查自己发布的 running 任务：
 
-1. **自己有 running 任务？** → 跳过认领
-2. **没有 running 任务？** → 查询 pending 任务并认领
+1. 调用 `mteam_get_all_tasks({ status: 'running' })` 获取所有运行中任务
+2. 过滤出 publisher = 自己 的任务
+3. 判断超时：任务的 **updatedAt** 距今超过 1 小时 → 判定为死任务
+4. 处理超时：调用 `mteam_relinquish_task({ taskId, reason: '超时放回任务池' })`
+5. 每次心跳最多处理 1 个超时任务，处理完立即结束
 
-`updatedAt` 由任务操作（claim/relay/complete/fail/cancel）自动更新。超过 40 分钟 `updatedAt` 未更新的 running 任务视为死任务，由 heartbeat sessions_list 检查后自动 relinquish。
+**注意**：是 `updatedAt`（最后更新时间），不是 `createdAt`（创建时间）。`updatedAt` 在每次 claim/relay/complete/fail 时自动更新。
