@@ -217,6 +217,11 @@ function buildNotification(
   }
 }
 
+function shouldNotifyAgent(cfg: NotificationConfig, ...agentIds: Array<string | null | undefined>): boolean {
+  const allow = new Set(cfg.agents ?? []);
+  return agentIds.some(agentId => Boolean(agentId) && allow.has(String(agentId)));
+}
+
 /**
  * 基础通知模板：过滤 agent → 拼接消息 → 返回格式化通知
  * 用于 publish / claim / cancel / close（无特殊 status 过滤的场景）
@@ -353,7 +358,7 @@ function formatRelayOrRelinquishNotifications(
   const result: FormattedNotification[] = [];
 
   for (const cfg of notifications) {
-    if (!cfg.agents.includes(lastExecutor)) continue;
+    if (!shouldNotifyAgent(cfg, lastExecutor, task.publisher)) continue;
     const notif = buildNotification(cfg, message);
     if (notif) result.push(notif);
   }
@@ -428,7 +433,7 @@ export function formatFailNotifications(
   const result: FormattedNotification[] = [];
 
   for (const cfg of notifications) {
-    if (!cfg.agents.includes(effectiveExecutor)) continue;
+    if (!shouldNotifyAgent(cfg, effectiveExecutor, task.publisher)) continue;
     const notif = buildNotification(cfg, message);
     if (notif) result.push(notif);
   }
@@ -463,7 +468,7 @@ export function formatTaskNotifications(
   const result: FormattedNotification[] = [];
 
   for (const cfg of notifications) {
-    if (!cfg.agents.includes(effectiveExecutor)) continue;
+    if (!shouldNotifyAgent(cfg, effectiveExecutor, task.publisher)) continue;
     const notif = buildNotification(cfg, message);
     if (notif) result.push(notif);
   }

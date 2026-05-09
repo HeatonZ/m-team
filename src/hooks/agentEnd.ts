@@ -33,7 +33,7 @@ import {
 } from '../notifications.js';
 import type { Task, TaskStatus } from '../schema/task.js';
 
-const LLM_TIMEOUT_MS = 60000;
+const LLM_TIMEOUT_MS = 180000;
 const TERMINAL_ACTIONS = new Set(['complete', 'relay', 'fail']);
 const REPEATED_NO_PROGRESS_WINDOW = 4;
 const NO_PROGRESS_REPEAT_THRESHOLD = 3;

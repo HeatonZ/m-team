@@ -58,6 +58,10 @@
               "type": "string",
               "description": "Discord 频道 ID (provider=discord 时使用)"
             },
+            "discordToken": {
+              "type": "string",
+              "description": "Discord bot token (provider=discord 时使用)"
+            },
             "agents": {
               "type": "array",
               "items": {
