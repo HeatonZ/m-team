@@ -117,9 +117,7 @@ export function validateTask(task: unknown): ValidationResult {
   if (!t.goal || typeof t.goal !== 'string') {
     errors.push('goal 必填且为字符串');
   }
-  if (!Array.isArray(t.context)) {
-    errors.push('context 必填且为数组');
-  } else {
+  if (Array.isArray(t.context)) {
     for (let i = 0; i < t.context.length; i++) {
       const entry = t.context[i] as Record<string, unknown>;
       if (!entry || typeof entry !== 'object') {
