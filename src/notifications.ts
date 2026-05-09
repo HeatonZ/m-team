@@ -404,18 +404,36 @@ export function formatFailNotifications(
   task: Task,
   notifications: NotificationConfig[]
 ): FormattedNotification[] {
-  return formatBasicNotification(
-    task,
-    notifications,
-    (cfg, _agent) => cfg.agents.includes(task.executor ?? task.lastExecutor ?? 'unknown'),
-    (task) => [
-      `❌ 任务失败 [${task.taskId}]`,
-      ``,
-      `🎯 ${task.goal}`,
-      `📝 ${task.description}`,
-      `执行者: ${task.executor ?? task.lastExecutor ?? 'unknown'}`
-    ]
-  );
+  if (!notifications || notifications.length === 0) return [];
+  if (!task) return [];
+
+  const lastEntry = task.context[task.context.length - 1] as
+    | { step?: string; output?: { summary?: string; error?: string } }
+    | undefined;
+  const failureReason = lastEntry?.output?.error || lastEntry?.output?.summary || lastEntry?.step || null;
+  const duration = formatDuration(task.createdAt, task.completedAt ?? task.updatedAt);
+  const effectiveExecutor = task.executor || task.lastExecutor || 'unknown';
+
+  const lines = [
+    `❌ 任务失败 [${task.taskId}]`,
+    ``,
+    `📋 ${task.description}`,
+    `执行者: ${effectiveExecutor}`,
+    ...(failureReason ? [`原因: ${failureReason}`] : []),
+    ...(duration ? [`耗时: ${duration}`] : []),
+    `建议下一步: 如属可恢复的数据质量/约束校验问题，重新生成明确纠偏 description 后再 relay；否则补充缺失前置条件后重发任务`
+  ].filter(Boolean);
+
+  const message = lines.join('\n');
+  const result: FormattedNotification[] = [];
+
+  for (const cfg of notifications) {
+    if (!cfg.agents.includes(effectiveExecutor)) continue;
+    const notif = buildNotification(cfg, message);
+    if (notif) result.push(notif);
+  }
+
+  return result;
 }
 
 export function formatTaskNotifications(

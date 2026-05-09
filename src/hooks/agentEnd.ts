@@ -90,6 +90,39 @@ function getRelayDescription(decision: JudgeResult): string | undefined {
   return next;
 }
 
+function buildRecoveryDescription(task: Task, reason: string, contextStep: string): string | undefined {
+  const base = `${task.description} ${task.goal} ${reason} ${contextStep}`;
+  const text = base.toLowerCase();
+
+  const hasConstraintSignal = /spec|规格|constraint|条件|filter|筛选|price|成本|数量|quality|质量|校验|validate|invalid|violate|不合格|补足|替换|重筛/.test(text);
+  if (!hasConstraintSignal) return undefined;
+
+  const quantityMatch = base.match(/(?:补足到|找够|输出|筛出|提供)\s*(\d+)\s*个|quantity["'：:\s=]*(\d+)/i);
+  const quantity = quantityMatch?.[1] || quantityMatch?.[2] || '目标数量';
+
+  const maxCostMatch = base.match(/(?:≤|<=|小于等于|不高于)\s*(\d+(?:\.\d+)?)\s*元|maxCostPriceRmb["'：:\s=]*(\d+(?:\.\d+)?)/i);
+  const maxSpecsMatch = base.match(/(?:<|小于)\s*(\d+)\s*(?:个)?规格|maxSpecs["'：:\s=]*(\d+)/i);
+
+  const constraints: string[] = [];
+  if (maxCostMatch?.[1] || maxCostMatch?.[2]) constraints.push(`成本价 ≤ ${maxCostMatch[1] || maxCostMatch[2]} 元`);
+  if (maxSpecsMatch?.[1] || maxSpecsMatch?.[2]) constraints.push(`规格数 < ${maxSpecsMatch[1] || maxSpecsMatch[2]}`);
+
+  const constraintText = constraints.length > 0 ? `，严格保留${constraints.join('、')}的商品` : '';
+  return `重新筛选当前候选，移除不合格项${constraintText}，并补足到 ${quantity} 个合规结果`;
+}
+
+function shouldConvertFailToRecoveryRelay(task: Task, decision: JudgeResult): boolean {
+  if (decision.decision !== 'fail') return false;
+  if (decision.parseStatus !== 'ok') return false;
+  if (decision.terminalType !== 'system_error') return false;
+
+  const base = `${task.description} ${task.goal} ${decision.reason} ${decision.contextStep} ${JSON.stringify(decision.contextOutput ?? {})}`.toLowerCase();
+  const hasRecoverableSignal = /spec|规格|constraint|条件|filter|筛选|price|成本|quantity|数量|quality|质量|校验|validate|invalid|violate|不合格|replace|替换|补足|重筛/.test(base);
+  const hasHardStopSignal = /missing publisher|发布者|缺少前置|无法访问|权限|not found|登录失效|session empty|timeout|unknown_decision|llm/.test(base);
+
+  return hasRecoverableSignal && !hasHardStopSignal;
+}
+
 function extractText(content: unknown): string {
   if (typeof content === 'string') return content;
   if (Array.isArray(content)) {
@@ -336,20 +369,22 @@ ${transcript}
 
 请综合以上全部信息判断：
 
-一、是否应终止而不是继续 relay：
-- 如果当前执行轮没有任何新增进展，只是在重复旧结论、重复说明缺信息、重复抱怨无法执行 → DECISION: FAIL
-- 如果 context 最近多步都在重复同一失败原因，本轮也没有打破这个模式 → DECISION: FAIL
-- 如果“下一步描述”更像原因说明/缺失条件/给发布者的建议，而不是下一棒可执行动作 → DECISION: FAIL
+一、先判断这是“不可恢复终止”还是“可恢复纠偏”：
+- 如果当前执行轮没有任何新增进展，只是在重复旧结论、重复说明缺信息、重复抱怨无法执行，而且没有可交给下一棒的明确纠偏动作 → DECISION: FAIL
+- 如果 context 最近多步都在重复同一失败原因，本轮也没有打破这个模式，而且仍提不出新的可执行纠偏动作 → DECISION: FAIL
+- 如果发现的是数据质量/筛选口径/约束校验问题，但存在明确补救路径（如重筛、补齐、替换不合格项、回滚到上一步重做），默认视为可恢复，不要直接 FAIL，而应输出 DECISION: RELAY
+- 只有在“下一步描述”无法写成下一棒可执行动作时，才允许 FAIL
 
 二、如果不需要终止，再判断：
 - 任务目标已达成，或 context 已包含完整执行路径 → DECISION: COMPLETE
 - 任务目标未达成，还需要下一步 → DECISION: RELAY
 
 三、仅当 DECISION: RELAY 时，下一步描述必须满足：
-- 动作：动词开头（继续搜索、筛选、抓取、生成、提取）
+- 动作：动词开头（继续搜索、重新筛选、补齐、替换、抓取、生成、提取）
 - 目标：要操作的对象
 - 条件：过滤维度或明确边界
-- 数量逻辑：需要时写“找够 N 个”，禁止“前 N 个”
+- 数量逻辑：需要时写“补足到 N 个 / 重新找够 N 个”，禁止“前 N 个”
+- 若当前问题是质量校验未通过，下一步描述必须直接写纠偏动作，不能只写失败原因
 
 硬规则：
 - “回复收到/确认收到/已阅”默认理解为在当前 session / task context / 文件中留痕确认；除非 description 或 input 明确要求外部渠道，否则不得推断为聊天平台发消息。
@@ -791,6 +826,68 @@ export function registerAgentEndHook(api: OpenClawPluginApi): void {
     const executorId = task.executor || 'unknown';
 
     if (decision.decision === 'fail') {
+      if (shouldConvertFailToRecoveryRelay(task, decision)) {
+        const recoveryDescription = buildRecoveryDescription(task, decision.reason, decision.contextStep);
+        if (recoveryDescription && recoveryDescription !== task.description) {
+          const result = relayTask(taskId, executorId, {
+            step: decision.contextStep,
+            output: {
+              ...(decision.contextOutput ?? {}),
+              summary: String((decision.contextOutput?.summary as string | undefined) ?? decision.reason),
+              recoveryFrom: 'fail_to_relay',
+              originalFailReason: decision.reason,
+            },
+          }, recoveryDescription);
+          writeTaskLog({
+            taskId,
+            action: 'relay',
+            sessionKey: sessionKey ?? undefined,
+            agentId: agentId ?? undefined,
+            result: {
+              success: result.success,
+              reason: result.reason || decision.reason,
+              decision: 'relay',
+              contextStep: decision.contextStep,
+              contextOutput: {
+                ...(decision.contextOutput ?? {}),
+                recoveryFrom: 'fail_to_relay',
+                originalFailReason: decision.reason,
+              },
+              nextDescription: recoveryDescription,
+              previousDescription: decision.previousDescription,
+              descriptionChanged: true,
+              parseStatus: 'ok',
+              rawJudgeTail: decision.rawJudgeTail,
+              convertedFromFail: true,
+            },
+          });
+          console.error(
+            `[m-team][agent_end] task=${taskId} decision=RELAY_FROM_FAIL previous="${(decision.previousDescription || '').slice(0, 120)}" next="${recoveryDescription.slice(0, 120)}" relaySuccess=${result.success}`
+          );
+          logAgentEndDecision({
+            phase: 'terminal',
+            taskId,
+            decision: 'relay',
+            terminalType: 'normal_relay',
+            parseStatus: 'ok',
+            relayAttempt: decision.relayAttempt + 1,
+            noProgressStreak: 0,
+            descriptionChanged: true,
+            previousDescription: decision.previousDescription,
+            nextDescription: recoveryDescription,
+            relaySuccess: result.success,
+            convertedFromFail: true,
+            sessionKey,
+            agentId: agentId ?? null,
+          });
+          if (result.task) {
+            sendNotifications(formatRelayNotifications(result.task, getNotifications()), api.logger ?? null)
+              .catch(err => api.logger?.error(`[m-team] recovery relay 通知发送失败: ${String(err)}`));
+          }
+          return;
+        }
+      }
+
       const result = failTask(taskId, decision.reason, undefined, {
         outcome: 'blocked',
         error: decision.parseStatus,
