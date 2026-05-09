@@ -120,10 +120,7 @@ export function validateTask(task: unknown): ValidationResult {
   if (!Array.isArray(t.context)) {
     errors.push('context 必填且为数组');
   } else {
-    if (t.context.length > 0 && (t.context[0] as ContextEntry)?.type !== 'input') {
-      errors.push('context[0].type 必须是 "input"');
-    }
-    for (let i = 1; i < t.context.length; i++) {
+    for (let i = 0; i < t.context.length; i++) {
       const entry = t.context[i] as Record<string, unknown>;
       if (!entry || typeof entry !== 'object') {
         errors.push(`context[${i}] 必须是对象`);
@@ -168,7 +165,6 @@ export interface TaskPatch {
 export interface CreateTaskInput {
   goal: string;
   description: string;
-  input?: Record<string, unknown>;
   publisher?: string;
   priority?: TaskPriority;
 }
@@ -178,7 +174,6 @@ export function createTask(input: CreateTaskInput): Task {
   const {
     goal,
     description,
-    input: inputData = {},
     publisher = 'user',
     priority = TaskPriority.NORMAL
   } = input;
@@ -187,13 +182,7 @@ export function createTask(input: CreateTaskInput): Task {
     taskId: `task_${Date.now()}`,
     description: String(description),
     goal: String(goal),
-    context: [
-      {
-        type: 'input',
-        data: inputData,
-        createdAt: Date.now()
-      }
-    ],
+    context: [],
     priority,
     publisher: publisher || 'user',
     status: TaskStatus.PENDING,

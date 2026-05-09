@@ -305,12 +305,9 @@ async function judgeByLlm(
 
   const contextText = context.length > 0
     ? context.map((ctx, i) => {
-        if (ctx.type === 'input') {
-          return `[步骤 ${i}] 初始输入: ${JSON.stringify(ctx.data ?? {})}`;
-        }
         return `[步骤 ${i}] 执行者: ${ctx.executor ?? '?'} | 步骤: ${ctx.step ?? '?'} | 输出: ${JSON.stringify(ctx.output ?? {})} | 完成时间: ${ctx.completedAt ? new Date(ctx.completedAt).toLocaleString() : '?'}`;
       }).join('\n')
-    : '(无 context 历史)';
+    : '（无上下文）';
 
   const startMs = Date.now();
   const logTranscript = transcript.length > 500 ? transcript.slice(0, 500) + '\n...（截断）' : transcript;

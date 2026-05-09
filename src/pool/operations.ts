@@ -64,14 +64,13 @@ function init(): void {
 export function publishTask(input: {
   description: string;
   goal: string;
-  input?: Record<string, unknown>;
   publisher?: string;
   priority?: string;
 }): string {
   init();
 
-  const { description, goal, input: inputData, publisher, priority } = input;
-  const task = createTask({ description, goal, input: inputData, publisher, priority: priority as TaskPriority | undefined });
+  const { description, goal, publisher, priority } = input;
+  const task = createTask({ description, goal, publisher, priority: priority as TaskPriority | undefined });
 
   const db = getDb();
   db.transaction(() => {

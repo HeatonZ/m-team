@@ -8,7 +8,7 @@ license: MIT
 
 ## Overview
 
-Publisher 收到用户请求后，将模糊需求转化为结构化任务并发布到 M-Team 任务池。核心职责：**拆解 goal/description/input，填充 PUBLISH CHECKLIST，通过 mteam_publish_task 发布**。
+Publisher 收到用户请求后，将模糊需求转化为结构化任务并发布到 M-Team 任务池。核心职责：**拆解 goal / description，填充 PUBLISH CHECKLIST，通过 mteam_publish_task 发布**。
 
 发布后不跟踪，由 executor 通过 heartbeat 认领并执行，完成后自动通知。
 
@@ -32,11 +32,11 @@ User wants to offload a task
     ↓
 This skill activates
     ↓
-Step 1: Extract goal / input / description
+Step 1: Extract goal / description
     ↓
 Step 2: Run PUBLISH CHECKLIST — all items must pass
     ↓
-Step 3: mteam_publish_task({ description, goal, input, publisher, priority })
+Step 3: mteam_publish_task({ description, goal, publisher, priority })
     ↓
 Step 4: Done. Exit. No tracking.
 ```
@@ -46,9 +46,7 @@ Step 4: Done. Exit. No tracking.
 | Field | Meaning | Rule |
 |-------|---------|------|
 | `goal` | 完整的任务终点描述 | executor 凭此判断接不接单，必须包含类型/平台/约束/验收标准 |
-| `input` | 执行参数 | keyword、count 等第一步需要的参数 |
 | `description` | 当前这一步做什么 | 单步可执行，不超过 2 句 |
-
 **Goal 填写规范（必须详细）：**
 - 任务类型（选品 / 爬虫 / 文档 / 代码）
 - 数据源和平台（1688 / Shopee / 什么站点）
