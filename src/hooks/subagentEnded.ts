@@ -222,8 +222,32 @@ interface JudgeResult {
   reason: string;
   previousDescription: string;
   descriptionChanged: boolean;
-  parseStatus: 'ok' | 'llm_output_missing' | 'next_description_missing' | 'json_parse_failed' | 'timeout' | 'unknown_decision' | 'same_description_blocked';
+  parseStatus: 'ok' | 'llm_output_missing' | 'next_description_missing' | 'json_parse_failed' | 'timeout' | 'unknown_decision' | 'same_description_blocked' | 'reason_like_description_blocked';
   rawJudgeTail: string;
+}
+
+function looksLikeReasonText(text: string | undefined): boolean {
+  if (!text) return false;
+  const s = text.trim();
+  if (!s) return false;
+  const reasonPatterns = [
+    /^验收驳回[:：]?/i,
+    /^原因[:：]?/i,
+    /^reason[:：]?/i,
+    /^因为/i,
+    /^由于/i,
+    /^缺少/i,
+    /^无法/i,
+    /^未/i,
+    /^失败/i,
+    /^超时/i,
+    /^建议/i,
+    /^请发布者/i,
+  ];
+  if (reasonPatterns.some((p) => p.test(s))) return true;
+  if (/chat_id|message_id|无法路由|补充信息|重新发布/i.test(s)) return true;
+  if (/。/.test(s) && /下一步[:：]/.test(s)) return true;
+  return false;
 }
 
 async function judgeByLlm(
@@ -267,6 +291,8 @@ ${transcript}
 - 任务目标未达成，还需要下一步 → DECISION: RELAY
 
 **硬规则：如果只是 spawn 了 sub-agent、yield 等待、或还在等待其他 agent 结果，禁止 COMPLETE，必须 RELAY。**
+**硬规则：description 里出现“回复收到 / 回复已阅 / 确认收到 / 留一句收到”时，默认解释为在当前 session、任务 context 或任务文件里留痕确认；除非 task input 或 description 明确给出外部渠道、chat_id、message_id、群、私信、回复某条消息等路由信息，否则禁止解释成去聊天平台发送消息。**
+**硬规则：REASON 只写原因说明；“下一步描述”只能写下一棒要执行的动作句，禁止把失败原因、解释、驳回意见、缺失信息说明原样写成下一步描述。**
 
 输出格式：
 DECISION: COMPLETE
@@ -279,7 +305,7 @@ DECISION: RELAY
 REASON: <为什么还需要下一棒>
 CONTEXT_STEP: <本次步骤描述>
 CONTEXT_OUTPUT: {"summary": "<步骤总结>", "files": ["<文件路径1>", ...]}
-下一步描述：<一句话描述>`.trim();
+下一步描述：<一句话描述，必须是可执行动作，不得重复 REASON，不得写成原因说明或驳回意见>`.trim();
 
   try {
     const result = await api.runtime.agent.runEmbeddedAgent({
@@ -342,10 +368,10 @@ CONTEXT_OUTPUT: {"summary": "<步骤总结>", "files": ["<文件路径1>", ...]}
     if (hasRelay) {
       const contextStep = extractField(normalized, 'CONTEXT_STEP') || description || '执行步骤';
       const contextOutput = parseContextOutput(normalized);
+      const reason = extractField(normalized, 'REASON') || 'LLM 判定任务目标未达成，需要下一棒继续';
       const nextDesc = nextDescription ?? description;
       const descriptionChanged = Boolean(nextDescription && nextDescription !== description);
       const parseStatus = nextDescription ? 'ok' : 'next_description_missing';
-      const reason = extractField(normalized, 'REASON') || 'LLM 判定任务目标未达成，需要下一棒继续';
       if (nextDescription && nextDescription === description) {
         return {
           decision: 'relay',
@@ -356,6 +382,19 @@ CONTEXT_OUTPUT: {"summary": "<步骤总结>", "files": ["<文件路径1>", ...]}
           previousDescription: description || '',
           descriptionChanged: false,
           parseStatus: 'same_description_blocked',
+          rawJudgeTail: normalized.slice(-1000),
+        };
+      }
+      if (nextDescription && looksLikeReasonText(nextDescription)) {
+        return {
+          decision: 'relay',
+          nextDescription: undefined,
+          contextStep,
+          contextOutput,
+          reason: 'LLM 生成的下一步描述更像原因说明而非动作描述，禁止把 reason 写回 description',
+          previousDescription: description || '',
+          descriptionChanged: false,
+          parseStatus: 'reason_like_description_blocked',
           rawJudgeTail: normalized.slice(-1000),
         };
       }
@@ -495,9 +534,9 @@ export function registerSubagentEndedHook(api: OpenClawPluginApi): void {
       const executorAgentDir = (() => {
         const cfg = api.config as Record<string, unknown> | undefined;
         const agents = cfg?.agents as Record<string, unknown> | undefined;
-        const byId = (agents?.[agentId ?? ''] as Record<string, unknown> | undefined)
-          ?? ((agents?.named as Record<string, unknown> | undefined)?.[agentId ?? ''] as Record<string, unknown> | undefined);
-        const raw = byId?.agentDir;
+        const list = Array.isArray(agents?.list) ? (agents?.list as Array<Record<string, unknown>>) : [];
+        const matched = list.find(item => item?.id === agentId);
+        const raw = matched?.agentDir;
         return typeof raw === 'string' && raw.trim() ? raw.trim() : undefined;
       })();
 
