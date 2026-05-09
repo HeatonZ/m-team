@@ -182,6 +182,87 @@ function detectRepeatedNoProgress(task: Task, currentReason: string): boolean {
   return sameReasonCount >= NO_PROGRESS_REPEAT_THRESHOLD && noProgressCount >= NO_PROGRESS_REPEAT_THRESHOLD;
 }
 
+function getRecentStepEntries(task: Task): Array<Record<string, unknown>> {
+  return (task.context ?? []).filter((entry): entry is Record<string, unknown> => entry.type === 'step');
+}
+
+function getRelayAttempt(task: Task): number {
+  const steps = getRecentStepEntries(task);
+  let attempts = 0;
+  for (const step of steps) {
+    const output = (step.output as Record<string, unknown> | undefined) ?? {};
+    const maybeAttempt = Number(output.relayAttempt ?? 0);
+    if (Number.isFinite(maybeAttempt) && maybeAttempt > attempts) {
+      attempts = maybeAttempt;
+    }
+  }
+  return attempts;
+}
+
+function getNoProgressStreak(task: Task): number {
+  const steps = getRecentStepEntries(task);
+  let streak = 0;
+  for (let i = steps.length - 1; i >= 0; i--) {
+    const output = (steps[i].output as Record<string, unknown> | undefined) ?? {};
+    const flag = output.noProgress === true;
+    if (!flag) break;
+    streak += 1;
+  }
+  return streak;
+}
+
+function buildDecisionMetrics(task: Task, reason: string, decision: 'complete' | 'relay' | 'fail'): { relayAttempt: number; noProgressStreak: number } {
+  const repeated = detectRepeatedNoProgress(task, reason);
+  const prevRelayAttempt = getRelayAttempt(task);
+  const prevNoProgressStreak = getNoProgressStreak(task);
+  const noProgress = repeated || looksLikeReasonText(reason);
+
+  return {
+    relayAttempt: decision === 'relay' ? prevRelayAttempt + 1 : prevRelayAttempt,
+    noProgressStreak: decision === 'complete' ? 0 : (noProgress ? prevNoProgressStreak + 1 : 0),
+  };
+}
+
+function logAgentEndSkip(reason: string, meta: Record<string, unknown>): void {
+  const payload = JSON.stringify({ reason, ...meta });
+  console.error(`[m-team][agent_end][skip] ${payload}`);
+}
+
+function logAgentEndDecision(meta: Record<string, unknown>): void {
+  console.error(`[m-team][agent_end][decision] ${JSON.stringify(meta)}`);
+}
+
+function createFailResult(
+  task: Task,
+  payload: {
+    reason: string;
+    contextStep: string;
+    contextOutput: Record<string, unknown>;
+    previousDescription: string;
+    nextDescription?: string;
+    descriptionChanged: boolean;
+    parseStatus: JudgeResult['parseStatus'];
+    rawJudgeTail: string;
+    terminalType: JudgeResult['terminalType'];
+  }
+): JudgeResult {
+  const metrics = buildDecisionMetrics(task, payload.reason, 'fail');
+  return {
+    decision: 'fail',
+    nextDescription: payload.nextDescription,
+    contextStep: payload.contextStep,
+    contextOutput: payload.contextOutput,
+    reason: payload.reason,
+    previousDescription: payload.previousDescription,
+    descriptionChanged: payload.descriptionChanged,
+    relayAttempt: metrics.relayAttempt,
+    noProgressStreak: metrics.noProgressStreak,
+    terminalType: payload.terminalType,
+    parseStatus: payload.parseStatus,
+    rawJudgeTail: payload.rawJudgeTail,
+  };
+}
+
 interface JudgeParams {
   runId: string;
   sessionId: string;
@@ -197,6 +278,9 @@ interface JudgeResult {
   reason: string;
   previousDescription: string;
   descriptionChanged: boolean;
+  relayAttempt: number;
+  noProgressStreak: number;
+  terminalType: 'system_error' | 'business_blocked' | 'normal_relay' | 'normal_complete';
   parseStatus:
     | 'ok'
     | 'llm_output_missing'
@@ -360,16 +444,16 @@ CONTEXT_OUTPUT: {"summary": "<步骤总结>", "files": ["<文件路径1>", ...]}
       console.error(
         `[m-team] judgeByLlm 判决: FAIL taskId=${task.taskId} reason="${reason.slice(0, 120)}"`
       );
-      return {
-        decision: 'fail',
+      return createFailResult(task, {
+        reason,
         contextStep,
         contextOutput,
-        reason,
         previousDescription: description || '',
         descriptionChanged: false,
         parseStatus: detectRepeatedNoProgress(task, reason) ? 'repeated_no_progress_blocked' : 'ok',
         rawJudgeTail: normalized.slice(-1000),
-      };
+        terminalType: detectRepeatedNoProgress(task, reason) ? 'business_blocked' : 'system_error',
+      });
     }
 
     if (hasComplete) {
@@ -383,6 +467,9 @@ CONTEXT_OUTPUT: {"summary": "<步骤总结>", "files": ["<文件路径1>", ...]}
         reason: reason || 'LLM 判定任务目标已达成',
         previousDescription: description || '',
         descriptionChanged: false,
+        relayAttempt: buildDecisionMetrics(task, reason || 'LLM 判定任务目标已达成', 'complete').relayAttempt,
+        noProgressStreak: 0,
+        terminalType: 'normal_complete',
         parseStatus: 'ok',
         rawJudgeTail: normalized.slice(-1000),
       };
@@ -397,51 +484,51 @@ CONTEXT_OUTPUT: {"summary": "<步骤总结>", "files": ["<文件路径1>", ...]}
         console.error(
           `[m-team] judgeByLlm 判决: RELAY-BLOCKED SAME_DESCRIPTION taskId=${task.taskId} nextDescription="${(nextDesc || '').slice(0, 80)}"`
         );
-        return {
-          decision: 'fail',
+        return createFailResult(task, {
+          reason: 'LLM 生成的下一步描述与当前 description 完全相同，禁止原样 relay',
           nextDescription: undefined,
           contextStep,
           contextOutput,
-          reason: 'LLM 生成的下一步描述与当前 description 完全相同，禁止原样 relay',
           previousDescription: description || '',
           descriptionChanged: false,
           parseStatus: 'same_description_blocked',
           rawJudgeTail: normalized.slice(-1000),
-        };
+          terminalType: 'business_blocked',
+        });
       }
 
       if (nextDescription && looksLikeReasonText(nextDescription)) {
         console.error(
           `[m-team] judgeByLlm 判决: RELAY-BLOCKED REASON_LIKE_DESCRIPTION taskId=${task.taskId} nextDescription="${nextDescription.slice(0, 120)}"`
         );
-        return {
-          decision: 'fail',
+        return createFailResult(task, {
+          reason: 'LLM 生成的下一步描述更像原因说明而非动作描述，禁止把 reason 写回 description',
           nextDescription: undefined,
           contextStep,
           contextOutput,
-          reason: 'LLM 生成的下一步描述更像原因说明而非动作描述，禁止把 reason 写回 description',
           previousDescription: description || '',
           descriptionChanged: false,
           parseStatus: 'reason_like_description_blocked',
           rawJudgeTail: normalized.slice(-1000),
-        };
+          terminalType: 'business_blocked',
+        });
       }
 
       if (detectRepeatedNoProgress(task, reason)) {
         console.error(
           `[m-team] judgeByLlm 判决: RELAY-BLOCKED REPEATED_NO_PROGRESS taskId=${task.taskId} reason="${reason.slice(0, 120)}"`
         );
-        return {
-          decision: 'fail',
+        return createFailResult(task, {
+          reason: '最近多步都在重复同一阻塞原因且无新增进展，禁止继续 relay',
           nextDescription: undefined,
           contextStep,
           contextOutput,
-          reason: '最近多步都在重复同一阻塞原因且无新增进展，禁止继续 relay',
           previousDescription: description || '',
           descriptionChanged: false,
           parseStatus: 'repeated_no_progress_blocked',
           rawJudgeTail: normalized.slice(-1000),
-        };
+          terminalType: 'business_blocked',
+        });
       }
 
       console.error(
@@ -456,6 +543,9 @@ CONTEXT_OUTPUT: {"summary": "<步骤总结>", "files": ["<文件路径1>", ...]}
         reason: reason || 'LLM 判定任务目标未达成，需要下一棒继续',
         previousDescription: description || '',
         descriptionChanged,
+        relayAttempt: buildDecisionMetrics(task, reason || 'LLM 判定任务目标未达成，需要下一棒继续', 'relay').relayAttempt,
+        noProgressStreak: buildDecisionMetrics(task, reason || 'LLM 判定任务目标未达成，需要下一棒继续', 'relay').noProgressStreak,
+        terminalType: 'normal_relay',
         parseStatus,
         rawJudgeTail: normalized.slice(-1000),
       };
@@ -465,16 +555,16 @@ CONTEXT_OUTPUT: {"summary": "<步骤总结>", "files": ["<文件路径1>", ...]}
       `[m-team] judgeByLlm 判决: UNKNOWN（无法解析 raw="${lastLine.slice(0, 150)}"），转 FAIL` 
     );
     api.logger?.warn(`[m-team] agent_end LLM 判断结果无法解析 "${lastLine.slice(0, 200)}"，终止任务`);
-    return {
-      decision: 'fail',
+    return createFailResult(task, {
+      reason: 'LLM 判决输出无法解析，禁止继续 relay',
       contextStep: description || '执行步骤',
       contextOutput: {},
-      reason: 'LLM 判决输出无法解析，禁止继续 relay',
       previousDescription: description || '',
       descriptionChanged: false,
       parseStatus: raw.trim() ? 'unknown_decision' : 'llm_output_missing',
       rawJudgeTail: normalized.slice(-1000),
-    };
+      terminalType: 'system_error',
+    });
   } catch (err) {
     const elapsedMs = Date.now() - startMs;
     const errorText = String(err);
@@ -483,16 +573,16 @@ CONTEXT_OUTPUT: {"summary": "<步骤总结>", "files": ["<文件路径1>", ...]}
       `[m-team] judgeByLlm 异常: taskId=${task.taskId} elapsed=${elapsedMs}ms error=${errorText}`
     );
     api.logger?.warn(`[m-team] agent_end LLM 判断失败: ${errorText}，终止任务`);
-    return {
-      decision: 'fail',
+    return createFailResult(task, {
+      reason: `LLM 判断失败：${errorText.slice(0, 300)}`,
       contextStep: description || '执行步骤',
       contextOutput: {},
-      reason: `LLM 判断失败：${errorText.slice(0, 300)}`,
       previousDescription: description || '',
       descriptionChanged: false,
       parseStatus,
       rawJudgeTail: errorText.slice(-1000),
-    };
+      terminalType: 'system_error',
+    });
   }
 }
 
@@ -540,40 +630,77 @@ export function registerAgentEndHook(api: OpenClawPluginApi): void {
 
     if (!sessionKey?.startsWith('agent:')) return;
     const taskId = parseTaskId(sessionKey);
-    if (!taskId) return;
+    if (!taskId) {
+      logAgentEndSkip('task_id_parse_failed', {
+        sessionKey,
+        agentId: agentId ?? null,
+        success,
+        durationMs: durationMs ?? null,
+        msgCount: messages?.length ?? 0,
+      });
+      return;
+    }
 
-    console.error(
-      `[m-team] agent_end: taskId=${taskId} agentId=${agentId ?? '?'} ` +
-        `success=${success} duration=${durationMs ?? '?'} msgs=${messages?.length ?? 0}`
-    );
+    logAgentEndDecision({
+      phase: 'enter',
+      taskId,
+      sessionKey,
+      agentId: agentId ?? null,
+      success,
+      durationMs: durationMs ?? null,
+      msgCount: messages?.length ?? 0,
+    });
 
     const pluginConfig = (api.pluginConfig ?? {}) as Record<string, unknown>;
     const workspaceRoot: string = (pluginConfig.workspaceRoot as string) ?? '/mnt/d/code/m-team';
     const task = readTaskFile(taskId, workspaceRoot);
     if (!task) {
+      logAgentEndSkip('task_file_missing', {
+        taskId,
+        sessionKey,
+        agentId: agentId ?? null,
+        workspaceRoot,
+      });
       api.logger?.warn(`[m-team] agent_end: 无法读取任务 ${taskId} 的 task.json，跳过`);
       return;
     }
 
     if (!isExecutorSessionForTask(sessionKey, agentId ?? undefined, taskId)) {
-      console.error(`[m-team] agent_end skip non-executor-session taskId=${taskId} sessionKey=${sessionKey}`);
+      logAgentEndSkip('non_executor_session', {
+        taskId,
+        sessionKey,
+        agentId: agentId ?? null,
+        taskExecutor: task.executor ?? null,
+      });
       return;
     }
 
     if ((task.status as unknown as string) !== 'running') {
-      console.error(`[m-team] agent_end skip non-running taskId=${taskId} status=${String(task.status)}`);
+      logAgentEndSkip('task_not_running', {
+        taskId,
+        sessionKey,
+        agentId: agentId ?? null,
+        taskStatus: String(task.status),
+      });
       return;
     }
 
     if ((task.executor ?? '') !== (agentId ?? '')) {
-      console.error(
-        `[m-team] agent_end skip executor-mismatch taskId=${taskId} task.executor=${task.executor ?? '(none)'} agentId=${agentId ?? '(none)'}`
-      );
+      logAgentEndSkip('executor_mismatch', {
+        taskId,
+        sessionKey,
+        agentId: agentId ?? null,
+        taskExecutor: task.executor ?? null,
+      });
       return;
     }
 
     if (hasTerminalLogForSession(taskId, sessionKey, workspaceRoot)) {
-      console.error(`[m-team] agent_end skip duplicate terminal handling taskId=${taskId} sessionKey=${sessionKey}`);
+      logAgentEndSkip('duplicate_terminal', {
+        taskId,
+        sessionKey,
+        agentId: agentId ?? null,
+      });
       return;
     }
 
@@ -589,6 +716,9 @@ export function registerAgentEndHook(api: OpenClawPluginApi): void {
           success: result.success,
           reason: result.reason || errorMsg,
           decision: 'fail',
+          terminalType: 'system_error',
+          relayAttempt: getRelayAttempt(task),
+          noProgressStreak: getNoProgressStreak(task),
           parseStatus: 'ok',
           error: errorMsg,
         },
@@ -614,6 +744,12 @@ export function registerAgentEndHook(api: OpenClawPluginApi): void {
     });
 
     if (nonSystemMessages.length === 0) {
+      logAgentEndSkip('messages_empty', {
+        taskId,
+        sessionKey,
+        agentId: agentId ?? null,
+        msgCount: messages?.length ?? 0,
+      });
       const result = failTask(taskId, 'AGENT_END_MESSAGES_EMPTY', undefined, {
         outcome: 'error',
         error: 'AGENT_END_MESSAGES_EMPTY',
@@ -627,6 +763,9 @@ export function registerAgentEndHook(api: OpenClawPluginApi): void {
           success: result.success,
           reason: result.reason || 'AGENT_END_MESSAGES_EMPTY',
           decision: 'fail',
+          terminalType: 'system_error',
+          relayAttempt: getRelayAttempt(task),
+          noProgressStreak: getNoProgressStreak(task),
           parseStatus: 'llm_output_missing',
         },
         error: 'AGENT_END_MESSAGES_EMPTY',
@@ -680,6 +819,18 @@ export function registerAgentEndHook(api: OpenClawPluginApi): void {
       console.error(
         `[m-team][agent_end] task=${taskId} decision=FAIL parseStatus=${decision.parseStatus} reason="${decision.reason.slice(0, 120)}"`
       );
+      logAgentEndDecision({
+        phase: 'terminal',
+        taskId,
+        decision: 'fail',
+        terminalType: decision.terminalType,
+        parseStatus: decision.parseStatus,
+        relayAttempt: decision.relayAttempt,
+        noProgressStreak: decision.noProgressStreak,
+        reason: decision.reason,
+        sessionKey,
+        agentId: agentId ?? null,
+      });
       if (result.task) {
         sendNotifications(formatFailNotifications(result.task, getNotifications()), api.logger ?? null)
           .catch(err => api.logger?.error(`[m-team] fail 通知发送失败: ${String(err)}`));
@@ -716,6 +867,21 @@ export function registerAgentEndHook(api: OpenClawPluginApi): void {
         `parseStatus=${decision.parseStatus} previous="${(decision.previousDescription || '').slice(0, 120)}" ` +
         `next="${(decision.nextDescription || '').slice(0, 120)}" relaySuccess=${result.success}`
       );
+      logAgentEndDecision({
+        phase: 'terminal',
+        taskId,
+        decision: 'relay',
+        terminalType: decision.terminalType,
+        parseStatus: decision.parseStatus,
+        relayAttempt: decision.relayAttempt,
+        noProgressStreak: decision.noProgressStreak,
+        descriptionChanged: decision.descriptionChanged,
+        previousDescription: decision.previousDescription,
+        nextDescription: decision.nextDescription,
+        relaySuccess: result.success,
+        sessionKey,
+        agentId: agentId ?? null,
+      });
       if (result.task) {
         sendNotifications(formatRelayNotifications(result.task, getNotifications()), api.logger ?? null)
           .catch(err => api.logger?.error(`[m-team] relay 通知发送失败: ${String(err)}`));
@@ -748,6 +914,18 @@ export function registerAgentEndHook(api: OpenClawPluginApi): void {
       `[m-team][agent_end] task=${taskId} decision=COMPLETE parseStatus=${decision.parseStatus} ` +
       `contextStep="${decision.contextStep.slice(0, 120)}"`
     );
+    logAgentEndDecision({
+      phase: 'terminal',
+      taskId,
+      decision: 'complete',
+      terminalType: decision.terminalType,
+      parseStatus: decision.parseStatus,
+      relayAttempt: decision.relayAttempt,
+      noProgressStreak: decision.noProgressStreak,
+      contextStep: decision.contextStep,
+      sessionKey,
+      agentId: agentId ?? null,
+    });
     if (result.task) {
       sendNotifications(formatTaskNotifications(result.task, getNotifications()), api.logger ?? null)
         .catch(err => api.logger?.error(`[m-team] complete 通知发送失败: ${String(err)}`));
