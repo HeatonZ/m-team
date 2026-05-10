@@ -45,6 +45,7 @@ type HookMap = {
 export interface ExecOptions {
   agentId?: string;
   sessionKey?: string;
+  toolContext?: PluginHookToolContext;
 }
 
 export interface PluginHarness {
@@ -123,6 +124,8 @@ function createTestApi(config: TestPluginConfig): OpenClawPluginApi & { __regist
 }
 
 function buildToolContext(name: string, params: Record<string, unknown>, options: ExecOptions): PluginHookToolContext {
+  if (options.toolContext) return options.toolContext;
+
   const agentId = options.agentId ?? (typeof params.agentId === 'string' ? params.agentId : undefined) ?? 'manager';
   const sessionKey = options.sessionKey
     ?? (typeof params.taskId === 'string' && agentId ? `agent:${agentId}:m-team:${String(params.taskId)}` : `agent:${agentId}:manual`);

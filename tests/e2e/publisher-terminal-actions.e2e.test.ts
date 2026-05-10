@@ -1,6 +1,8 @@
 import { describe, expect, test } from 'vitest';
 import { createPluginHarness } from '../helpers/create-plugin-harness.ts';
 import { extractDetails, extractText, type ToolResult } from '../helpers/extract-tool-result.ts';
+import { registerAfterToolCallHook } from '../../src/hooks/afterToolCall.ts';
+import { publishTask } from '../../src/pool/index.js';
 
 interface PublishDetails {
   taskId: string;
@@ -107,6 +109,47 @@ describe('publisher terminal actions e2e', () => {
       expect(extractDetails(blocked)?.blocked).toBe(true);
       expect(extractText(blocked)).toContain('heartbeat');
       expect(harness.readRuntimeLogs().some((entry) => entry.message.includes('任务发布'))).toBe(false);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  test('emits ownership mismatch audit when hook ctx and persisted publisher diverge', async () => {
+    const harness = await createPluginHarness();
+    try {
+      const logRecords: Array<{ level: 'info' | 'warn' | 'error'; message: string }> = [];
+      const taskId = publishTask({
+        goal: '验证 publish ownership mismatch 审计',
+        description: '显式 publisher 与 hook ctx 故意不一致',
+        publisher: 'manager',
+      });
+      registerAfterToolCallHook({
+        on(hookName: 'after_tool_call', handler: unknown) {
+          if (hookName === 'after_tool_call') {
+            (handler as (event: unknown, ctx: unknown) => void)({
+              toolName: 'mteam_publish_task',
+              params: {
+                goal: '验证 publish ownership mismatch 审计',
+                description: '显式 publisher 与 hook ctx 故意不一致',
+                publisher: 'manager',
+              },
+              result: { details: { taskId } },
+            }, {
+              agentId: 'maker',
+              sessionKey: 'agent:maker:main',
+            });
+          }
+        },
+        logger: {
+          info() {},
+          warn() {},
+          error(message: string) { logRecords.push({ level: 'error', message }); },
+        },
+      } as never);
+
+      expect(logRecords.some((entry) => entry.message.includes(`publish ownership mismatch taskId=${taskId}`))).toBe(true);
+      expect(logRecords.some((entry) => entry.message.includes('taskPublisher=manager'))).toBe(true);
+      expect(logRecords.some((entry) => entry.message.includes('contextAgentId=maker'))).toBe(true);
     } finally {
       await harness.cleanup();
     }
