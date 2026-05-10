@@ -158,7 +158,7 @@ describe('hook lifecycle e2e', () => {
         {
           success: true,
           messages: [
-            { role: 'assistant', content: '最终结果：已输出 /mnt/d/code/hermes/result.md，任务完成。' },
+            { role: 'assistant', content: '最终结果：已输出 /mnt/d/code/hermes/result.md，形成最终选品结论，任务完成。' },
           ],
         } as never,
         { agentId: 'maker', sessionKey: `agent:maker:m-team:${taskId}` },

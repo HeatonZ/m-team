@@ -28,7 +28,7 @@ describe('publisher heartbeat acceptance e2e', () => {
       await harness.runAgentEnd(
         {
           success: true,
-          messages: [{ role: 'assistant', content: '最终结果：已输出 /mnt/d/code/hermes/publisher-accept.md，任务完成。' }],
+          messages: [{ role: 'assistant', content: '最终结果：已输出 /mnt/d/code/hermes/publisher-accept.md，验证 completed 不应抢跑，任务完成。' }],
         } as never,
         { agentId: 'fixer', sessionKey: `agent:fixer:m-team:${completedTaskId}` },
       );

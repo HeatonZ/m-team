@@ -24,7 +24,7 @@ describe('agent_end fallback lookup', () => {
       await harness.runAgentEnd({
         success: true,
         messages: [
-          { role: 'assistant', content: [{ type: 'text', text: '最终结果：1+1=2，任务完成。' }] },
+          { role: 'assistant', content: [{ type: 'text', text: '最终结果：已输出 /mnt/d/code/hermes/result.md，验证 agent_end 兼容真实 runtime，任务完成。' }] },
         ],
       } as never, {
         agentId: 'maker',

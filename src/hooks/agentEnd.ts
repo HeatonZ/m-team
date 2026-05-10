@@ -90,7 +90,7 @@ function fingerprint(text: string): string {
 }
 
 function inferOutput(text: string): ContextStepOutput {
-  const files = [...text.matchAll(/(?:\/mnt\/[^\s,，；;]+|[\w./-]+\.(?:json|md|csv|txt|png|jpg|webp))/g)].map(m => m[0]);
+  const files = [...text.matchAll(/(?:\/mnt\/[^\s,，；;。]+|[\w./-]+\.(?:json|md|csv|txt|png|jpg|webp))/g)].map(m => m[0]);
   const unresolvedIssues = [...text.matchAll(/(?:问题|缺失|未完成|待处理|需补齐|需要修正|阻塞|无法继续|报错|异常)[:：]?\s*([^\n]+)/g)].map(m => m[1].trim());
   const handoffMatch = text.match(/(?:下一步|建议)[:：]\s*([^\n]+)/i);
   return {
@@ -99,6 +99,16 @@ function inferOutput(text: string): ContextStepOutput {
     handoffNote: handoffMatch?.[1]?.trim(),
     unresolvedIssues: Array.from(new Set(unresolvedIssues)).slice(0, 10),
   };
+}
+
+function inferGoalSatisfied(text: string, task: Task, output: ContextStepOutput): boolean {
+  const normalizedGoal = fingerprint(task.goal);
+  const normalizedText = fingerprint(text);
+  const goalMentionsAllItems = normalizedGoal.length > 0 && normalizedGoal.split(/\s+/).every(token => token.length < 2 || normalizedText.includes(token));
+  const explicitGoalCompletion = /目标已完成|goal 已满足|已满足 goal|形成最终选品结论|全部完成|全部已输出|完整结果/i.test(text);
+  const explicitMultiItemCompletion = /已完成.+并汇总输出|包含.+全部结果|三个结果|全部候选|最终结论/i.test(text);
+  const finalArtifact = Boolean(output.files?.some(file => /result\.(json|md|csv|txt)$/i.test(file)));
+  return explicitGoalCompletion || (explicitMultiItemCompletion && finalArtifact) || goalMentionsAllItems;
 }
 
 function isCompleteSignal(text: string, task: Task, nextDescription: string | undefined, output: ContextStepOutput): boolean {
@@ -113,11 +123,13 @@ function isCompleteSignal(text: string, task: Task, nextDescription: string | un
   const referencesExplicitArtifact = Boolean(output.files?.length) || /result\.json|\.md|\.csv|\.json|已写入|已生成|已上传/i.test(text);
   const hasStructuredOutcome = /结果摘要|最终结果|产出文件|数据引用/i.test(text);
   const canProveTerminalDelivery = referencesExplicitArtifact || /最终结果|全部完成|全部已输出|完整结果/i.test(text);
+  const goalSatisfied = inferGoalSatisfied(text, task, output);
 
   if (!hasExplicitCompletionLanguage) return false;
   if (hasIncompleteLanguage) return false;
   if (nextDescription) return false;
   if (!hasStructuredOutcome) return false;
+  if (!goalSatisfied) return false;
   if (looksLikeSingleStepDescription && stepCount === 0) return false;
   if (looksLikeSingleStepDescription && onlyRestatesCurrentStep && !referencesExplicitArtifact) return false;
 
