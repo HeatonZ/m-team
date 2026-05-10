@@ -1,6 +1,16 @@
-import type { OpenClawPluginApi } from 'openclaw/plugin-sdk/core';
+import type {
+  OpenClawPluginApi,
+  PluginHookAgentEndEvent,
+  PluginHookAgentContext,
+  PluginHookAfterToolCallEvent,
+  PluginHookBeforeToolCallEvent,
+  PluginHookBeforeToolCallResult,
+  PluginHookToolContext,
+  PluginHeartbeatPromptContributionEvent,
+  PluginHeartbeatPromptContributionResult,
+} from 'openclaw/plugin-sdk/core';
 import plugin from '../../src/index.ts';
-import { setWorkspaceRoot, getTask } from '../../src/pool/index.js';
+import { setWorkspaceRoot, getTask, getTaskLogs } from '../../src/pool/index.js';
 import { getDb } from '../../src/pool/db.ts';
 import { createTempWorkspace, type TempWorkspace } from './temp-workspace.ts';
 import { createTestPluginConfig, type TestPluginConfig } from './plugin-config.ts';
@@ -13,20 +23,57 @@ export interface RegisteredTool {
   execute: (toolCallId: string, rawParams: Record<string, unknown>) => Promise<unknown>;
 }
 
+type HookMap = {
+  before_tool_call: Array<(
+    event: PluginHookBeforeToolCallEvent,
+    ctx: PluginHookToolContext,
+  ) => PluginHookBeforeToolCallResult | void>;
+  after_tool_call: Array<(
+    event: PluginHookAfterToolCallEvent,
+    ctx: PluginHookToolContext,
+  ) => void | Promise<void>>;
+  heartbeat_prompt_contribution: Array<(
+    event: PluginHeartbeatPromptContributionEvent,
+    ctx: unknown,
+  ) => PluginHeartbeatPromptContributionResult | undefined>;
+  agent_end: Array<(
+    event: PluginHookAgentEndEvent,
+    ctx: PluginHookAgentContext,
+  ) => void | Promise<void>>;
+};
+
+export interface ExecOptions {
+  agentId?: string;
+  sessionKey?: string;
+}
+
 export interface PluginHarness {
   workspace: TempWorkspace;
   config: TestPluginConfig;
-  api: OpenClawPluginApi & { __registeredTools: RegisteredTool[] };
+  api: OpenClawPluginApi & { __registeredTools: RegisteredTool[]; __hooks: HookMap };
   tools: RegisteredTool[];
-  exec: (name: string, params?: Record<string, unknown>) => Promise<unknown>;
+  exec: (name: string, params?: Record<string, unknown>, options?: ExecOptions) => Promise<unknown>;
   getTool: (name: string) => RegisteredTool;
   readTask: (taskId: string) => ReturnType<typeof getTask>;
+  readLogs: (taskId?: string, action?: string) => ReturnType<typeof getTaskLogs>;
+  runHeartbeat: (agentId: string) => PluginHeartbeatPromptContributionResult | undefined;
+  runAgentEnd: (event: PluginHookAgentEndEvent, ctx?: Partial<PluginHookAgentContext>) => Promise<void>;
   cleanup: () => Promise<void>;
   mutateTask: (taskId: string, mutator: (task: NonNullable<ReturnType<typeof getTask>>) => void) => void;
 }
 
-function createTestApi(config: TestPluginConfig): OpenClawPluginApi & { __registeredTools: RegisteredTool[] } {
+function createEmptyHooks(): HookMap {
+  return {
+    before_tool_call: [],
+    after_tool_call: [],
+    heartbeat_prompt_contribution: [],
+    agent_end: [],
+  };
+}
+
+function createTestApi(config: TestPluginConfig): OpenClawPluginApi & { __registeredTools: RegisteredTool[]; __hooks: HookMap } {
   const registeredTools: RegisteredTool[] = [];
+  const hooks = createEmptyHooks();
 
   const api = {
     pluginConfig: config,
@@ -44,12 +91,35 @@ function createTestApi(config: TestPluginConfig): OpenClawPluginApi & { __regist
           return { runId: 'test-run-id' };
         },
       },
+      storage: {
+        async get<T>(key: string): Promise<T | null> {
+          if (!key.startsWith('mteam:task:')) return null;
+          const taskId = key.slice('mteam:task:'.length);
+          return (getTask(taskId) ?? null) as T | null;
+        },
+      },
     },
-    on: (_hookName: string, _handler: unknown) => undefined,
+    on(hookName: keyof HookMap, handler: unknown) {
+      const list = hooks[hookName];
+      if (list) {
+        list.push(handler as never);
+      }
+    },
     __registeredTools: registeredTools,
+    __hooks: hooks,
   };
 
-  return api as OpenClawPluginApi & { __registeredTools: RegisteredTool[] };
+  return api as OpenClawPluginApi & { __registeredTools: RegisteredTool[]; __hooks: HookMap };
+}
+
+function buildToolContext(name: string, params: Record<string, unknown>, options: ExecOptions): PluginHookToolContext {
+  const agentId = options.agentId ?? (typeof params.agentId === 'string' ? params.agentId : undefined) ?? 'manager';
+  const sessionKey = options.sessionKey
+    ?? (typeof params.taskId === 'string' && agentId ? `agent:${agentId}:m-team:${String(params.taskId)}` : `agent:${agentId}:manual`);
+  return {
+    agentId,
+    sessionKey,
+  } as PluginHookToolContext;
 }
 
 export async function createPluginHarness(overrides: Partial<TestPluginConfig> = {}): Promise<PluginHarness> {
@@ -73,12 +143,55 @@ export async function createPluginHarness(overrides: Partial<TestPluginConfig> =
     config,
     api,
     tools: api.__registeredTools,
-    exec: async (name: string, params: Record<string, unknown> = {}) => {
+    exec: async (name: string, params: Record<string, unknown> = {}, options: ExecOptions = {}) => {
       const tool = getToolByName(name);
-      return tool.execute('test-tool-call', params);
+      const ctx = buildToolContext(name, params, options);
+
+      for (const hook of api.__hooks.before_tool_call) {
+        const guard = hook({ toolName: name, params } as PluginHookBeforeToolCallEvent, ctx);
+        if (guard?.block) {
+          return {
+            content: [{ type: 'text', text: guard.blockReason ?? `${name} blocked` }],
+            details: { blocked: true, reason: guard.blockReason },
+          };
+        }
+      }
+
+      let result: unknown;
+      let error: string | undefined;
+      try {
+        result = await tool.execute('test-tool-call', params);
+      } catch (err) {
+        error = err instanceof Error ? err.message : String(err);
+        throw err;
+      } finally {
+        for (const hook of api.__hooks.after_tool_call) {
+          await hook({ toolName: name, params, result, error } as PluginHookAfterToolCallEvent, ctx);
+        }
+      }
+
+      return result;
     },
     getTool: getToolByName,
     readTask: (taskId: string) => getTask(taskId),
+    readLogs: (taskId?: string, action?: string) => getTaskLogs(taskId, action),
+    runHeartbeat: (agentId: string) => {
+      let result: PluginHeartbeatPromptContributionResult | undefined;
+      for (const hook of api.__hooks.heartbeat_prompt_contribution) {
+        const next = hook({ agentId } as PluginHeartbeatPromptContributionEvent, {});
+        if (next) result = next;
+      }
+      return result;
+    },
+    runAgentEnd: async (event, ctx = {}) => {
+      const baseCtx = {
+        agentId: ctx.agentId,
+        sessionKey: ctx.sessionKey,
+      } as PluginHookAgentContext;
+      for (const hook of api.__hooks.agent_end) {
+        await hook(event, baseCtx);
+      }
+    },
     cleanup: async () => {
       await workspace.cleanup();
     },
