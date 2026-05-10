@@ -60,7 +60,7 @@ export function register(
         }
       }
 
-      return textResult(`🔁 任务已驳回\n${task ? formatTaskAsText(task) : `任务 ${taskId}`}`, { task });
+      return textResult(`🔁 任务已驳回\n${task ? formatTaskAsText(task, { includeGoal: true }) : `任务 ${taskId}`}`, { task });
     },
   });
 }

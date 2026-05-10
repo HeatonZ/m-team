@@ -38,7 +38,7 @@ export function register(
         }
       }
 
-      return textResult(`🔒 任务已关闭\n${result.task ? formatTaskAsText(result.task) : taskId}`, { success: result.success, task: result.task });
+      return textResult(`🔒 任务已关闭\n${result.task ? formatTaskAsText(result.task, { includeGoal: true }) : taskId}`, { success: result.success, task: result.task });
     },
   });
 }
