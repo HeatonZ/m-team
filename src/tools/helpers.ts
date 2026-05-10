@@ -39,13 +39,14 @@ export function formatTaskLine(task: Omit<Task, 'goal'>, index: number): string 
 // ============================================================
 
 /**
- * 单个任务 → 文本（含全部关键字段，不隐藏 goal）
- * 用于 mteam_get_task / mteam_get_agent_active 等查询单任务的返回
+ * 单个任务 → 文本（默认隐藏 goal，供执行路径工具使用）
+ * 用于 mteam_get_task / mteam_get_agent_active / mteam_claim_task 等执行路径返回
  */
-export function formatTaskAsText(task: Task): string {
+export function formatTaskAsText(task: Task, options?: { includeGoal?: boolean }): string {
   const status = getStatusLabel(task.status);
   const priority = PRIORITY_LABELS[task.priority] ?? '🟡 中';
   const stepCount = task.context.filter(e => e.type === 'step').length;
+  const includeGoal = options?.includeGoal ?? false;
 
   const lines = [
     `📋 任务详情`,
@@ -53,10 +54,10 @@ export function formatTaskAsText(task: Task): string {
     `类型: ${TASK_TYPE_LABELS[task.taskType] ?? task.taskType}`,
     `状态: ${status}`,
     `优先级: ${priority}`,
-    `目标: ${task.goal}`,
-    `当前步骤: ${task.description}`,
-    `发布者: ${task.publisher}`,
   ];
+  if (includeGoal) lines.push(`目标: ${task.goal}`);
+  lines.push(`当前步骤: ${task.description}`);
+  lines.push(`发布者: ${task.publisher}`);
   if (task.executor) lines.push(`执行者: ${task.executor}`);
   if (task.lastExecutor) lines.push(`上一步: ${task.lastExecutor}`);
   lines.push(`已执行步骤: ${stepCount}`);
