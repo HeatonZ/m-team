@@ -12,6 +12,16 @@ import { formatPublishNotifications, sendNotifications } from '../notifications.
 import { PublishTaskParams } from '../types/tools.js';
 import type { PublishTaskParamsInterface } from '../types/tools.js';
 
+function inferPublisher(rawParams: PublishTaskParamsInterface, toolContext?: PluginHookToolContext): string {
+  const explicitPublisher = rawParams.publisher?.trim();
+  if (explicitPublisher) return explicitPublisher;
+
+  const contextAgentId = toolContext?.agentId?.trim();
+  if (contextAgentId) return contextAgentId;
+
+  throw new Error('mteam_publish_task 缺少 publisher：既未显式传 publisher，也未从 toolContext.agentId 推断到调用者');
+}
+
 export function register(
   api: OpenClawPluginApi,
   config: MTeamPluginConfig
@@ -23,10 +33,8 @@ export function register(
     description: '发布任务到 M-Team 任务池',
     parameters: PublishTaskParams,
     async execute(_toolCallId: string, rawParams: PublishTaskParamsInterface, toolContext?: PluginHookToolContext) {
-      const inferredPublisher = toolContext?.agentId?.trim();
-      const loggedAgentId = inferredPublisher ?? 'missing-agent-id';
-      const publisher = rawParams.publisher?.trim() || inferredPublisher || 'user';
-      api.logger?.info?.(`[m-team] publish execute sessionKey=${toolContext?.sessionKey ?? 'missing-session-key'} agentId=${loggedAgentId} rawPublisher=${rawParams.publisher?.trim() ?? 'missing'} effectivePublisher=${publisher}`);
+      const publisher = inferPublisher(rawParams, toolContext);
+      api.logger?.info?.(`[m-team] publish execute sessionKey=${toolContext?.sessionKey ?? 'missing-session-key'} agentId=${toolContext?.agentId?.trim() ?? 'missing-agent-id'} rawPublisher=${rawParams.publisher?.trim() ?? 'missing'} effectivePublisher=${publisher}`);
       const { description, goal, taskType, priority } = rawParams;
 
       const taskId = publishTask({

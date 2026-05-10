@@ -26,4 +26,23 @@ describe('publish publisher inference', () => {
       await harness.cleanup();
     }
   });
+
+  test('fails closed when publisher is omitted and toolContext agentId is missing', async () => {
+    const harness = await createPluginHarness({ dashboardEnabled: false });
+    try {
+      await expect(
+        harness.getTool('mteam_publish_task').execute(
+          'test-tool-call',
+          {
+            goal: '验证缺失 publisher 时阻断发布',
+            description: '不显式传 publisher，且不给 toolContext agentId',
+            priority: 'high',
+          },
+          { sessionKey: 'agent:unknown:direct:ou_test_missing_agent' } as never,
+        ),
+      ).rejects.toThrow('mteam_publish_task 缺少 publisher');
+    } finally {
+      await harness.cleanup();
+    }
+  });
 });
