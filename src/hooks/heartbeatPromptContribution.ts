@@ -50,11 +50,12 @@ const CLAIM_PROMPT = `## 心跳任务：认领新任务
 
 3. 若有合适的 → mteam_claim_task({ agentId, taskId })
    **注意**：认领后内部会自动立即开始执行，不要在 heartbeat session 执行任务
+   **禁止**：不要调用 sessions_spawn / sessions_send，不要派生子 agent 做“最小验证”或代替 executor 执行
 4. 若没有合适的 → 回复原因
 
 **goal 不在认领决策范围内**，goal 是任务终态标尺；认领时主要看 taskType、description 和已有 context。
 
-**禁止：不要执行任务，不要调用 relinquish_task，只做认领。**
+**禁止：不要执行任务，不要调用 relinquish_task，不要调用 sessions_spawn / sessions_send，只做认领。**
 `;
 
 // ============================================================

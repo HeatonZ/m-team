@@ -35,6 +35,7 @@ describe('hook lifecycle e2e', () => {
 
   test('session guard blocks forbidden heartbeat / executor / non-publisher actions', async () => {
     const harness = await createPluginHarness({ dashboardEnabled: false });
+    const { api } = harness;
     try {
       const publishBlocked = await harness.exec(
         'mteam_publish_task',
@@ -47,6 +48,24 @@ describe('hook lifecycle e2e', () => {
       ) as ToolResult<{ blocked?: boolean; reason?: string }>;
       expect(extractDetails(publishBlocked)?.blocked).toBe(true);
       expect(extractText(publishBlocked)).toContain('心跳 session');
+
+      const spawnBlocked = await harness.exec(
+        'mteam_get_pending',
+        { agentId: 'maker' },
+        { agentId: 'maker', sessionKey: 'agent:maker:discord:heartbeat' },
+      ) as ToolResult<{ blocked?: boolean; reason?: string }>;
+      expect(extractDetails(spawnBlocked)?.blocked).not.toBe(true);
+      const spawnGuard = api.__hooks.before_tool_call
+        .map((hook) => hook({ toolName: 'sessions_spawn', params: { label: 'heartbeat-should-not-spawn', task: '不应在 heartbeat 中派生执行' } } as never, { agentId: 'maker', sessionKey: 'agent:maker:discord:heartbeat' } as never))
+        .find(Boolean) as { block?: boolean; blockReason?: string } | undefined;
+      expect(spawnGuard?.block).toBe(true);
+      expect(spawnGuard?.blockReason).toContain('spawn 子 agent');
+
+      const sendGuard = api.__hooks.before_tool_call
+        .map((hook) => hook({ toolName: 'sessions_send', params: { sessionId: 'fake-session', message: '不应在 heartbeat 转发未校验结果' } } as never, { agentId: 'maker', sessionKey: 'agent:maker:discord:heartbeat' } as never))
+        .find(Boolean) as { block?: boolean; blockReason?: string } | undefined;
+      expect(sendGuard?.block).toBe(true);
+      expect(sendGuard?.blockReason).toContain('转发未经校验');
 
       const task = await harness.exec('mteam_publish_task', {
         goal: '生成 executor 受限场景',

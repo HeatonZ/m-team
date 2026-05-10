@@ -34,13 +34,14 @@ export function registerSessionGuardHook(
       const isExecutorTaskSession = Boolean(sessionKey?.startsWith(`agent:${agentId}:m-team:task_`));
 
       // 心跳 session 禁止调用 complete / fail（这两种由 agent_end hook 统一处理）
+      // 额外禁止 sessions_spawn / sessions_send：heartbeat 只负责认领，不允许派生执行链或转发未经校验的子结果。
       if (
-        (toolName === 'mteam_complete_task' || toolName === 'mteam_fail_task')
+        (toolName === 'mteam_complete_task' || toolName === 'mteam_fail_task' || toolName === 'sessions_spawn' || toolName === 'sessions_send')
         && sessionKey?.endsWith(':heartbeat')
       ) {
         return {
           block: true,
-          blockReason: `心跳 session（${sessionKey}）禁止调用 ${toolName}。heartbeat 只负责认领或 publisher 验收，不负责执行链式步骤。`,
+          blockReason: `心跳 session（${sessionKey}）禁止调用 ${toolName}。heartbeat 只负责认领或 publisher 验收，不负责执行链式步骤、spawn 子 agent 或转发未经校验的执行结果。`,
         };
       }
 
