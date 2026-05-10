@@ -13,6 +13,7 @@ import {
   relayTask,
   retainTaskOwnership,
 } from '../pool/operations.js';
+import { getTask } from '../pool/index.js';
 import { writeTaskLog } from '../pool/db.js';
 import {
   sendNotifications,
@@ -147,8 +148,11 @@ export function registerAgentEndHook(api: OpenClawPluginApi): void {
     const taskId = parseTaskId(sessionKey ?? '');
     if (!taskId || !isExecutorSessionForTask(sessionKey, agentId, taskId)) return;
 
-    const task = await api.runtime.storage.get<Task>(`mteam:task:${taskId}`).catch(() => null) ?? null;
-    if (!task) return;
+    const task = await api.runtime.storage?.get?.<Task>(`mteam:task:${taskId}`).catch(() => null) ?? getTask(taskId) ?? null;
+    if (!task) {
+      api.logger?.warn?.(`[m-team] agent_end task lookup miss taskId=${taskId} sessionKey=${sessionKey ?? 'missing-session-key'} agentId=${agentId ?? 'missing-agent-id'}`);
+      return;
+    }
     if (![TaskPhase.EXECUTING, TaskPhase.FINALIZING].includes(task.lifecycle.phase)) return;
 
     const nonSystemMessages = (event.messages ?? []).filter(msg => (msg as Record<string, unknown>).role !== 'system');

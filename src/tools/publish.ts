@@ -24,7 +24,9 @@ export function register(
     parameters: PublishTaskParams,
     async execute(_toolCallId: string, rawParams: PublishTaskParamsInterface, toolContext?: PluginHookToolContext) {
       const inferredPublisher = toolContext?.agentId?.trim();
+      const loggedAgentId = inferredPublisher ?? 'missing-agent-id';
       const publisher = rawParams.publisher?.trim() || inferredPublisher || 'user';
+      api.logger?.info?.(`[m-team] publish execute sessionKey=${toolContext?.sessionKey ?? 'missing-session-key'} agentId=${loggedAgentId} rawPublisher=${rawParams.publisher?.trim() ?? 'missing'} effectivePublisher=${publisher}`);
       const { description, goal, taskType, priority } = rawParams;
 
       const taskId = publishTask({
