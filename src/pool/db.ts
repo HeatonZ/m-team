@@ -78,6 +78,7 @@ function initSchema(db: Database.Database): void {
   const hasTaskType = columns.some(col => col.name === 'task_type');
   const hasFlow = columns.some(col => col.name === 'flow');
   const hasLifecycle = columns.some(col => col.name === 'lifecycle');
+  const hasUpdatedAt = columns.some(col => col.name === 'updated_at');
   if (!hasTaskType) {
     db.exec("ALTER TABLE tasks ADD COLUMN task_type TEXT NOT NULL DEFAULT 'general';");
   }
@@ -86,6 +87,10 @@ function initSchema(db: Database.Database): void {
   }
   if (!hasLifecycle) {
     db.exec('ALTER TABLE tasks ADD COLUMN lifecycle TEXT');
+  }
+  if (!hasUpdatedAt) {
+    db.exec("ALTER TABLE tasks ADD COLUMN updated_at INTEGER NOT NULL DEFAULT 0;");
+    db.exec('UPDATE tasks SET updated_at = COALESCE(completed_at, created_at, 0) WHERE updated_at = 0');
   }
 }
 
