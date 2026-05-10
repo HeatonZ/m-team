@@ -50,17 +50,14 @@ export function register(
 - 任务目录: ${taskWorkdir}
 - 执行者 agentId: ${agentId}
 
-【目标（goal）】
-${task?.goal ?? '（无）'}
-
 【工作区约束】
 所有文件操作（读、写、终端命令）必须在任务目录内进行。
 
 【执行流程】
 1. 先调用 mteam_get_task 查任务详情（含执行历史 + 当前 description）
 2. 根据上方执行历史确认当前步骤是否已在历史中完成
-3. 根据 description 执行当前步骤
-4. 认领与执行只围绕 taskType + description；goal 仅用于后续 agent_end 终态复盘
+3. 只围绕当前 description 执行当前这一步，不要自行扩展为整条任务计划
+4. 不要根据总目标自行宣布任务完成；只有当前这一步已形成明确可验证产物时，才汇报本步结果
 5. 做完后直接结束 session，m-team 会在 agent_end hook 收口并判断 complete / relay / fail / retain
 
 `;

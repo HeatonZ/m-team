@@ -101,10 +101,24 @@ function inferOutput(text: string): ContextStepOutput {
   };
 }
 
-function isCompleteSignal(text: string, task: Task): boolean {
-  return /结果摘要|最终结果|已完成|完成如下|输出如下|任务完成/i.test(text)
-    && !/下一步|待处理|需补齐|未完成/i.test(text)
-    && (text.includes(task.goal.slice(0, Math.min(8, task.goal.length))) || /文件|结果|summary|完成/i.test(text));
+function isCompleteSignal(text: string, task: Task, nextDescription: string | undefined, output: ContextStepOutput): boolean {
+  const normalizedDescription = fingerprint(task.description);
+  const normalizedText = fingerprint(text);
+  const stepCount = task.context.filter(entry => entry.type === 'step').length;
+  const hasExplicitCompletionLanguage = /结果摘要|最终结果|已完成|完成如下|输出如下|任务完成/i.test(text);
+  const hasIncompleteLanguage = /下一步|待处理|需补齐|未完成|继续|剩余|还需|仍需/i.test(text);
+  const looksLikeSingleStepDescription = /^(计算|搜索|查找|整理|生成|上传|抓取|撰写|翻译|检查|验证|补齐|创建)\s*/.test(task.description)
+    && !/[，。,；;]|并|以及|然后|后再|找够|全部|所有|最终/.test(task.description);
+  const onlyRestatesCurrentStep = normalizedDescription.length > 0 && normalizedText.includes(normalizedDescription);
+  const referencesExplicitArtifact = Boolean(output.files?.length) || /result\.json|\.md|\.csv|\.json|已写入|已生成|已上传/i.test(text);
+
+  if (!hasExplicitCompletionLanguage) return false;
+  if (hasIncompleteLanguage) return false;
+  if (nextDescription) return false;
+  if (looksLikeSingleStepDescription && stepCount === 0) return false;
+  if (looksLikeSingleStepDescription && onlyRestatesCurrentStep && !referencesExplicitArtifact) return false;
+
+  return referencesExplicitArtifact || /最终结果|全部完成|全部已输出|完整结果/i.test(text);
 }
 
 function isReworkSignal(text: string): boolean {
@@ -183,7 +197,7 @@ export function registerAgentEndHook(api: OpenClawPluginApi): void {
       return;
     }
 
-    if (isCompleteSignal(text, task)) {
+    if (isCompleteSignal(text, task, nextDescription, output)) {
       const result = completeTask(taskId, { step, output });
       writeTaskLog({ taskId, action: 'complete', sessionKey: sessionKey ?? undefined, agentId: agentId ?? undefined, result: { success: result.success, decision: 'complete' } });
       if (result.task) await sendNotifications(formatTaskNotifications(result.task, getNotifications()), api.logger ?? null).catch(() => null);
