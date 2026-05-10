@@ -91,7 +91,7 @@ function fingerprint(text: string): string {
 
 function inferOutput(text: string): ContextStepOutput {
   const files = [...text.matchAll(/(?:\/mnt\/[^\s,，；;]+|[\w./-]+\.(?:json|md|csv|txt|png|jpg|webp))/g)].map(m => m[0]);
-  const unresolvedIssues = [...text.matchAll(/(?:问题|缺失|未完成|待处理|需补齐|需要修正)[:：]?\s*([^\n]+)/g)].map(m => m[1].trim());
+  const unresolvedIssues = [...text.matchAll(/(?:问题|缺失|未完成|待处理|需补齐|需要修正|阻塞|无法继续|报错|异常)[:：]?\s*([^\n]+)/g)].map(m => m[1].trim());
   const handoffMatch = text.match(/(?:下一步|建议)[:：]\s*([^\n]+)/i);
   return {
     summary: text.slice(0, 500),
@@ -111,14 +111,26 @@ function isCompleteSignal(text: string, task: Task, nextDescription: string | un
     && !/[，。,；;]|并|以及|然后|后再|找够|全部|所有|最终/.test(task.description);
   const onlyRestatesCurrentStep = normalizedDescription.length > 0 && normalizedText.includes(normalizedDescription);
   const referencesExplicitArtifact = Boolean(output.files?.length) || /result\.json|\.md|\.csv|\.json|已写入|已生成|已上传/i.test(text);
+  const hasStructuredOutcome = /结果摘要|最终结果|产出文件|数据引用/i.test(text);
+  const canProveTerminalDelivery = referencesExplicitArtifact || /最终结果|全部完成|全部已输出|完整结果/i.test(text);
 
   if (!hasExplicitCompletionLanguage) return false;
   if (hasIncompleteLanguage) return false;
   if (nextDescription) return false;
+  if (!hasStructuredOutcome) return false;
   if (looksLikeSingleStepDescription && stepCount === 0) return false;
   if (looksLikeSingleStepDescription && onlyRestatesCurrentStep && !referencesExplicitArtifact) return false;
 
-  return referencesExplicitArtifact || /最终结果|全部完成|全部已输出|完整结果/i.test(text);
+  return canProveTerminalDelivery;
+}
+
+function hasExplicitRelayIntent(text: string): boolean {
+  return /(?:下一步|建议)[:：]\s*[^\n]+/i.test(text);
+}
+
+function hasBlockingFailureSignal(text: string, output: ContextStepOutput): boolean {
+  return /阻塞|卡住|无法继续|缺少前置|前置条件不足|权限不足|接口报错|环境异常/i.test(text)
+    || Boolean(output.unresolvedIssues?.some(issue => /阻塞|无法|缺少|报错|异常|失败/i.test(issue)));
 }
 
 function isReworkSignal(text: string): boolean {
@@ -219,13 +231,37 @@ export function registerAgentEndHook(api: OpenClawPluginApi): void {
       return;
     }
 
+    if (hasExplicitRelayIntent(text) && !nextDescription) {
+      const retainDescription = task.lifecycle.phase === TaskPhase.FINALIZING
+        ? '把下一步写成明确单步 description，再决定是否交接。'
+        : '把下一步写成明确单步 description，再继续执行或交接。';
+      const retainPhase = task.lifecycle.phase === TaskPhase.FINALIZING ? TaskPhase.FINALIZING : TaskPhase.EXECUTING;
+      const result = retainTaskOwnership(taskId, agentId ?? task.executor ?? 'unknown', { step, output }, retainDescription, retainPhase);
+      writeTaskLog({ taskId, action: 'retain', sessionKey: sessionKey ?? undefined, agentId: agentId ?? undefined, result: { success: result.success, decision: 'retain', phase: retainPhase, reason: 'AMBIGUOUS_RELAY_WITHOUT_NEXT_DESCRIPTION' } });
+      return;
+    }
+
     if (hasProgress(output)) {
+      if (hasBlockingFailureSignal(text, output) && !nextDescription) {
+        const result = failTask(taskId, 'BLOCKED_WITH_PROGRESS_BUT_NO_HANDOFF', { step: task.description, output: { ...output, summary: text || '阻塞且已有中间结果，但未形成可交接下一步', error: 'BLOCKED_WITH_PROGRESS_BUT_NO_HANDOFF', unresolvedIssues: output.unresolvedIssues?.length ? output.unresolvedIssues : ['阻塞且未形成明确下一步'] } }, { outcome: 'blocked', error: 'BLOCKED_WITH_PROGRESS_BUT_NO_HANDOFF' });
+        writeTaskLog({ taskId, action: 'fail', sessionKey: sessionKey ?? undefined, agentId: agentId ?? undefined, result: { success: result.success, decision: 'fail' }, error: 'BLOCKED_WITH_PROGRESS_BUT_NO_HANDOFF' });
+        if (result.task) await sendNotifications(formatFailNotifications(result.task, getNotifications()), api.logger ?? null).catch(() => null);
+        return;
+      }
+
       const retainDescription = task.lifecycle.phase === TaskPhase.FINALIZING
         ? '继续完成当前最终收口动作，补齐最终输出后完成任务。'
         : task.description;
       const retainPhase = task.lifecycle.phase === TaskPhase.FINALIZING ? TaskPhase.FINALIZING : TaskPhase.EXECUTING;
       const result = retainTaskOwnership(taskId, agentId ?? task.executor ?? 'unknown', { step, output }, retainDescription, retainPhase);
       writeTaskLog({ taskId, action: 'retain', sessionKey: sessionKey ?? undefined, agentId: agentId ?? undefined, result: { success: result.success, decision: 'retain', phase: retainPhase } });
+      return;
+    }
+
+    if (hasBlockingFailureSignal(text, output)) {
+      const result = failTask(taskId, 'BLOCKED_WITHOUT_HANDOFF', { step: task.description, output: { ...output, summary: text || '阻塞且缺少可交接下一步', error: 'BLOCKED_WITHOUT_HANDOFF', unresolvedIssues: output.unresolvedIssues?.length ? output.unresolvedIssues : ['阻塞且未形成明确下一步'] } }, { outcome: 'blocked', error: 'BLOCKED_WITHOUT_HANDOFF' });
+      writeTaskLog({ taskId, action: 'fail', sessionKey: sessionKey ?? undefined, agentId: agentId ?? undefined, result: { success: result.success, decision: 'fail' }, error: 'BLOCKED_WITHOUT_HANDOFF' });
+      if (result.task) await sendNotifications(formatFailNotifications(result.task, getNotifications()), api.logger ?? null).catch(() => null);
       return;
     }
 
