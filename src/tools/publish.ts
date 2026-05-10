@@ -3,6 +3,7 @@
  */
 
 import type { OpenClawPluginApi } from 'openclaw/plugin-sdk';
+import type { PluginHookToolContext } from 'openclaw/plugin-sdk/core';
 import type { MTeamPluginConfig } from '../config.js';
 import { textResult } from './shared.js';
 import { publishTask, getTask } from '../pool/index.js';
@@ -22,8 +23,10 @@ export function register(
     label: '发布任务',
     description: '发布任务到 M-Team 任务池',
     parameters: PublishTaskParams,
-    async execute(_toolCallId: string, rawParams: PublishTaskParamsInterface) {
-      const { description, goal, taskType, publisher = 'user', priority } = rawParams;
+    async execute(_toolCallId: string, rawParams: PublishTaskParamsInterface, toolContext?: PluginHookToolContext) {
+      const inferredPublisher = toolContext?.agentId?.trim();
+      const publisher = rawParams.publisher?.trim() || inferredPublisher || 'user';
+      const { description, goal, taskType, priority } = rawParams;
 
       const taskId = publishTask({
         taskType,

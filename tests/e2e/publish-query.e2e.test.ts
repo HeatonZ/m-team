@@ -19,9 +19,8 @@ describe('publish/query e2e', () => {
         goal: '最终产出 1 份清晰的选品结论',
         description: '先整理 3 个候选商品的基础信息',
         taskType: 'research',
-        publisher: 'manager',
         priority: 'high',
-      }) as ToolResult<PublishDetails>;
+      }, { agentId: 'manager' }) as ToolResult<PublishDetails>;
 
       const publishText = extractText(publishResult);
       const publishDetails = extractDetails(publishResult);
@@ -33,13 +32,14 @@ describe('publish/query e2e', () => {
       expect(storedTask?.goal).toBe('最终产出 1 份清晰的选品结论');
       expect(storedTask?.description).toBe('先整理 3 个候选商品的基础信息');
       expect(storedTask?.taskType).toBe('research');
+      expect(storedTask?.publisher).toBe('manager');
 
       const getTaskResult = await harness.exec('mteam_get_task', { taskId }) as ToolResult<{ task: Record<string, unknown> }>;
       const getTaskText = extractText(getTaskResult);
       const getTaskDetails = extractDetails(getTaskResult);
       expect(getTaskText).toContain(taskId);
       expect(getTaskText).toContain('当前步骤: 先整理 3 个候选商品的基础信息');
-      expect(getTaskText).toContain('目标: 最终产出 1 份清晰的选品结论');
+      expect(getTaskText).not.toContain('最终产出 1 份清晰的选品结论');
       expect(getTaskDetails?.task).not.toHaveProperty('goal');
 
       const pendingResult = await harness.exec('mteam_get_pending', { agentId: 'maker' }) as ToolResult<TaskListDetails>;

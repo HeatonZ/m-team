@@ -20,7 +20,7 @@ export interface RegisteredTool {
   label?: string;
   description?: string;
   parameters?: unknown;
-  execute: (toolCallId: string, rawParams: Record<string, unknown>) => Promise<unknown>;
+  execute: (toolCallId: string, rawParams: Record<string, unknown>, toolContext?: PluginHookToolContext) => Promise<unknown>;
 }
 
 type HookMap = {
@@ -167,7 +167,7 @@ export async function createPluginHarness(overrides: Partial<TestPluginConfig> =
       let result: unknown;
       let error: string | undefined;
       try {
-        result = await tool.execute('test-tool-call', params);
+        result = await tool.execute('test-tool-call', params, ctx);
       } catch (err) {
         error = err instanceof Error ? err.message : String(err);
         throw err;

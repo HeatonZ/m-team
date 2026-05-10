@@ -37,7 +37,7 @@ export const PublishTaskParams = {
       description: '任务类型。general=通用动作；coding/research/ops/data/design/content=专业任务，供 heartbeat 先按类型粗筛',
       enum: ['general', 'coding', 'research', 'ops', 'data', 'design', 'content']
     },
-    publisher: { type: 'string', description: '发布者，默认 "user"' },
+    publisher: { type: 'string', description: '发布者；未显式提供时默认取当前调用者 agentId' },
     priority: { type: 'string', description: '优先级 high/normal/low，默认 normal', enum: ['high', 'normal', 'low'] },
   },
   required: ['goal', 'description'] as const,
