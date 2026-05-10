@@ -9,6 +9,7 @@ import type {
   PluginHeartbeatPromptContributionEvent,
   PluginHeartbeatPromptContributionResult,
 } from 'openclaw/plugin-sdk/core';
+import type { SubagentRunInput } from 'openclaw/plugin-sdk';
 import plugin from '../../src/index.ts';
 import { setWorkspaceRoot, getTask, getTaskLogs, getAllTasks } from '../../src/pool/index.js';
 import { getDb } from '../../src/pool/db.ts';
@@ -51,13 +52,14 @@ export interface ExecOptions {
 export interface PluginHarness {
   workspace: TempWorkspace;
   config: TestPluginConfig;
-  api: OpenClawPluginApi & { __registeredTools: RegisteredTool[]; __hooks: HookMap; __logRecords: Array<{ level: 'info' | 'warn' | 'error'; message: string }> };
+  api: OpenClawPluginApi & { __registeredTools: RegisteredTool[]; __hooks: HookMap; __logRecords: Array<{ level: 'info' | 'warn' | 'error'; message: string }>; __subagentRuns: SubagentRunInput[] };
   tools: RegisteredTool[];
   exec: (name: string, params?: Record<string, unknown>, options?: ExecOptions) => Promise<unknown>;
   getTool: (name: string) => RegisteredTool;
   readTask: (taskId: string) => ReturnType<typeof getTask>;
   readLogs: (taskId?: string, action?: string) => ReturnType<typeof getTaskLogs>;
   readRuntimeLogs: () => Array<{ level: 'info' | 'warn' | 'error'; message: string }>;
+  readSubagentRuns: () => SubagentRunInput[];
   runHeartbeat: (agentId: string) => PluginHeartbeatPromptContributionResult | undefined;
   runAgentEnd: (event: PluginHookAgentEndEvent, ctx?: Partial<PluginHookAgentContext>) => Promise<void>;
   cleanup: () => Promise<void>;
@@ -77,6 +79,7 @@ function createTestApi(config: TestPluginConfig): OpenClawPluginApi & { __regist
   const registeredTools: RegisteredTool[] = [];
   const hooks = createEmptyHooks();
   const logRecords: Array<{ level: 'info' | 'warn' | 'error'; message: string }> = [];
+  const subagentRuns: SubagentRunInput[] = [];
 
   const api = {
     pluginConfig: config,
@@ -90,7 +93,8 @@ function createTestApi(config: TestPluginConfig): OpenClawPluginApi & { __regist
     },
     runtime: {
       subagent: {
-        async run() {
+        async run(input: SubagentRunInput) {
+          subagentRuns.push(input);
           return { runId: 'test-run-id' };
         },
       },
@@ -118,9 +122,10 @@ function createTestApi(config: TestPluginConfig): OpenClawPluginApi & { __regist
     __registeredTools: registeredTools,
     __hooks: hooks,
     __logRecords: logRecords,
+    __subagentRuns: subagentRuns,
   };
 
-  return api as OpenClawPluginApi & { __registeredTools: RegisteredTool[]; __hooks: HookMap; __logRecords: Array<{ level: 'info' | 'warn' | 'error'; message: string }> };
+  return api as OpenClawPluginApi & { __registeredTools: RegisteredTool[]; __hooks: HookMap; __logRecords: Array<{ level: 'info' | 'warn' | 'error'; message: string }>; __subagentRuns: SubagentRunInput[] };
 }
 
 function buildToolContext(name: string, params: Record<string, unknown>, options: ExecOptions): PluginHookToolContext {
@@ -188,7 +193,8 @@ export async function createPluginHarness(overrides: Partial<TestPluginConfig> =
     getTool: getToolByName,
     readTask: (taskId: string) => getTask(taskId),
     readLogs: (taskId?: string, action?: string) => getTaskLogs(taskId, action),
-    readRuntimeLogs: () => [...api.__logRecords],
+    readRuntimeLogs: () => api.__logRecords,
+    readSubagentRuns: () => api.__subagentRuns,
     runHeartbeat: (agentId: string) => {
       let result: PluginHeartbeatPromptContributionResult | undefined;
       for (const hook of api.__hooks.heartbeat_prompt_contribution) {
