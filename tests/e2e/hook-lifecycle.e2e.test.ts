@@ -2,6 +2,10 @@ import { describe, expect, test } from 'vitest';
 import { createPluginHarness } from '../helpers/create-plugin-harness.ts';
 import { extractDetails, extractText, type ToolResult } from '../helpers/extract-tool-result.ts';
 
+interface PublishDetails {
+  taskId: string;
+}
+
 describe('hook lifecycle e2e', () => {
   test('heartbeat injects claim prompt only for idle executor and publisher acceptance prompt for publisher', async () => {
     const harness = await createPluginHarness({ dashboardEnabled: false });
@@ -14,7 +18,7 @@ describe('hook lifecycle e2e', () => {
         goal: '完成一轮链式交接',
         description: '先整理候选商品的初步结果',
         publisher: 'manager',
-      }) as ToolResult<{ taskId: string }>;
+      }) as ToolResult<PublishDetails>;
       const taskId = extractDetails(publishResult)!.taskId;
       await harness.exec('mteam_claim_task', { taskId, agentId: 'maker' }, { agentId: 'maker' });
 
@@ -48,7 +52,7 @@ describe('hook lifecycle e2e', () => {
         goal: '生成 executor 受限场景',
         description: '先执行当前一棒',
         publisher: 'manager',
-      }) as ToolResult<{ taskId: string }>;
+      }) as ToolResult<PublishDetails>;
       const taskId = extractDetails(task)!.taskId;
       await harness.exec('mteam_claim_task', { taskId, agentId: 'maker' }, { agentId: 'maker' });
 
@@ -79,7 +83,7 @@ describe('hook lifecycle e2e', () => {
         goal: '形成最终选品结论',
         description: '先整理 3 个候选商品信息',
         publisher: 'manager',
-      }) as ToolResult<{ taskId: string }>;
+      }) as ToolResult<PublishDetails>;
       const taskId = extractDetails(publishResult)!.taskId;
       expect(taskId).not.toBeUndefined();
 
@@ -115,6 +119,34 @@ describe('hook lifecycle e2e', () => {
       const completedTask = harness.readTask(taskId);
       expect(completedTask?.status).toBe('completed');
       expect(completedTask?.context.at(-1)?.output?.files).toContain('/mnt/d/code/hermes/result.md');
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  test('agent_end ignores non-task storage prefixes and no longer crashes on publisher timeout scan', async () => {
+    const harness = await createPluginHarness({ dashboardEnabled: false });
+    try {
+      const publishResult = await harness.exec('mteam_publish_task', {
+        goal: '验证超时扫描兼容 storage.list',
+        description: '先整理 1 个候选商品信息',
+        publisher: 'manager',
+      }) as ToolResult<PublishDetails>;
+      const taskId = extractDetails(publishResult)!.taskId;
+      await harness.exec('mteam_claim_task', { taskId, agentId: 'maker' }, { agentId: 'maker' });
+
+      await expect(harness.runAgentEnd(
+        {
+          success: true,
+          messages: [
+            { role: 'assistant', content: '最终结果：已输出 /mnt/d/code/hermes/result.md，任务完成。' },
+          ],
+        } as never,
+        { agentId: 'maker', sessionKey: `agent:maker:m-team:${taskId}` },
+      )).resolves.toBeUndefined();
+
+      const completedTask = harness.readTask(taskId);
+      expect(completedTask?.status).toBe('completed');
     } finally {
       await harness.cleanup();
     }

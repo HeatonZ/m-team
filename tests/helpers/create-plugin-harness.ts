@@ -10,7 +10,7 @@ import type {
   PluginHeartbeatPromptContributionResult,
 } from 'openclaw/plugin-sdk/core';
 import plugin from '../../src/index.ts';
-import { setWorkspaceRoot, getTask, getTaskLogs } from '../../src/pool/index.js';
+import { setWorkspaceRoot, getTask, getTaskLogs, getAllTasks } from '../../src/pool/index.js';
 import { getDb } from '../../src/pool/db.ts';
 import { createTempWorkspace, type TempWorkspace } from './temp-workspace.ts';
 import { createTestPluginConfig, type TestPluginConfig } from './plugin-config.ts';
@@ -96,6 +96,13 @@ function createTestApi(config: TestPluginConfig): OpenClawPluginApi & { __regist
           if (!key.startsWith('mteam:task:')) return null;
           const taskId = key.slice('mteam:task:'.length);
           return (getTask(taskId) ?? null) as T | null;
+        },
+        async list<T>(prefix: string): Promise<Array<{ key: string; value: T }>> {
+          if (prefix !== 'mteam:task:') return [];
+          return getAllTasks().map(task => ({
+            key: `mteam:task:${task.taskId}`,
+            value: task as T,
+          }));
         },
       },
     },
