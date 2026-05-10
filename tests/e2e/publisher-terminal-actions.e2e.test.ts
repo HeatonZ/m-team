@@ -64,4 +64,51 @@ describe('publisher terminal actions e2e', () => {
       await harness.cleanup();
     }
   });
+
+  test('rejects publisher-facing actions when caller is not the real publisher in main session', async () => {
+    const harness = await createPluginHarness();
+    try {
+      const publishResult = await harness.exec('mteam_publish_task', {
+        goal: '验证 publisher 权限链',
+        description: '生成一个只能由 manager 操作的任务',
+      }, {
+        agentId: 'manager',
+        sessionKey: 'agent:manager:main',
+      }) as ToolResult<PublishDetails>;
+      const taskId = extractDetails(publishResult)!.taskId;
+
+      const cancelBlocked = await harness.exec('mteam_cancel_task', {
+        taskId,
+        publisher: 'manager',
+        reason: 'maker 越权取消',
+      }, {
+        agentId: 'maker',
+        sessionKey: 'agent:maker:main',
+      }) as ToolResult<{ blocked?: boolean; reason?: string }>;
+      expect(extractDetails(cancelBlocked)?.blocked).toBe(true);
+      expect(extractText(cancelBlocked)).toContain('publisher=manager');
+      expect(harness.readTask(taskId)?.status).toBe('pending');
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  test('blocks heartbeat session from publishing new tasks', async () => {
+    const harness = await createPluginHarness();
+    try {
+      const blocked = await harness.exec('mteam_publish_task', {
+        goal: 'heartbeat 禁止发布',
+        description: '不应成功创建任务',
+      }, {
+        agentId: 'manager',
+        sessionKey: 'agent:manager:main:heartbeat',
+      }) as ToolResult<{ blocked?: boolean; reason?: string }>;
+
+      expect(extractDetails(blocked)?.blocked).toBe(true);
+      expect(extractText(blocked)).toContain('heartbeat');
+      expect(harness.readRuntimeLogs().some((entry) => entry.message.includes('任务发布'))).toBe(false);
+    } finally {
+      await harness.cleanup();
+    }
+  });
 });

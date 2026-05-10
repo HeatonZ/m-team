@@ -1,10 +1,4 @@
-/**
- * M-Team Hooks — after_tool_call
- *
- * 统一记录所有 mteam_* 工具调用的操作日志。
- * agent_end hook 负责生命周期终态事件（complete/relay/fail）。
- */
-
+import { getTask } from '../pool/index.js';
 import type {
   OpenClawPluginApi,
   PluginHookAfterToolCallEvent,
@@ -44,6 +38,12 @@ export function registerAfterToolCallHook(api: OpenClawPluginApi): void {
         // result 是 AgentToolResult，taskId 在 result.details.taskId
         const resultObj = result as { details?: { taskId?: string } };
         const publishedTaskId = resultObj?.details?.taskId ?? 'unknown';
+        const task = publishedTaskId !== 'unknown' ? getTask(publishedTaskId) : null;
+        const taskPublisher = task?.publisher?.trim();
+        const contextAgentId = agentId?.trim();
+        if (taskPublisher && contextAgentId && taskPublisher !== contextAgentId) {
+          api.logger?.error?.(`[m-team] publish ownership mismatch taskId=${publishedTaskId} taskPublisher=${taskPublisher} contextAgentId=${contextAgentId} sessionKey=${sessionKey ?? 'missing-session-key'}`);
+        }
         writeTaskLog({
           taskId: publishedTaskId,
           action,
@@ -53,6 +53,7 @@ export function registerAfterToolCallHook(api: OpenClawPluginApi): void {
             description: params.description as string | undefined,
             goal: params.goal as string | undefined,
             priority: params.priority as string | undefined,
+            publisher: (params.publisher as string | undefined) ?? taskPublisher,
           },
           result: result as Record<string, unknown> | undefined,
         });
