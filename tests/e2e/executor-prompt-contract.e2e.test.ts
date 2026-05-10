@@ -7,7 +7,7 @@ interface PublishDetails {
 }
 
 describe('executor prompt contract e2e', () => {
-  test('claim-launched executor prompt should require structured final report with step result, issues, and overall-goal status', async () => {
+  test('claim-launched executor prompt should require structured step-level final report without exposing goal perspective', async () => {
     const harness = await createPluginHarness({ dashboardEnabled: false });
     try {
       const publishResult = await harness.exec('mteam_publish_task', {
@@ -27,9 +27,13 @@ describe('executor prompt contract e2e', () => {
       expect(runMessage).toContain('最后一条消息必须结构化汇报 4 件事');
       expect(runMessage).toContain('结果摘要');
       expect(runMessage).toContain('未解决问题');
-      expect(runMessage).toContain('如果没有下一步，要说明为什么整个任务已满足 goal');
-      expect(runMessage).toContain('本步完成 ≠ 整任务完成');
+      expect(runMessage).toContain('无未解决问题');
+      expect(runMessage).toContain('无下一步建议');
+      expect(runMessage).toContain('你不拥有 goal 视角，不判断整任务是否完成');
+      expect(runMessage).not.toContain('如果没有下一步，要说明为什么整个任务已满足 goal');
+      expect(runMessage).not.toContain('本步完成 ≠ 整任务完成');
       expect(runMessage).not.toContain('目标: 形成最终选品结论');
+      expect(runMessage).not.toContain('goal 是整任务终态标尺');
     } finally {
       await harness.cleanup();
     }
