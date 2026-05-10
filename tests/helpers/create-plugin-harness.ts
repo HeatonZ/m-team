@@ -50,12 +50,13 @@ export interface ExecOptions {
 export interface PluginHarness {
   workspace: TempWorkspace;
   config: TestPluginConfig;
-  api: OpenClawPluginApi & { __registeredTools: RegisteredTool[]; __hooks: HookMap };
+  api: OpenClawPluginApi & { __registeredTools: RegisteredTool[]; __hooks: HookMap; __logRecords: Array<{ level: 'info' | 'warn' | 'error'; message: string }> };
   tools: RegisteredTool[];
   exec: (name: string, params?: Record<string, unknown>, options?: ExecOptions) => Promise<unknown>;
   getTool: (name: string) => RegisteredTool;
   readTask: (taskId: string) => ReturnType<typeof getTask>;
   readLogs: (taskId?: string, action?: string) => ReturnType<typeof getTaskLogs>;
+  readRuntimeLogs: () => Array<{ level: 'info' | 'warn' | 'error'; message: string }>;
   runHeartbeat: (agentId: string) => PluginHeartbeatPromptContributionResult | undefined;
   runAgentEnd: (event: PluginHookAgentEndEvent, ctx?: Partial<PluginHookAgentContext>) => Promise<void>;
   cleanup: () => Promise<void>;
@@ -74,13 +75,14 @@ function createEmptyHooks(): HookMap {
 function createTestApi(config: TestPluginConfig): OpenClawPluginApi & { __registeredTools: RegisteredTool[]; __hooks: HookMap } {
   const registeredTools: RegisteredTool[] = [];
   const hooks = createEmptyHooks();
+  const logRecords: Array<{ level: 'info' | 'warn' | 'error'; message: string }> = [];
 
   const api = {
     pluginConfig: config,
     logger: {
-      info: (_message: string) => undefined,
-      warn: (_message: string) => undefined,
-      error: (_message: string) => undefined,
+      info: (message: string) => { logRecords.push({ level: 'info', message }); },
+      warn: (message: string) => { logRecords.push({ level: 'warn', message }); },
+      error: (message: string) => { logRecords.push({ level: 'error', message }); },
     },
     registerTool(tool: RegisteredTool) {
       registeredTools.push(tool);
@@ -114,9 +116,10 @@ function createTestApi(config: TestPluginConfig): OpenClawPluginApi & { __regist
     },
     __registeredTools: registeredTools,
     __hooks: hooks,
+    __logRecords: logRecords,
   };
 
-  return api as OpenClawPluginApi & { __registeredTools: RegisteredTool[]; __hooks: HookMap };
+  return api as OpenClawPluginApi & { __registeredTools: RegisteredTool[]; __hooks: HookMap; __logRecords: Array<{ level: 'info' | 'warn' | 'error'; message: string }> };
 }
 
 function buildToolContext(name: string, params: Record<string, unknown>, options: ExecOptions): PluginHookToolContext {
@@ -182,6 +185,7 @@ export async function createPluginHarness(overrides: Partial<TestPluginConfig> =
     getTool: getToolByName,
     readTask: (taskId: string) => getTask(taskId),
     readLogs: (taskId?: string, action?: string) => getTaskLogs(taskId, action),
+    readRuntimeLogs: () => [...api.__logRecords],
     runHeartbeat: (agentId: string) => {
       let result: PluginHeartbeatPromptContributionResult | undefined;
       for (const hook of api.__hooks.heartbeat_prompt_contribution) {

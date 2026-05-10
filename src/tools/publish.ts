@@ -8,8 +8,7 @@ import type { MTeamPluginConfig } from '../config.js';
 import { textResult } from './shared.js';
 import { publishTask, getTask } from '../pool/index.js';
 import { formatTaskAsText } from './helpers.js';
-import { formatPublishNotifications } from '../notifications.js';
-import { sendNotifications } from '../notifications.js';
+import { formatPublishNotifications, sendNotifications } from '../notifications.js';
 import { PublishTaskParams } from '../types/tools.js';
 import type { PublishTaskParamsInterface } from '../types/tools.js';
 
@@ -40,9 +39,11 @@ export function register(
       if (task && config.notifications?.length) {
         try {
           const notifications = formatPublishNotifications(task, config.notifications);
-          await sendNotifications(notifications, api.logger ?? null);
+          const traces = await sendNotifications(notifications, api.logger ?? null);
+          api.logger?.info?.(`[m-team] publish notifications prepared=${notifications.length} delivered=${traces.filter((trace) => trace.delivered).length} taskId=${taskId}`);
         } catch (e) {
-          api.logger?.warn('[m-team] 通知发送失败');
+          const message = e instanceof Error ? e.message : String(e);
+          api.logger?.warn(`[m-team] publish notifications unexpected failure taskId=${taskId} error=${message}`);
         }
       }
 

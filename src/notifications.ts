@@ -49,6 +49,15 @@ interface PluginLoggerLike {
   warn?(msg: string): void;
 }
 
+export interface NotificationDeliveryTrace {
+  provider: 'feishu' | 'discord';
+  target: string;
+  attempted: boolean;
+  delivered: boolean;
+  skippedReason?: string;
+  error?: string;
+}
+
 /**
  * 发送格式化后的通知（Feishu / Discord）
  * 不依赖 OpenClaw channel adapter，直接调 Web API
@@ -56,20 +65,60 @@ interface PluginLoggerLike {
 export async function sendNotifications(
   notifications: FormattedNotification[],
   logger?: PluginLoggerLike
-): Promise<void> {
-  if (!notifications || notifications.length === 0) return;
+): Promise<NotificationDeliveryTrace[]> {
+  if (!notifications || notifications.length === 0) {
+    return [];
+  }
+
+  const traces: NotificationDeliveryTrace[] = [];
 
   for (const notif of notifications) {
-    try {
-      if (notif.provider === 'feishu' && notif.chatId && notif.appId && notif.appSecret) {
-        await sendFeishuGroupMessage(notif.chatId, notif.message, notif.appId, notif.appSecret, logger);
-      } else if (notif.provider === 'discord' && notif.channelId && notif.discordToken) {
-        await sendDiscordDirect(notif.channelId, notif.message, notif.discordToken, logger);
+    const target = notif.provider === 'feishu'
+      ? notif.chatId ?? 'missing-chat-id'
+      : notif.channelId ?? 'missing-channel-id';
+
+    if (notif.provider === 'feishu') {
+      if (!notif.chatId) {
+        traces.push({ provider: 'feishu', target, attempted: false, delivered: false, skippedReason: 'missing-chat-id' });
+        logger?.warn?.('[m-team] notification skipped provider=feishu reason=missing-chat-id');
+        continue;
       }
+      if (!notif.appId || !notif.appSecret) {
+        traces.push({ provider: 'feishu', target, attempted: false, delivered: false, skippedReason: 'missing-credentials' });
+        logger?.warn?.(`[m-team] notification skipped provider=feishu target=${notif.chatId} reason=missing-credentials`);
+        continue;
+      }
+    }
+
+    if (notif.provider === 'discord') {
+      if (!notif.channelId) {
+        traces.push({ provider: 'discord', target, attempted: false, delivered: false, skippedReason: 'missing-channel-id' });
+        logger?.warn?.('[m-team] notification skipped provider=discord reason=missing-channel-id');
+        continue;
+      }
+      if (!notif.discordToken) {
+        traces.push({ provider: 'discord', target, attempted: false, delivered: false, skippedReason: 'missing-credentials' });
+        logger?.warn?.(`[m-team] notification skipped provider=discord target=${notif.channelId} reason=missing-credentials`);
+        continue;
+      }
+    }
+
+    try {
+      if (notif.provider === 'feishu') {
+        await sendFeishuGroupMessage(notif.chatId!, notif.message, notif.appId!, notif.appSecret!, logger);
+      } else {
+        await sendDiscordDirect(notif.channelId!, notif.message, notif.discordToken!, logger);
+      }
+      traces.push({ provider: notif.provider, target, attempted: true, delivered: true });
+      logger?.info?.(`[m-team] notification delivered provider=${notif.provider} target=${target}`);
     } catch (err) {
-      logger?.error(`[m-team] sendNotifications 失败: ${(err as Error).message}`);
+      const message = err instanceof Error ? err.message : String(err);
+      traces.push({ provider: notif.provider, target, attempted: true, delivered: false, error: message });
+      logger?.error(`[m-team] notification failed provider=${notif.provider} target=${target} error=${message}`);
     }
   }
+
+  return traces;
 }
 
 // ── Feishu 发送 ────────────────────────────────────────────────
