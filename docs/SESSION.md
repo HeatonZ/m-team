@@ -50,7 +50,7 @@ mteam_get_all_tasks()
 agent:{agentId}:m-team:{taskId}
 ```
 
-**executor 不调用任何管理工具**。只执行 `description` 规定的当前一棒，然后结束 session。后续 `complete / relay / fail / retain` 由 `agent_end` hook 自动判断。
+**executor 不调用任何管理工具**。只执行 `description` 规定的当前一棒，然后结束 session。后续 `complete / relay / fail / retain` 由 `agent_end` 自动判断。
 
 **执行流程**：
 1. 调用 `mteam_get_task` 查看 taskType、description、context、lifecycle
@@ -61,9 +61,9 @@ agent:{agentId}:m-team:{taskId}
 
 ---
 
-## agent_end Hook
+## agent_end 收口
 
-Executor Session 执行轮结束时，`agent_end` hook 自动触发，只处理 task executor session，并按链式状态机收口：
+Executor Session 执行轮结束时，`agent_end` 自动触发，只处理 task executor session，并按链式状态机收口：
 
 ```typescript
 api.on('agent_end', async (event, ctx) => {
@@ -122,7 +122,7 @@ T0  Heartbeat Session: mteam_claim_task()
 T1  Executor Session: 执行 description 当前一棒
 T2  Executor Session: 最后一条消息写结果 / 文件 / 下一棒建议
 T3  Executor Session: 结束 session
-T4  agent_end hook: 自动判断 complete / relay / retain / fail
+T4  agent_end: 自动判断 complete / relay / retain / fail
 T5  下次 Heartbeat: 根据新的 pending/running 状态继续
 ```
 
@@ -137,7 +137,7 @@ Agent B 执行当前 description
   → 当前棒已完成，但任务未结束
   → executor 结束 session
 
-agent_end hook
+agent_end
   → relayTask(taskId, executorId, { step, output }, nextDescription, mode)
   → status = pending
   → phase = handoff 或 reworking

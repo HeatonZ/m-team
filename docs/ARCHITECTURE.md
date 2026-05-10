@@ -8,7 +8,7 @@
 |------|------|
 | [ARCHITECTURE.md](./ARCHITECTURE.md) | 设计目标、架构图、设计原则 |
 | [TASK.md](./TASK.md) | 任务格式、Tool API、状态流转 |
-| [SESSION.md](./SESSION.md) | 双 Session 模型、心跳流程、agent_end hook |
+| [SESSION.md](./SESSION.md) | 双 Session 模型、心跳流程、agent_end 收口 |
 | [IMPLEMENTATION.md](./IMPLEMENTATION.md) | 源码结构、技术细节、配置、安装路径 |
 
 ---
@@ -23,7 +23,7 @@
 - **共享任务池** — SQLite 持久化，任务池透明共享
 - **链式接力** — executor 只做当前一棒，做完后把结果交给下一棒或进入收口
 - **context 追溯** — 完整步骤历史，下一棒能基于前序上下文继续
-- **状态机收口** — executor 不调用 complete/relay/fail，全部由 `agent_end` hook 在执行轮结束时自动判断
+- **状态机收口** — executor 不调用 complete/relay/fail，全部由 `agent_end` 在执行轮结束时自动判断
 
 ---
 
@@ -52,13 +52,13 @@
 ┌──────────────────────────────────────────────────────────────┐
 │ Executor Session（只管执行当前一棒，然后结束）               │
 │                                                              │
-│ agent_end hook（执行轮结束时自动触发）                       │
+│ agent_end 收口（执行轮结束时自动触发）                        │
 │   ├─ success=false → failTask                                │
 │   ├─ 已达成 goal → completeTask                              │
 │   ├─ 需要下一棒 → relayTask(handoff / reworking)             │
 │   └─ 当前 executor 继续收口/续做 → retainTaskOwnership       │
 │                                                              │
-│ 日志 + 通知：afterToolCall（工具调用）/ agent_end（终态）     │
+│ 日志 + 通知：afterToolCall（工具调用）/ agent_end（终态收口） │
 │                                                              │
 │ Publisher 心跳（PUBLISHER_ACCEPTANCE_PROMPT）                │
 │ mteam_close_task({ taskId, publisher })  ← 验收通过          │
@@ -77,7 +77,7 @@
 | 来源 | 覆盖事件 |
 |------|---------|
 | `afterToolCall` hook | publish / claim / relinquish / reject / cancel / close |
-| `agent_end` hook | fail / relay / complete / retain |
+| `agent_end` | fail / relay / complete / retain |
 
 ---
 
@@ -88,7 +88,7 @@
 - **任务卡死检测** — running 任务超过 1 小时 `updatedAt` 未更新视为死任务，Publisher 心跳时自动 relinquish 放回任务池
 - **context 无限追溯** — 每步 output 追加到 context 数组，供后续 executor 参考
 - **task.json 同步写入** — 每个任务目录下保留 task.json，供外部工具直接读文件系统
-- **hook 统一终态** — executor 不调用 complete/relay/fail，agent_end hook 读执行轮对话并自动判断终态
+- **hook 统一终态** — executor 不调用 complete/relay/fail，agent_end 读执行轮对话并自动判断终态
 
 ---
 

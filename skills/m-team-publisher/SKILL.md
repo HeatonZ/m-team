@@ -61,7 +61,7 @@ Step 4: Done. Exit. No tracking.
 - 若一条任务里混了多种专业动作，按**当前这一棒**的动作定类型，不按最终 goal 定类型
 
 **Goal 填写规范（必须详细）：**
-- goal 只描述**任务终点**，用于 publisher 验收和 agent_end / judge 复盘，不用于 executor 认领
+- goal 只描述**任务终点**，用于 publisher 验收和 agent_end 复盘，不用于 executor 认领
 - 任务类型（选品 / 爬虫 / 文档 / 代码）
 - 数据源和平台（1688 / Shopee / 什么站点）
 - 关键约束（costPrice < 5 RMB、数量、截止时间）

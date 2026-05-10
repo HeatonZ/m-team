@@ -137,7 +137,7 @@ running + finalizing
 | `mteam_close_task` | Publisher | Publisher 验收通过，关闭任务（终态） |
 | `mteam_get_all_tasks` | 执行者 | 获取所有任务 |
 
-> **注意**：`complete_task`、`relay_task`、`update_task` 已移除。executor 执行完后不调用任何管理工具，complete / relay / fail / retain 由 `agent_end` hook 在执行轮结束时自动判断并执行。
+> **注意**：`complete_task`、`relay_task`、`update_task` 已移除。executor 执行完后不调用任何管理工具，complete / relay / fail / retain 由 `agent_end` 在执行轮结束时自动判断并执行。
 
 ---
 
@@ -152,7 +152,7 @@ mteam_claim_task({
 })
 ```
 
-**executor 执行完后不调用任何工具**，直接结束 session。后续 complete / relay / fail / retain 由 `agent_end` hook 处理。
+**executor 执行完后不调用任何工具**，直接结束 session。后续 complete / relay / fail / retain 由 `agent_end` 处理。
 
 ### retain 说明
 

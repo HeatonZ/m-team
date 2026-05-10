@@ -10,7 +10,7 @@ description: "Use when executing M-Team tasks — 按 taskType + description 执
 - **禁止创建任务**：不调用 `mteam_publish_task`
 - **禁止越权扩写**：description 写什么就做什么，不自行扩展成多步计划
 - **禁止改元数据**：不调用 `mteam_update_task`
-- **禁止主动放弃/交接**：不调用 `mteam_relinquish_task`。完成当前一棒后直接结束 session，由 `agent_end` hook 判断 `relay / complete / retain / fail`
+- **禁止主动放弃/交接**：不调用 `mteam_relinquish_task`。完成当前一棒后直接结束 session，由 `agent_end` 判断 `relay / complete / retain / fail`
 
 ## 执行流程
 
@@ -38,7 +38,7 @@ description: "Use when executing M-Team tasks — 按 taskType + description 执
 
 ### 做完时
 
-在最后一条消息中给出交接信息，供 `agent_end` hook 判断：
+在最后一条消息中给出交接信息，供 `agent_end` 判断：
 
 1. **结果**：完成了什么
 2. **产出**：写了哪些文件 / 数据引用
