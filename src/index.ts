@@ -75,8 +75,12 @@ const plugin = definePluginEntry({
     setNotifications(config.notifications ?? []);
 
     // — 启动 dashboard UI（在插件进程内 spawn，随插件卸载而停止）—
-    startDashboard(workspaceRoot);
-    registerDashboardCleanup(api, stopDashboard);
+    const dashboardEnabled = config.dashboardEnabled ?? true;
+    if (dashboardEnabled) {
+      const dashboardPort = config.dashboardPort ?? Number(process.env.PORT || 3000);
+      startDashboard(workspaceRoot, dashboardPort);
+      registerDashboardCleanup(api, stopDashboard);
+    }
 
     registerTools(api, config);
 
