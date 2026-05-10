@@ -349,6 +349,7 @@ function formatRelayOrRelinquishNotifications(
     `${stepEmoji} 任务放回池子 [${task.taskId}]`,
     ``,
     `📋 ${task.description}`,
+    `阶段: ${task.lifecycle.phase}`,
     `执行者: ${lastExecutor}`,
     `动作: ${stepText}`,
     ...(duration ? [`耗时: ${duration}`] : [])

@@ -40,15 +40,71 @@ export const VALID_PRIORITIES: TaskPriority[] = [
   TaskPriority.LOW
 ];
 
+export const TaskType = {
+  GENERAL: 'general',
+  CODING: 'coding',
+  RESEARCH: 'research',
+  OPS: 'ops',
+  DATA: 'data',
+  DESIGN: 'design',
+  CONTENT: 'content'
+} as const;
+
+export type TaskType = typeof TaskType[keyof typeof TaskType];
+
+export const VALID_TASK_TYPES: TaskType[] = [
+  TaskType.GENERAL,
+  TaskType.CODING,
+  TaskType.RESEARCH,
+  TaskType.OPS,
+  TaskType.DATA,
+  TaskType.DESIGN,
+  TaskType.CONTENT
+];
+
+export const TaskPhase = {
+  READY: 'ready',
+  EXECUTING: 'executing',
+  HANDOFF: 'handoff',
+  REWORKING: 'reworking',
+  FINALIZING: 'finalizing',
+  DONE: 'done'
+} as const;
+
+export type TaskPhase = typeof TaskPhase[keyof typeof TaskPhase];
+
+export const VALID_TASK_PHASES: TaskPhase[] = [
+  TaskPhase.READY,
+  TaskPhase.EXECUTING,
+  TaskPhase.HANDOFF,
+  TaskPhase.REWORKING,
+  TaskPhase.FINALIZING,
+  TaskPhase.DONE
+];
+
+export const LifecycleDecision = {
+  RETAIN: 'retain',
+  RELAY: 'relay',
+  COMPLETE: 'complete',
+  FAIL: 'fail'
+} as const;
+
+export type LifecycleDecision = typeof LifecycleDecision[keyof typeof LifecycleDecision];
+
 // ============================================================
 // 核心类型
 // ============================================================
 
-/** 任务上下文条目 */
-export interface ContextInputEntry {
-  type: 'input';
-  data: Record<string, unknown>;
-  createdAt: number;
+export interface ContextStepOutput {
+  summary?: string;
+  files?: string[];
+  dataRefs?: string[];
+  completionNote?: string;
+  handoffNote?: string;
+  unresolvedIssues?: string[];
+  error?: string;
+  metrics?: Record<string, number | string>;
+  [key: string]: unknown;
 }
 
 export interface ContextStepEntry {
@@ -59,27 +115,41 @@ export interface ContextStepEntry {
   completedAt: number;
 }
 
-export type ContextEntry = ContextInputEntry | ContextStepEntry;
+export type ContextEntry = ContextStepEntry;
 
-export interface ContextStepOutput {
-  summary?: string;
-  files?: string[];
-  error?: string;
-  [key: string]: unknown;
+export interface LoopGuardState {
+  samePhaseCount: number;
+  sameDescriptionCount: number;
+  noProgressCount: number;
+  lastDescriptionFingerprint?: string;
+  lastContextFingerprint?: string;
+  lastProgressAt?: number;
+}
+
+export interface TaskLifecycle {
+  phase: TaskPhase;
+  handoffCount: number;
+  reworkCount: number;
+  lastDecision?: LifecycleDecision;
+  lastDecisionAt?: number;
+  loopGuard: LoopGuardState;
 }
 
 /**
  * M-Team 任务 — 内存中的完整任务对象
  *
- * goal 与 description 的职责分离：
- * - goal：任务目标，executor 凭此判断任务是否适合自己，应有区分度
- * - description：当前这一步做什么，每次 relay 时由上一个 executor 填写下一步
+ * goal / taskType / description 的职责分离：
+ * - taskType：认领前的粗筛类型
+ * - description：当前这一步做什么，executor 认领时主要依据它
+ * - goal：任务终态标尺，用于 agent_end 终态判断与 publisher 验收，不参与认领
  */
 export interface Task {
   taskId: string;
+  taskType: TaskType;
   goal: string;
   description: string;
   context: ContextEntry[];
+  lifecycle: TaskLifecycle;
   priority: TaskPriority;
   publisher: string;
   status: TaskStatus;
@@ -99,6 +169,54 @@ export interface ValidationResult {
   errors: string[];
 }
 
+function isValidLoopGuard(value: unknown): boolean {
+  if (!value || typeof value !== 'object') return false;
+  const guard = value as Record<string, unknown>;
+  return typeof guard.samePhaseCount === 'number'
+    && typeof guard.sameDescriptionCount === 'number'
+    && typeof guard.noProgressCount === 'number';
+}
+
+function isValidLifecycle(value: unknown): boolean {
+  if (!value || typeof value !== 'object') return false;
+  const lifecycle = value as Record<string, unknown>;
+  return VALID_TASK_PHASES.includes(lifecycle.phase as TaskPhase)
+    && typeof lifecycle.handoffCount === 'number'
+    && typeof lifecycle.reworkCount === 'number'
+    && isValidLoopGuard(lifecycle.loopGuard);
+}
+
+export function createDefaultLifecycle(phase: TaskPhase = TaskPhase.READY): TaskLifecycle {
+  return {
+    phase,
+    handoffCount: 0,
+    reworkCount: 0,
+    loopGuard: {
+      samePhaseCount: 0,
+      sameDescriptionCount: 0,
+      noProgressCount: 0,
+    }
+  };
+}
+
+export function normalizeTask(task: Task): Task {
+  const normalizedContext = (task.context ?? []).filter((entry): entry is ContextStepEntry => {
+    return entry?.type === 'step'
+      && typeof entry.executor === 'string'
+      && typeof entry.step === 'string'
+      && typeof entry.completedAt === 'number';
+  }).map(entry => ({
+    ...entry,
+    output: entry.output ?? {}
+  }));
+
+  return {
+    ...task,
+    context: normalizedContext,
+    lifecycle: isValidLifecycle(task.lifecycle) ? task.lifecycle : createDefaultLifecycle(),
+  };
+}
+
 export function validateTask(task: unknown): ValidationResult {
   const errors: string[] = [];
 
@@ -109,7 +227,7 @@ export function validateTask(task: unknown): ValidationResult {
   const t = task as Record<string, unknown>;
 
   if (!t.taskId || !String(t.taskId).startsWith('task_')) {
-    errors.push('taskId 格式无效，应为 task_{unix_timestamp}');
+    errors.push('taskId 格式无效，应为 task_{Date.now()}');
   }
   if (!t.description || typeof t.description !== 'string') {
     errors.push('description 必填且为字符串');
@@ -117,12 +235,18 @@ export function validateTask(task: unknown): ValidationResult {
   if (!t.goal || typeof t.goal !== 'string') {
     errors.push('goal 必填且为字符串');
   }
+  if (t.taskType && !VALID_TASK_TYPES.includes(t.taskType as TaskType)) {
+    errors.push(`taskType 无效，可选值: ${VALID_TASK_TYPES.join(', ')}`);
+  }
   if (Array.isArray(t.context)) {
     for (let i = 0; i < t.context.length; i++) {
       const entry = t.context[i] as Record<string, unknown>;
       if (!entry || typeof entry !== 'object') {
         errors.push(`context[${i}] 必须是对象`);
         continue;
+      }
+      if (entry.type !== 'step') {
+        errors.push(`context[${i}].type 必须是 step`);
       }
       if (!entry.executor || typeof entry.executor !== 'string') {
         errors.push(`context[${i}].executor 必填且为字符串`);
@@ -138,6 +262,9 @@ export function validateTask(task: unknown): ValidationResult {
   if (t.priority && !VALID_PRIORITIES.includes(t.priority as TaskPriority)) {
     errors.push(`priority 无效，可选值: ${VALID_PRIORITIES.join(', ')}`);
   }
+  if (!isValidLifecycle(t.lifecycle)) {
+    errors.push('lifecycle 无效，缺少合法 phase / 计数器 / loopGuard');
+  }
 
   return { valid: errors.length === 0, errors };
 }
@@ -147,11 +274,13 @@ export function validateTask(task: unknown): ValidationResult {
 // ============================================================
 
 export interface TaskPatch {
+  taskType?: TaskType;
   status?: TaskStatus;
   executor?: string | null;
   lastExecutor?: string | null;
   description?: string;
   context?: string; // JSON stringified ContextEntry[]
+  lifecycle?: string; // JSON stringified TaskLifecycle
   completedAt?: number;
   updatedAt?: number;
 }
@@ -161,15 +290,16 @@ export interface TaskPatch {
 // ============================================================
 
 export interface CreateTaskInput {
+  taskType?: TaskType;
   goal: string;
   description: string;
   publisher?: string;
   priority?: TaskPriority;
 }
 
-// Named export so operations.ts can import directly (avoids require() in ESM)
 export function createTask(input: CreateTaskInput): Task {
   const {
+    taskType = TaskType.GENERAL,
     goal,
     description,
     publisher = 'user',
@@ -178,9 +308,11 @@ export function createTask(input: CreateTaskInput): Task {
 
   return {
     taskId: `task_${Date.now()}`,
+    taskType,
     description: String(description),
     goal: String(goal),
     context: [],
+    lifecycle: createDefaultLifecycle(TaskPhase.READY),
     priority,
     publisher: publisher || 'user',
     status: TaskStatus.PENDING,
@@ -211,20 +343,50 @@ export const PRIORITY_LABELS: Record<TaskPriority, string> = {
   [TaskPriority.LOW]: '🟢 低'
 };
 
+export const TASK_TYPE_LABELS: Record<TaskType, string> = {
+  [TaskType.GENERAL]: '通用',
+  [TaskType.CODING]: '代码',
+  [TaskType.RESEARCH]: '调研',
+  [TaskType.OPS]: '运维',
+  [TaskType.DATA]: '数据',
+  [TaskType.DESIGN]: '设计',
+  [TaskType.CONTENT]: '内容'
+};
+
+export const TASK_PHASE_LABELS: Record<TaskPhase, string> = {
+  [TaskPhase.READY]: '待接手',
+  [TaskPhase.EXECUTING]: '执行中',
+  [TaskPhase.HANDOFF]: '等待交接',
+  [TaskPhase.REWORKING]: '返工中',
+  [TaskPhase.FINALIZING]: '收口中',
+  [TaskPhase.DONE]: '已完成'
+};
+
+export function getTaskTypeLabel(taskType: TaskType): string {
+  return TASK_TYPE_LABELS[taskType] ?? taskType;
+}
+
 export function getStatusLabel(status: TaskStatus): string {
   return STATUS_LABELS[status] ?? status;
 }
 
-export function formatTaskForHuman(task: Task): string {
+export function getPhaseLabel(phase: TaskPhase): string {
+  return TASK_PHASE_LABELS[phase] ?? phase;
+}
+
+export function formatTaskForHuman(input: Task): string {
+  const task = normalizeTask(input);
   const lines: string[] = [
     `🎯 ${task.goal}`,
+    `🏷️ 类型: ${getTaskTypeLabel(task.taskType)}`,
     `📋 当前：${task.description}`,
     `ID: ${task.taskId}`,
     `优先级: ${PRIORITY_LABELS[task.priority] ?? '🟡 中'}`,
-    `状态: ${getStatusLabel(task.status)}`
+    `状态: ${getStatusLabel(task.status)}`,
+    `阶段: ${getPhaseLabel(task.lifecycle.phase)}`
   ];
 
-  const stepCount = task.context.length - 1;
+  const stepCount = task.context.length;
   if (stepCount === 0) {
     lines.push('📝 还未开始执行');
   } else {
@@ -237,14 +399,13 @@ export function formatTaskForHuman(task: Task): string {
   return lines.join('\n');
 }
 
-export function getTaskSummary(task: Task): string {
+export function getTaskSummary(input: Task): string {
+  const task = normalizeTask(input);
   if (!task.context || task.context.length === 0) return '（无上下文）';
 
-  const lastEntry = task.context[task.context.length - 1];
-  if (lastEntry.type === 'input') return '（初始输入，暂无执行结果）';
-
-  const last = lastEntry as ContextStepEntry;
+  const last = task.context[task.context.length - 1];
   if (last.output?.summary) return last.output.summary;
   if (last.output?.files?.length) return `[文件] ${last.output.files.join(', ')}`;
+  if (last.output?.handoffNote) return last.output.handoffNote;
   return '（无摘要）';
 }

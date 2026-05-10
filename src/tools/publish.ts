@@ -23,9 +23,10 @@ export function register(
     description: '发布任务到 M-Team 任务池',
     parameters: PublishTaskParams,
     async execute(_toolCallId: string, rawParams: PublishTaskParamsInterface) {
-      const { description, goal, publisher = 'user', priority } = rawParams;
+      const { description, goal, taskType, publisher = 'user', priority } = rawParams;
 
       const taskId = publishTask({
+        taskType,
         description,
         goal,
         publisher,

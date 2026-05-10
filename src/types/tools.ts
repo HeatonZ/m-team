@@ -30,8 +30,13 @@ export interface ContextStepOutputInterface {
 export const PublishTaskParams = {
   type: 'object' as const,
   properties: {
-    goal: { type: 'string', description: '任务目标（executor 凭此判断任务是否适合自己，必须有区分度，不能只是标题）' },
+    goal: { type: 'string', description: '任务目标（仅用于 agent_end 终态判断、复盘和 publisher 验收；executor 认领时不作为判断依据）' },
     description: { type: 'string', description: '当前这一步做什么（每次只写一步，relay 时由上一个 executor 填写下一步）' },
+    taskType: {
+      type: 'string',
+      description: '任务类型。general=通用动作；coding/research/ops/data/design/content=专业任务，供 heartbeat 先按类型粗筛',
+      enum: ['general', 'coding', 'research', 'ops', 'data', 'design', 'content']
+    },
     publisher: { type: 'string', description: '发布者，默认 "user"' },
     priority: { type: 'string', description: '优先级 high/normal/low，默认 normal', enum: ['high', 'normal', 'low'] },
   },
@@ -41,6 +46,7 @@ export const PublishTaskParams = {
 export interface PublishTaskParamsInterface {
   goal: string;
   description: string;
+  taskType?: 'general' | 'coding' | 'research' | 'ops' | 'data' | 'design' | 'content';
   publisher?: string;
   priority?: 'high' | 'normal' | 'low';
 }

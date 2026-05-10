@@ -55,6 +55,7 @@ async function cmdTasks(argv: string[]) {
     case 'create': {
       const goal = args.find(a => a === '--goal' || a === '-g') ? args[args.indexOf('--goal') + 1] ?? args[args.indexOf('-g') + 1] : undefined;
       const description = args.find(a => a === '--description' || a === '-d') ? args[args.indexOf('--description') + 1] ?? args[args.indexOf('-d') + 1] : undefined;
+      const taskType = extract(args, '--task-type');
       const publisher = extract(args, '--publisher', '-p');
       const priority = extract(args, '--priority');
       const tags = extract(args, '--tags');
@@ -63,6 +64,7 @@ async function cmdTasks(argv: string[]) {
       if (!description) fatal('--description 必须提供');
 
       const taskId = publishTask({
+        taskType: taskType ?? undefined,
         description,
         goal,
         publisher: publisher ?? 'cli',

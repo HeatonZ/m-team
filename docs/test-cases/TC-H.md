@@ -1,30 +1,56 @@
-# TC-H：守卫顺序验证
+# M8：守卫顺序
 
-**背景：** relayTask 和 relinquishTask 中存在两个守卫条件：CANCELLED 检查 和 executor 检查。如果 CANCELLED 检查在 executor 检查之后，会导致 Bug：cancelTask 清空 executor 后，relayTask 会先检查 executor != alice（返回 NOT_CURRENT_EXECUTOR）而不是先检查 CANCELLED（应返回 TASK_CANCELLED）。
-
----
-
-## TC-H1：cancelTask 后 executor 清空，relayTask 应返回 TASK_CANCELLED
-
-**场景描述：** 验证 relayTask 中 CANCELLED 检查在 executor 检查之前。
-
-**测试步骤：**
-
-1. Publisher 发布任务，alice 认领
-2. Publisher 取消任务，任务变为已取消，执行人被清空（变为 null）
-3. alice（使用已被清空的 executor 身份）调用 relayTask
-4. 验证 relay 返回失败，原因为"任务已取消"
-5. 若守卫顺序反了：会先检查 executor != alice（alice 已被清空为 null），返回"不是当前执行人"，这是 Bug
+**背景：** 任务操作存在多重 guard。顺序错了，就会把真正的问题掩盖成次要问题，导致错误码和业务语义都不对。
 
 ---
 
-## TC-H2：relinquishTask 守卫顺序同样验证
+## M8-1：已取消任务优先返回 cancelled，而不是“不是当前执行人”
 
-**场景描述：** 验证 relinquishTask 中 CANCELLED 检查在 executor 检查之前。
+**场景描述：** 任务被取消后，执行人字段可能已清空。此时如果旧执行人再触发操作，系统应优先返回“任务已取消”，而不是先报“不是当前执行人”。
 
 **测试步骤：**
 
-1. Publisher 发布任务，alice 认领
-2. Publisher 取消任务，任务变为已取消，执行人被清空
-3. alice 调用 relinquishTask
-4. 验证返回失败，原因为"任务已取消"
+1. alice 认领任务
+2. Publisher 取消任务
+3. alice 再尝试触发需要执行人校验的动作
+4. 验证系统优先返回“任务已取消”
+5. 验证不会因为 executor 已清空而先报“不是当前执行人”
+
+---
+
+## M8-2：phase 非法时优先拦截，不继续执行后续判断
+
+**场景描述：** 当任务当前 phase 不允许进入某个动作时，系统应先按 phase 规则拦截，而不是继续走 description / executor 等后续判断。
+
+**测试步骤：**
+
+1. 构造一个 `pending + ready` 任务
+2. 对它执行只允许运行态触发的动作
+3. 验证系统直接指出当前 phase 不允许
+4. 验证不会继续产生误导性的其它错误
+
+---
+
+## M8-3：loop guard 熔断优先于原样 relay
+
+**场景描述：** 当 loop guard 已判断存在重复 description 或无进展风险时，应优先熔断，不能继续原样 relay。
+
+**测试步骤：**
+
+1. 构造 sameDescriptionCount / noProgressCount 达阈值的任务
+2. 触发终态收口
+3. 验证系统优先命中 loop guard
+4. 验证结果不是继续原样放回池子
+
+---
+
+## M8-4：重复 terminal event 优先跳过，不重复写终态
+
+**场景描述：** 同一 `taskId + sessionKey` 已经成功写过终态后，后续重复事件应先被幂等保护拦住。
+
+**测试步骤：**
+
+1. 让任务已经成功完成一次终态写入
+2. 再次模拟同一 session 的重复 terminal event
+3. 验证系统直接跳过
+4. 验证不会重复追加 context 或重复变更状态

@@ -1,34 +1,30 @@
 # M-Team — 源码结构与技术细节
 
-> 版本：3.1 | 更新：2026-05-08
+> 版本：4.0 | 更新：2026-05-09
 > 参考：[ARCHITECTURE.md](./ARCHITECTURE.md)、[TASK.md](./TASK.md)
 
 ---
 
 ## 源码结构
 
-```
+```text
 src/
-├── index.ts               # 插件入口（register + 重新导出）
-│
+├── index.ts
 ├── pool/
-│   ├── db.js             # SQLite 连接 + tasks 表初始化 + 序列化
-│   ├── index.js          # 对外只读 API（查询 + 通知格式化）
-│   └── operations.js     # 所有写操作
-│
+│   ├── db.js
+│   ├── index.js
+│   └── operations.js
 ├── schema/
-│   └── task.ts           # Task 模型 + 验证 + 格式化（纯函数）
-│
+│   └── task.ts
 ├── tools/
-│   ├── index.ts          # 全部 9 个工具注册（Typebox schema）
-│   └── helpers.js        # 参数读取 / jsonResult 封装
-│
+│   ├── index.ts
+│   └── helpers.js
 ├── hooks/
-│   ├── agentEnd.ts            # agent_end hook：fail / relay / complete 自动判断
-│   ├── afterToolCall.ts       # afterToolCall hook：publish/claim/relinquish/reject/cancel/close 日志+通知
-│   └── heartbeatPromptContribution.ts  # heartbeat_prompt_contribution：注入手色 prompt
-│
-└── notifications.ts      # 通知格式化函数（9 个）
+│   ├── agentEnd.ts
+│   ├── afterToolCall.ts
+│   ├── heartbeatPromptContribution.ts
+│   └── sessionGuard.ts
+└── notifications.ts
 ```
 
 ### 模块职责
@@ -36,42 +32,34 @@ src/
 | 模块 | 职责 |
 |------|------|
 | `pool/db.js` | SQLite 连接、tasks 表初始化、CRUD helpers、task ↔ row 序列化 |
-| `pool/operations.js` | 所有写操作（publish/claim/relinquish/reject/cancel/close/complete/relay/fail）|
-| `pool/index.js` | 只读查询（getPending/getTask/getAllTasks/formatNotifications）|
-| `schema/task.ts` | Task 模型定义、createTask、validateTask、格式化输出（纯函数，可单元测试）|
-| `tools/index.ts` | 9 个工具的 Typebox 参数定义 + execute 实现 |
-| `tools/helpers.js` | readStr/readNum/jsonResult 等工具函数 |
-| `hooks/agentEnd.ts` | agent_end hook，读对话记录判断 complete/relay/fail |
-| `hooks/afterToolCall.ts` | afterToolCall hook，6 个工具操作的日志+通知 |
-| `hooks/heartbeatPromptContribution.ts` | heartbeat_prompt_contribution，注入手色 prompt |
-| `notifications.ts` | 9 个通知格式化函数 |
+| `pool/operations.js` | 所有写操作（publish / claim / relinquish / reject / cancel / close / complete / relay / fail / retain） |
+| `pool/index.js` | 只读查询（getPending / getTask / getAllTasks） |
+| `schema/task.ts` | Task 模型定义、taskType / status / priority / lifecycle、createTask、validateTask、格式化输出 |
+| `tools/index.ts` | 工具注册与参数定义 |
+| `hooks/agentEnd.ts` | 链式状态机收口：complete / relay / fail / retain 自动判断 |
+| `hooks/afterToolCall.ts` | publish / claim / relinquish / reject / cancel / close 日志+通知 |
+| `hooks/heartbeatPromptContribution.ts` | heartbeat prompt 注入 |
+| `hooks/sessionGuard.ts` | 心跳 / executor session 工具调用约束 |
+| `notifications.ts` | 通知格式化函数 |
 
 ---
 
 ## 运行时数据流
 
-```
+```text
 src/index.ts (register)
-     │
-     ├─ registerTools(api, config)
-     │       └─ tools/index.ts
-     │               └─ 调用 pool/operations.js 写操作
-     │                       └─ pool/db.js (SQLite)
-     │
-     ├─ registerAgentEndHook(api)
-     │       └─ hooks/agentEnd.ts
-     │               ├─ 异常退出 → failTask
-     │               ├─ LLM 判断 relay → relayTask
-     │               └─ LLM 判断 complete → completeTask
-     │                       └─ pool/db.js (SQLite)
-     │
-     ├─ registerAfterToolCallHook(api)
-     │       └─ hooks/afterToolCall.ts
-     │               └─ publish/claim/relinquish/reject/cancel/close 写日志+通知
-     │
-     └─ registerHeartbeatPromptContributionHook(api)
-             └─ hooks/heartbeatPromptContribution.ts
-                     └─ 注入手色 heartbeat prompt
+  ├─ registerTools(api, config)
+  │    └─ tools/index.ts → pool/operations.js → pool/db.js
+  ├─ registerAgentEndHook(api)
+  │    └─ hooks/agentEnd.ts
+  │         ├─ success=false → failTask
+  │         ├─ 已达成 goal → completeTask
+  │         ├─ 需要下一棒 → relayTask(handoff / reworking)
+  │         └─ 当前 executor 继续做 → retainTaskOwnership(executing / finalizing)
+  ├─ registerAfterToolCallHook(api)
+  │    └─ publish/claim/relinquish/reject/cancel/close 写日志+通知
+  └─ registerHeartbeatPromptContributionHook(api)
+       └─ 注入 heartbeat prompt
 ```
 
 ---
@@ -83,9 +71,12 @@ tasks 表：
 ```sql
 CREATE TABLE tasks (
   task_id        TEXT PRIMARY KEY,
+  task_type      TEXT NOT NULL DEFAULT 'general',
   description    TEXT NOT NULL,
   goal           TEXT NOT NULL,
-  context        TEXT NOT NULL DEFAULT '[]',   -- JSON 数组
+  context        TEXT NOT NULL DEFAULT '[]',
+  lifecycle      TEXT,
+  flow           TEXT,
   priority       TEXT NOT NULL DEFAULT 'normal',
   publisher      TEXT NOT NULL DEFAULT 'user',
   status         TEXT NOT NULL DEFAULT 'pending',
@@ -95,120 +86,84 @@ CREATE TABLE tasks (
   completed_at   INTEGER,
   updated_at     INTEGER NOT NULL
 );
-
-CREATE INDEX idx_tasks_status      ON tasks(status);
-CREATE INDEX idx_tasks_executor   ON tasks(executor);
-CREATE INDEX idx_tasks_priority   ON tasks(priority);
-CREATE INDEX idx_tasks_created_at ON tasks(created_at);
 ```
 
-**存储约定**：
-- `context` 字段存 JSON 字符串，读写时自动序列化
-- 所有时间存毫秒时间戳（integer）
-- `task_id` 是主键，所有关联通过 task_id
+### 存储约定
+- `context` 存 JSON 字符串
+- `lifecycle` 存链式状态机内部状态
+- `flow` 仅保留给旧数据兼容迁移
+- 老库无 `lifecycle` 时，启动迁移补列，并从旧 `flow` 映射到新 `lifecycle`
+- 所有时间存毫秒时间戳
+
+---
+
+## 状态机实现重点
+
+### 主状态
+- `status`：`pending / running / completed / closed / failed / cancelled`
+- `lifecycle.phase`：`ready / executing / handoff / reworking / finalizing / done`
+
+### 主路径
+```text
+pending + ready/handoff/reworking
+  → claim
+  → running + executing
+  → handoff / reworking / finalizing / done / failed
+```
+
+### loopGuard
+`lifecycle.loopGuard` 记录：
+- `samePhaseCount`
+- `sameDescriptionCount`
+- `noProgressCount`
+- `lastDescriptionFingerprint`
+- `lastContextFingerprint`
+- `lastProgressAt`
+
+用途：避免 description 不变、phase 不变、无有效进展时无限循环。
 
 ---
 
 ## 构建
 
 ```bash
-npm run build    # esbuild bundle 到 dist/index.js
+npm run build:plugin
 ```
 
-esbuild 配置：
-- `platform=node` + `format=esm`
-- `external: node:* / openclaw / openclaw/plugin-sdk`
-- bundle 大小约 68KB（含 @sinclair/typebox runtime）
+当前这轮主要用 `build:plugin` 验证 bundle 是否可构建。
 
 ---
 
 ## 测试
 
 ```bash
-npm run test     # watch 模式
-npm run test:run # 单次运行
+npm run test
+npm run test:run
 ```
 
-当前测试覆盖：`src/schema/task.js` 纯函数（createTask / validateTask / format*）。
+当前最需要补的是：
+- lifecycle / phase 流转测试
+- relay(handoff/reworking) 判定测试
+- loopGuard 熔断测试
+- heartbeat 认领语义测试
 
 ---
 
 ## 配置文件
 
-`openclaw.json` 中的插件配置：
+插件配置核心仍是：
+- `workspace.root`
+- `notifications`
+- `hooks.allowConversationAccess`
 
-```json
-{
-  "plugins": {
-    "entries": {
-      "m-team": {
-        "enabled": true,
-        "hooks": { "allowConversationAccess": true },
-        "config": {
-          "workspace": {
-            "root": "/home/hjl/.openclaw/m-team"
-          },
-          "notifications": [
-            {
-              "provider": "feishu",
-              "groupId": "oc_xxxxx",
-              "appId": "cli_xxxx",
-              "appSecret": "xxxx",
-              "agents": ["agent_1", "agent_2"]
-            },
-            {
-              "provider": "discord",
-              "channelId": "123456",
-              "discordToken": "Bot xxxx",
-              "agents": ["agent_1", "agent_2"]
-            }
-          ]
-        }
-      }
-    }
-  }
-}
-```
-
-| 配置项 | 说明 |
-|--------|------|
-| `workspaceRoot` | 工作区根目录，tasks/ 和 queue/ 建在此下 |
-| `notifications` | 任务状态变更时通知（publish / claim / complete / relay / fail / relinquish / cancel / close / reject）|
-| `notifications[].agents` | 限定特定 agent 触发通知（publisher/executor 匹配才发）。通常填入所有需要接收通知的 agentId，如 `["manager", "maker", "executor1"]`，配置一个账号即可覆盖全队 |
-| `notifications[].appId` | Feishu 机器人的 app_id（provider=feishu 时必填） |
-| `notifications[].appSecret` | Feishu 机器人的 app_secret（provider=feishu 时必填） |
-| `notifications[].discordToken` | Discord 机器人的 bot token（provider=discord 时必填） |
-| `hooks.allowConversationAccess` | 必须为 `true`，否则 agent_end hook 静默跳过 |
+`allowConversationAccess` 对 `agent_end` 必需，因为它要读取执行轮 messages 进行状态机收口。
 
 ---
 
 ## 安装路径
 
-- **WSL 开发路径**：`/mnt/d/code/m-team/`（权限干净）
-- **OpenClaw 安装路径**：`~/.openclaw/extensions/m-team/`（由 `openclaw plugins install` 管理）
-- **工作目录**：`/home/hjl/.openclaw/m-team/`（tasks/ 和 queue/ 在此）
+- **WSL 开发路径**：`/mnt/d/code/m-team/`
+- **OpenClaw 安装路径**：`~/.openclaw/extensions/m-team/`
+- **工作目录**：`/home/hjl/.openclaw/m-team/`
 
-**重要：开发代码在 `/mnt/d/code/m-team`，不要直接改 `~/.openclaw/extensions/m-team/`**
-
-安装步骤：
-```bash
-npm install && npm run build
-openclaw plugins install /mnt/d/code/m-team --force
-openclaw gateway restart
-```
-
----
-
-## 工作区目录结构
-
-```
-workspaceRoot/
-├── tasks/
-│   └── {taskId}/
-│       ├── task.json            ← 任务详情（同步写入，外部可直接读）
-│       └── {产出文件}          ← executor 写入的任务文件夹
-└── queue/
-    └── m-team.db               ← SQLite 数据库（唯一真实数据源）
-```
-
-**数据源优先级**：SQLite tasks 表 > task.json 文件。task.json 是为了让外部工具（如 cat、grep）能直接读取引用，不做为主数据源。
+**重要**：开发改动只在 `/mnt/d/code/m-team` 做，不直接改安装目录。

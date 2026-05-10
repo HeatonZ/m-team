@@ -1,6 +1,6 @@
 # M-Team — 任务格式与 Tool API
 
-> 版本：3.1 | 更新：2026-05-08
+> 版本：4.0 | 更新：2026-05-09
 > 参考：[ARCHITECTURE.md](./ARCHITECTURE.md)、[SESSION.md](./SESSION.md)
 
 ---
@@ -10,21 +10,46 @@
 ```json
 {
   "taskId": "task_1745620000",
-  "description": "联系供应商确认价格",
-  "goal": "找到收纳箱类目下评分高的1688供应商",
+  "taskType": "research",
+  "description": "基于上一步生成的 suppliers_001.json，联系候选供应商确认价格，并补写回复结果到 result.json，至少覆盖 5 家",
+  "goal": "找到收纳箱类目下评分高且价格可确认的1688供应商",
   "context": [
-    { "type": "input", "data": { "keyword": "收纳箱", "count": 10 }, "createdAt": 1745620000000 },
-    { "executor": "agent_1", "step": "搜索1688供应商", "output": { "summary": "找到10家供应商", "files": ["data/suppliers_001.json"] }, "completedAt": 1745621000000 },
-    { "executor": "agent_2", "step": "联系供应商确认价格", "output": { "summary": "联系了5家，3家回复" }, "completedAt": 1745622000000 }
+    {
+      "type": "step",
+      "executor": "agent_1",
+      "step": "搜索1688供应商",
+      "output": {
+        "summary": "找到10家候选供应商",
+        "files": ["data/suppliers_001.json"],
+        "dataRefs": ["suppliers_001.json"],
+        "handoffNote": "下一棒基于 suppliers_001.json 联系候选供应商确认价格"
+      },
+      "completedAt": 1745621000000
+    }
   ],
+  "lifecycle": {
+    "phase": "handoff",
+    "handoffCount": 1,
+    "reworkCount": 0,
+    "lastDecision": "relay",
+    "lastDecisionAt": 1745621000000,
+    "loopGuard": {
+      "samePhaseCount": 1,
+      "sameDescriptionCount": 1,
+      "noProgressCount": 0,
+      "lastDescriptionFingerprint": "基于上一步生成的suppliers001json联系候选供应商确认价格并补写回复结果到resultjson至少覆盖5家",
+      "lastContextFingerprint": "{\"summary\":\"找到10家候选供应商\",\"files\":[\"data/suppliers_001.json\"]}",
+      "lastProgressAt": 1745621000000
+    }
+  },
   "priority": "high",
   "publisher": "user",
   "status": "pending",
   "executor": null,
-  "lastExecutor": "agent_2",
+  "lastExecutor": "agent_1",
   "createdAt": 1745620000000,
   "completedAt": null,
-  "updatedAt": 1745620000000
+  "updatedAt": 1745621000000
 }
 ```
 
@@ -32,239 +57,169 @@
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
-| `taskId` | string | 唯一标识，格式 `task_{unix_timestamp}`（秒级） |
-| `description` | string | **当前步骤描述**，每次 relay 后更新 |
-| `goal` | string | **核心目标**，创建后不可更改 |
-| `context` | array | 步骤历史，数组末尾是最新的可执行状态 |
+| `taskId` | string | 唯一标识，格式 `task_{Date.now()}`（毫秒级） |
+| `taskType` | string | 任务类型：`general` / `coding` / `research` / `ops` / `data` / `design` / `content` |
+| `description` | string | **当前一棒唯一执行指令**，每次 relay 后更新 |
+| `goal` | string | **终态标尺**，创建后不可更改 |
+| `context` | array | 已完成步骤历史，数组末尾是最新交接结果 |
+| `lifecycle` | object | 链式状态机内部状态，包含 `phase`、handoff/rework 计数与 loopGuard |
 | `priority` | string | `high` / `normal` / `low` |
-| `publisher` | string | 发布者身份（不做权限控制）|
+| `publisher` | string | 发布者身份 |
 | `status` | string | `pending` / `running` / `completed` / `closed` / `failed` / `cancelled` |
 | `executor` | string\|null | 当前持有任务的 agentId |
-| `lastExecutor` | string\|null | 上一个 executor（relay 时传承）|
-| `createdAt` | number | 创建时间戳（毫秒）|
+| `lastExecutor` | string\|null | 上一个 executor（handoff/rework 时传承） |
+| `createdAt` | number | 创建时间戳（毫秒） |
 | `completedAt` | number\|null | 完成时间戳 |
 | `updatedAt` | number | 最后更新时间戳 |
 
 ### context 格式说明
 
+`context` 只保留真正的执行历史 step，不再保留 `input` 头节点。
+
 | 字段 | 说明 |
 |------|------|
-| `context[0].type` | 固定为 `"input"`，创建后不可更改 |
-| `context[0].data` | 原始输入，任意结构 |
+| `context[].type` | 固定为 `step` |
 | `context[].executor` | 执行该步骤的 agentId |
-| `context[].step` | 步骤描述 |
-| `context[].output.summary` | 步骤摘要，建议简洁 |
-| `context[].output.files` | 任务文件夹内的相对路径，原始数据放文件里 |
+| `context[].step` | 该步实际执行动作 |
+| `context[].output.summary` | 步骤摘要 |
+| `context[].output.files` | 产出文件路径 |
+| `context[].output.dataRefs` | 下一棒可直接依赖的数据引用 |
+| `context[].output.handoffNote` | 给下一棒的接续说明 |
+| `context[].output.unresolvedIssues` | 尚未解决的问题 |
+| `context[].output.metrics` | 结构化指标（数量、命中数等） |
 | `context[].completedAt` | 步骤完成时间戳 |
+
+### lifecycle.phase 语义
+
+| phase | 对应 status | 含义 |
+|------|-------------|------|
+| `ready` | `pending` | 新任务待认领 |
+| `executing` | `running` | 当前 executor 正在执行 |
+| `handoff` | `pending` | 上一棒已完成，等待下一棒接手 |
+| `reworking` | `pending` | 需要返工修正，等待下一棒纠偏 |
+| `finalizing` | `running` | 已接近完成，当前 executor 正在收口 |
+| `done` | `completed` / `closed` | 已完成，等待验收或已关闭 |
 
 ### 状态流转
 
-```
-PENDING ──claim──► RUNNING ──agent_end(complete)──► COMPLETED ──close──► CLOSED（终态）
-    ▲                       │
-    │ relay                 │ fail（agent_end hook 触发）
-    └──relinquish──────────►FAILED
+```text
+pending + ready/handoff/reworking
+  └─ claim ─→ running + executing
+
+running + executing
+  ├─ 当前棒完成但任务未结束 ─→ pending + handoff
+  ├─ 当前棒发现问题需纠偏 ─→ pending + reworking
+  ├─ 已接近结束需收口 ─→ running + finalizing
+  ├─ goal 已达成 ─→ completed + done
+  └─ 不可恢复失败 ─→ failed
+
+running + finalizing
+  ├─ 收口完成 ─→ completed + done
+  ├─ 发现问题需返工 ─→ pending + reworking
+  ├─ 仍需下一棒补一小步 ─→ pending + handoff
+  └─ 不可恢复失败 ─→ failed
 ```
 
 ---
 
-## Tool API（9 个）
+## Tool API（10 个）
 
 | Tool | 调用者 | 说明 |
 |------|--------|------|
-| `mteam_publish_task` | 管理者 | 发布新任务（goal 必填，不可更改） |
+| `mteam_publish_task` | 管理者 | 发布新任务（goal 必填，不可更改；可显式传 `taskType` 供 heartbeat 粗筛） |
 | `mteam_claim_task` | 执行者 | 认领任务（SQLite 事务，原子操作） |
 | `mteam_reject_task` | Publisher | 验收不通过，驳回任务到 pending |
 | `mteam_cancel_task` | 管理者 | Publisher 取消任务（不可再 relay） |
-| `mteam_relinquish_task` | 执行者 | 主动放弃（放回 pending） |
+| `mteam_relinquish_task` | Publisher/运维 | 回收卡死任务，放回 pending |
 | `mteam_get_pending` | 执行者 | 获取待认领任务（agent 有任务时返回空） |
 | `mteam_get_agent_active` | 执行者 | 获取 agent 当前进行中任务 |
 | `mteam_get_task` | 执行者 | 获取任务详情 |
 | `mteam_close_task` | Publisher | Publisher 验收通过，关闭任务（终态） |
 | `mteam_get_all_tasks` | 执行者 | 获取所有任务 |
 
-> **注意**：`complete_task`、`relay_task`、`update_task` 已移除。executor 执行完后不调用任何管理工具，complete/relay/fail 由 `agent_end` hook 在 session 结束时自动判断并执行。
+> **注意**：`complete_task`、`relay_task`、`update_task` 已移除。executor 执行完后不调用任何管理工具，complete / relay / fail / retain 由 `agent_end` hook 在执行轮结束时自动判断并执行。
 
 ---
 
-## 工具详解
+## mteam_claim_task
 
-### mteam_publish_task
-
-发布新任务到任务池。
-
-```javascript
-mteam_publish_task({
-  description: "搜索收纳箱1688供应商",      // 第一步描述
-  goal: "找到收纳箱类目下评分高的1688供应商", // 核心目标，不可更改
-  input: { keyword: "收纳箱", count: 10 },   // 原始输入
-  publisher: "user",                          // 发布者身份
-  priority: "high"                            // high / normal / low
-})
-// 返回: { taskId: "task_1745740800" }
-```
-
----
-
-### mteam_claim_task
-
-认领一个 pending 任务，同时在 Plugin 内部创建 Executor Session。
+认领一个 `pending + ready/handoff/reworking` 任务，同时在 Plugin 内部创建 Executor Session。
 
 ```javascript
 mteam_claim_task({
   taskId: "task_1745740800",
   agentId: "my-agent-id"
 })
-/**
- * 返回:
- * {
- *   success: true,
- *   taskId: "task_1745740800",
- *   task: { ... },
- *   runId: "run_xxx",
- *   sessionKey: "agent:my-agent-id:m-team:task1745740800"
- * }
- *
- * SQLite 事务:
- *   BEGIN IMMEDIATE;
- *   SELECT * FROM tasks WHERE task_id=? AND status='pending';
- *   UPDATE tasks SET status='running', executor=?, ... WHERE task_id=?;
- *   COMMIT;
- */
 ```
 
-**executor 执行完后不调用任何工具**，直接结束 session。后续 complete/relay/fail 由 `agent_end` hook 处理。
+**executor 执行完后不调用任何工具**，直接结束 session。后续 complete / relay / fail / retain 由 `agent_end` hook 处理。
+
+### retain 说明
+
+retain 不是新的对外 status，而是链式任务里的**例外路径**：
+
+- **主路径**：`executing -> handoff/reworking -> executing -> finalizing -> done`
+- **retain**：控制权继续留在当前 executor，常见于：
+  - 当前一棒尚未真正结束，但已有明确中间进展
+  - 当前 executor 正在 `finalizing` 收口
+
+因此“未完成”不一定等于“放回池子”，但默认优先 handoff / reworking，而不是 retain。
 
 ---
 
-### mteam_reject_task
+## mteam_reject_task
 
 Publisher 验收不通过，驳回任务到 `pending` 池子。
 
 ```javascript
 mteam_reject_task({
   taskId: "task_xxx",
-  reason: "验收驳回：仅找到1个商品，不够5个。下一步：继续搜索，筛选 costPrice ≤ 5 RMB，找够剩余 4 个"
+  reason: "验收驳回：仅找到1个符合条件商品，要求5个。下一步：继续搜索宠物玩具关键词，筛选 costPrice ≤ 5 RMB、规格数 ≤ 8，找够剩余 4 个"
 })
-// 返回: { success: true, task: { ..., status: "pending" } }
 ```
 
-**驳回原因格式（必须包含两部分）**：
+**驳回原因必须包含两部分**：
 1. **问题**：具体哪里不对
-2. **下一步**：下一棒要做什么（动作+目标+条件+数量逻辑）
-
-**内部行为**：
-- 从 reason 中解析"下一步"内容（支持 `下一步：` 或 `下一步描述：` 前缀）
-- 解析出的下一步更新到 `task.description`，让下一棒 executor 直接看到
-- 驳回原因本身写入 `contextStep`（记录在 context 历史里）
-
-**注意**：驳回后任务回到 pending 池子，任何执行者都可再次认领。验收通过用 `mteam_close_task`（终态）。
+2. **下一步**：下一棒要做什么（动作 + 目标 + 条件 + 完成标准）
 
 ---
 
-### mteam_cancel_task
+## mteam_relinquish_task
 
-Publisher 取消任务。取消后任务进入 `cancelled` 状态，不可 relay。
-
-```javascript
-mteam_cancel_task({
-  taskId: "task_xxx",
-  publisher: "user",
-  reason: "需求变更"
-})
-```
-
-**注意**：只有任务的原始 `publisher` 才能取消。`cancelled` 状态的任务不可进入 `running` 状态。
+`mteam_relinquish_task` 只保留给 Publisher 超时回收或人工运维回收。正常 executor 不应主动调用。
 
 ---
 
-### mteam_relinquish_task
-
-Executor 主动放弃当前任务（放回 pending），供其他 agent 接力。
+## 查询类工具
 
 ```javascript
-mteam_relinquish_task({
-  taskId: "task_xxx",
-  executorId: "agent_1"
-})
-// 调用后 status → pending，executor → null，lastExecutor → "agent_1"
-```
-
-**两种 relinquish 场景**：
-- **Executor session 主动放弃**：自己判断无法完成，调用 `relinquish_task({ executorId: "maker" })`
-- **Publisher 心跳检测到死任务**：running 任务的 updatedAt 超过 1 小时，主动调用 `relinquish_task` 释放任务
-
----
-
-### 查询类工具
-
-```javascript
-// 获取待认领任务（最多 3 条，agent 有 running 任务时返回空）
-// 注意：返回的 task 不含 goal，认领时只看 description
 mteam_get_pending({ agentId: "my-agent" })
-// 返回: { pending: [{ taskId, description, priority, context, ... }] }
+// 返回: { pending: [{ taskId, taskType, description, context, lifecycle, priority, ... }] }
 
-// 获取 agent 当前进行中任务
 mteam_get_agent_active({ agentId: "my-agent" })
-// 返回: { activeTask: null | { taskId, status, ... } }
 
-// 获取单个任务详情
 mteam_get_task({ taskId: "task_xxx" })
-// 返回: { task: { ... } }
 
-// 获取所有任务
 mteam_get_all_tasks({})
-// 返回: { tasks: [...] }
 ```
+
+**认领时主要看**：`taskType`、`description`、已有 `context`。`goal` 仅用于复盘和验收。
 
 ---
 
-### mteam_close_task
+## mteam_close_task
 
 Publisher 验收 Executor 完成的任务。通过后任务进入 `closed` 终态。
 
 ```javascript
 mteam_close_task({
   taskId: "task_xxx",
-  publisher: "user"    // 必须与创建时 publisher 一致
+  publisher: "user"
 })
-// 返回: { success: true, task: { ..., status: "closed" } }
 ```
-
-**验收流程**：
-1. Executor 完成任务 → `completed`
-2. Publisher 心跳检测到 COMPLETED 任务 → 注入验收 prompt
-3. Publisher 判断通过 → `mteam_close_task` → `closed`
-4. Publisher 判断驳回 → `mteam_reject_task({ taskId, reason: "驳回原因" })` → `pending`
-
-**注意**：`closed` 是终态，不可逆。
 
 ---
 
 ## 并发竞态保护
 
-`claimTask` 使用 SQLite `BEGIN IMMEDIATE` 事务：
-
-```sql
-BEGIN IMMEDIATE;  -- 获取写锁，其他连接无法同时写
-SELECT * FROM tasks WHERE task_id = ? AND status = 'pending';
--- 有结果 → UPDATE tasks SET status='running', executor=?, ... WHERE task_id=?;
--- 无结果 → ROLLBACK;
-COMMIT;
-```
-
-`BEGIN IMMEDIATE` 在开始时即获取写锁，如果锁被占用则直接失败，保证只有一个 agent 能认领同一任务。
-
----
-
-## agent_end hook 终态判断
-
-Executor Session 结束时，`agent_end` hook 读取完整对话记录，自动判断并执行：
-
-| 条件 | 动作 | 状态变化 |
-|------|------|---------|
-| `success=false`（异常退出） | `failTask` | `running` → `failed` |
-| LLM 判断需 relay | `relayTask` | `running` → `pending` |
-| LLM 判断完成 | `completeTask` | `running` → `completed` |
-
-这三个操作都在 hook 内部直接调用 operations 函数（不经过工具层），每个调用点同时写日志 + 发通知。
+`claimTask` 使用 SQLite 事务，保证同一任务只能被一个 agent 成功认领。

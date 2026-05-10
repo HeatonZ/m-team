@@ -41,9 +41,12 @@ function initSchema(db: Database.Database): void {
   db.exec(`
     CREATE TABLE IF NOT EXISTS tasks (
       task_id        TEXT PRIMARY KEY,
+      task_type      TEXT NOT NULL DEFAULT 'general',
       description    TEXT NOT NULL,
       goal           TEXT NOT NULL,
       context        TEXT NOT NULL DEFAULT '[]',
+      lifecycle      TEXT,
+      flow           TEXT,
       priority       TEXT NOT NULL DEFAULT 'normal',
       publisher      TEXT NOT NULL DEFAULT 'user',
       status         TEXT NOT NULL DEFAULT 'pending',
@@ -70,6 +73,20 @@ function initSchema(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_task_logs_action    ON task_logs(action);
     CREATE INDEX IF NOT EXISTS idx_task_logs_created_at ON task_logs(created_at);
   `);
+
+  const columns = db.prepare('PRAGMA table_info(tasks)').all() as Array<{ name: string }>;
+  const hasTaskType = columns.some(col => col.name === 'task_type');
+  const hasFlow = columns.some(col => col.name === 'flow');
+  const hasLifecycle = columns.some(col => col.name === 'lifecycle');
+  if (!hasTaskType) {
+    db.exec("ALTER TABLE tasks ADD COLUMN task_type TEXT NOT NULL DEFAULT 'general';");
+  }
+  if (!hasFlow) {
+    db.exec('ALTER TABLE tasks ADD COLUMN flow TEXT');
+  }
+  if (!hasLifecycle) {
+    db.exec('ALTER TABLE tasks ADD COLUMN lifecycle TEXT');
+  }
 }
 
 // ============================================================
@@ -113,10 +130,10 @@ export function insertTask(task: Task): void {
   const row = serializeTask(task);
   db.prepare(`
     INSERT INTO tasks
-      (task_id, description, goal, context, priority, publisher,
+      (task_id, task_type, description, goal, context, lifecycle, flow, priority, publisher,
        status, executor, last_executor, created_at, completed_at, updated_at)
     VALUES
-      (@task_id, @description, @goal, @context, @priority, @publisher,
+      (@task_id, @task_type, @description, @goal, @context, @lifecycle, @flow, @priority, @publisher,
        @status, @executor, @last_executor, @created_at, @completed_at, @updated_at)
   `).run(row);
 }

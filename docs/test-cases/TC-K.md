@@ -1,54 +1,75 @@
-# TC-K：db.js 底层
+# M11：底层存储映射
 
-**背景：** 测试 SQLite 底层封装，字段映射、序列化、连接管理。
-
----
-
-## TC-K1：context 嵌套对象序列化正确
-
-**场景描述：** 上下文中包含深层嵌套对象时，序列化和反序列化后数据应保持一致。
-
-**测试步骤：**
-
-1. 构造任务，上下文包含嵌套结构：data.nested.deep.value = 42，以及 items 数组和 map 对象
-2. 插入数据库
-3. 从数据库读取
-4. 验证嵌套路径 data.nested.deep.value 等于 42，数组元素和 map 对象内容完全一致
+**背景：** 底层 SQLite 与任务对象之间存在序列化、字段映射和连接管理。这里要验证的是“新 lifecycle 模型”是否被正确持久化，而不是旧 flow 口径。
 
 ---
 
-## TC-K2：updateTaskRow 字段名映射正确
+## M11-1：context 中嵌套输出结构序列化正确
 
-**场景描述：** 代码中使用 camelCase 字段名，数据库使用 snake_case 列名，映射应正确。
+**场景描述：** context 输出里包含 `files / dataRefs / unresolvedIssues / metrics` 等嵌套结构时，序列化和反序列化后应保持一致。
 
 **测试步骤：**
 
-1. 发布任务
-2. 调用更新接口，同时传入 status、executor、completedAt、updatedAt、lastExecutor
-3. 直接查询数据库（绕过 ORM）
-4. 验证：completedAt 正确映射到 completed_at 列，updatedAt 映射到 updated_at 列，lastExecutor 映射到 last_executor 列，值均正确
+1. 构造一个带复杂 context 输出的任务
+2. 写入数据库
+3. 再读出该任务
+4. 验证以下字段保持一致：
+   - `files`
+   - `dataRefs`
+   - `unresolvedIssues`
+   - `metrics`
 
 ---
 
-## TC-K3：openDb 重复调用返回同一实例
+## M11-2：lifecycle 字段映射正确落库
 
-**场景描述：** 多次调用 openDb 同一路径，应返回同一个数据库实例（单例）。
+**场景描述：** 代码使用 camelCase 的 lifecycle 对象，数据库持久化时应正确写入对应列和值。
 
 **测试步骤：**
 
-1. 第一次调用 openDb('/tmp/singleton_test.db')
-2. 第二次调用 openDb('/tmp/singleton_test.db')
-3. 验证两次返回的是同一个对象引用
+1. 发布任务并经历一次 handoff 与一次 reworking
+2. 直接查询数据库原始记录
+3. 验证以下信息已正确落库：
+   - `lifecycle.phase`
+   - `handoffCount`
+   - `reworkCount`
+   - `lastDecision`
+4. 验证从数据库再读回任务对象后，值与内存态一致
 
 ---
 
-## TC-K4：closeDb 后 getDb 抛出
+## M11-3：旧数据可兼容迁移为新 lifecycle
 
-**场景描述：** 关闭数据库后调用 getDb 应抛出明确错误。
+**场景描述：** 当数据库中仍存在旧 flow 语义数据时，读取层应能兼容映射到新的 lifecycle phase。
 
 **测试步骤：**
 
-1. 打开数据库连接
-2. 关闭数据库连接
-3. 验证 isDbOpen() 返回 false
-4. 调用 getDb()，验证抛出错误，错误信息包含"not opened"
+1. 构造一条旧数据记录，带历史 `flow` 字段
+2. 读取任务对象
+3. 验证旧 `collecting / aggregating` 被映射到新的 phase
+4. 验证读取结果可被当前前端和业务逻辑正常消费
+
+---
+
+## M11-4：openDb 重复调用保持单例
+
+**场景描述：** 多次打开同一路径数据库，应复用同一个连接实例。
+
+**测试步骤：**
+
+1. 连续两次打开同一数据库路径
+2. 验证返回的是同一个对象引用
+
+---
+
+## M11-5：closeDb 后再次直接取连接会报明确错误
+
+**场景描述：** 关闭数据库后，若业务层仍直接访问连接，应得到明确错误，而不是静默失败。
+
+**测试步骤：**
+
+1. 打开数据库
+2. 关闭数据库
+3. 验证数据库已关闭
+4. 再次直接取连接
+5. 验证抛出包含“not opened”语义的明确错误

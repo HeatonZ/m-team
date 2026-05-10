@@ -4,7 +4,7 @@
 
 import { openDb, getTaskRow, getTaskRowByExecutor } from './db';
 import { getTaskRowsByStatus as _db_getTaskRowsByStatus, getAllTaskRows as _db_getAllTaskRows } from './db';
-import { TaskStatus, type Task } from '../schema/task';
+import { TaskPhase, TaskStatus, type Task } from '../schema/task';
 import { setWorkspaceRoot, DB_PATH } from './operations';
 import {
   publishTask,
@@ -16,28 +16,22 @@ import {
   completeTask,
   failTask,
   closeTask,
+  retainTaskOwnership,
   type ClaimResult,
   type CancelResult,
   type RelinquishResult,
   type RelayResult,
   type CompleteResult,
   type CloseResult,
-  type ContextStepInput
+  type ContextStepInput,
+  type RetainResult
 } from './operations';
 
-// ============================================================
-// 写操作（透传 from operations）
-// ============================================================
-
 export { setWorkspaceRoot, DB_PATH };
-export { publishTask, claimTask, updateTask, relinquishTask, relayTask, cancelTask, completeTask, failTask, closeTask };
-export type { ClaimResult, CancelResult, RelinquishResult, RelayResult, CompleteResult, CloseResult, ContextStepInput };
+export { publishTask, claimTask, updateTask, relinquishTask, relayTask, cancelTask, completeTask, failTask, closeTask, retainTaskOwnership };
+export type { ClaimResult, CancelResult, RelinquishResult, RelayResult, CompleteResult, CloseResult, ContextStepInput, RetainResult };
 export { getTaskLogs } from './db';
 export type { TaskLog, TaskLogInput } from './db';
-
-// ============================================================
-// 只读查询（统一经过 init() 确保数据库已打开）
-// ============================================================
 
 function init(): void {
   if (DB_PATH) openDb(DB_PATH);
@@ -61,7 +55,7 @@ export function getRunningTasks(): Task[] {
 export function getPendingTasks(agentId?: string | null): Task[] {
   init();
   if (agentId && getAgentActiveTask(agentId)) return [];
-  return getTaskRowsByStatus(TaskStatus.PENDING);
+  return getTaskRowsByStatus(TaskStatus.PENDING).filter(task => [TaskPhase.READY, TaskPhase.HANDOFF, TaskPhase.REWORKING].includes(task.lifecycle.phase));
 }
 
 export function getAgentActiveTask(agentId: string): Task | null {
@@ -98,6 +92,6 @@ export function getTasksByExecutor(agentId: string): Task[] {
   init();
   return _db_getAllTaskRows().filter(t => {
     if (t.executor === agentId || t.lastExecutor === agentId) return true;
-    return t.context.some((e) => (e as { type: string; executor?: string }).type === 'step' && (e as { executor: string }).executor === agentId);
+    return t.context.some((e) => e.executor === agentId);
   });
 }

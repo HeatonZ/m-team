@@ -37,7 +37,7 @@ export function registerGetPending(api: OpenClawPluginApi): void {
       }
 
       const lines = sanitized.map((t, i) => formatTaskLine(t, i + 1));
-      const text = `待认领任务 ${sanitized.length} 个：\n${lines.join('\n')}\n\n如需认领，用 mteam_claim_task(taskId=...)`;
+      const text = `待认领任务 ${sanitized.length} 个：\n${lines.join('\n')}\n\n优先先看类型，再看 description。\n如需认领，用 mteam_claim_task(taskId=...)`;
 
       return { content: [{ type: 'text' as const, text }], details: { success: true, pending: sanitized } };
     },

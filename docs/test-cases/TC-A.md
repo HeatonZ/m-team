@@ -1,93 +1,111 @@
-# TC-A：正常完成流程
+# M1：链式正常流转
 
 ---
 
-## TC-A1：Executor 完整执行并由 hook 判断完成
+## M1-1：新任务经过 handoff 后完成
 
-**场景描述：** Publisher 发布一个高优先级任务，Executor A 认领后分步执行（数据清洗 → 生成图表），Executor A 执行完后 agent_end hook 判断 relay；Executor B 认领后完成，agent_end hook 判断 complete → completed。
+**场景描述：** Publisher 发布一个 research 任务。第一棒执行人完成当前步骤后交接给下一棒；第二棒继续执行并收口完成。整个过程体现链式主路径：`ready → executing → handoff → executing → done`。
 
 **测试步骤：**
 
-1. Publisher 调用 `mteam_publish_task`，传入 description="分析销售数据"、goal="生成月报"、priority="high"、publisher="boss"
-2. 系统生成任务 ID，任务状态为 `pending`，executor=null
-3. 查询该任务，验证：任务存在、status=`pending`、executor=null、lastExecutor=null、context.length=1（只有初始 input）、priority=high、publisher=boss、completedAt=null
-4. Executor "agent_alice" 调用 `mteam_claim_task`，认领成功，状态变为 `running`，executor=agent_alice
-5. 查询任务，验证 status=`running`，executor=agent_alice
-6. Executor agent_alice 执行"数据清洗"，写文件到 workspace，**然后结束 session**
-7. agent_end hook 触发：
-   - 读取 event.messages（完整对话记录）
-   - LLM 判断：description 还有下一步 → `relayTask`
-   - 任务状态变为 `pending`，executor=null，lastExecutor=agent_alice，context 追加步骤
-8. 验证 context.length=2，第二项 step="数据清洗"，output 指向输出文件，status=`pending`
-9. Executor "agent_bob" 调用 `mteam_claim_task`，状态变为 `running`，executor=agent_bob
-10. Executor agent_bob 执行"生成图表"，**然后结束 session**
-11. agent_end hook 触发：
-    - LLM 判断：description 已全部完成 → `completeTask`
-    - 任务状态变为 `completed`，completedAt 被记录，executor=null
-12. 验证 status=`completed`，completedAt 不为空，context.length=3
-13. Publisher 心跳检测到 COMPLETED 任务，调用 `mteam_close_task` → status=`closed`
-14. 验证 status=`closed`（终态）
-15. 查询 agent_alice 的活跃任务，返回 null
-16. 查询 agent_bob 的待认领任务，正常返回（无 running 任务可认领新任务）
+1. Publisher 调用 `mteam_publish_task`，传入：
+   - `taskType=research`
+   - `description="先整理最近 7 天的样本数据并给出可交接摘要"`
+   - `goal="形成可直接用于月报的最终分析结论"`
+2. 验证任务初始状态：
+   - `status=pending`
+   - `lifecycle.phase=ready`
+   - `context.length=0`
+3. Executor A 认领任务后，验证：
+   - `status=running`
+   - `lifecycle.phase=executing`
+   - `executor=agent_alice`
+4. Executor A 完成当前一棒并结束 session，最后输出中包含：
+   - `summary`
+   - `handoffNote`
+   - `files` 或 `dataRefs`
+5. 终态 hook 收口后，验证：
+   - 任务回到 `pending`
+   - `lifecycle.phase=handoff`
+   - `lastExecutor=agent_alice`
+   - `handoffCount=1`
+   - `context.length=1`
+6. Executor B 认领该任务，验证进入：
+   - `status=running`
+   - `lifecycle.phase=executing`
+7. Executor B 基于前序 context 继续执行，不重做第一棒
+8. Executor B 结束 session，最后输出表明目标已完成
+9. 终态 hook 收口后，验证：
+   - `status=completed`
+   - `lifecycle.phase=done`
+   - `completedAt` 已记录
+   - `context.length=2`
+10. Publisher 验收通过，调用 `mteam_close_task`
+11. 验证最终状态为 `closed`
 
 ---
 
-## TC-A2：Executor 执行完，hook 判断 relay
+## M1-2：一步完成后直接 done
 
-**场景描述：** Executor 认领后执行完当前步骤，agent_end hook 判断仍需继续，relay 回池子。
+**场景描述：** 任务只有一棒，执行人完成后直接完成，不发生 handoff / reworking / finalizing 反复停留。
 
 **测试步骤：**
 
-1. Publisher 发布任务，Executor 认领成功，状态 `running`
-2. Executor 执行步骤，写文件，**结束 session**
-3. agent_end hook 触发：
-   - LLM 读取 messages，判断 description 还有下一步
-   - 调用 `relayTask`，status → `pending`，executor → null
-4. 验证 status=`pending`，executor=null，context 已追加步骤
-5. 下一个 Executor 认领同一任务，继续执行
+1. Publisher 发布一个单步任务
+2. Executor 认领后进入 `executing`
+3. Executor 完成并结束 session，最后输出包含明确的完成说明
+4. 终态 hook 收口后，验证：
+   - `status=completed`
+   - `lifecycle.phase=done`
+   - `handoffCount=0`
+   - `reworkCount=0`
+   - `context.length=1`
 
 ---
 
-## TC-A3：快速完成（一步完成）
+## M1-3：进入 finalizing 后再 complete
 
-**场景描述：** Executor 认领后一步完成，agent_end hook 判断 complete，任务直接 `completed`。
+**场景描述：** Executor 已完成主体工作，但还需要短暂收口整理，因此先进入 `finalizing`，下一轮再 complete。
 
 **测试步骤：**
 
-1. Publisher 发布任务，Executor 认领成功
-2. Executor 执行步骤，写文件，**结束 session**
-3. agent_end hook 触发：
-   - LLM 读取 messages，判断 goal 已达成
-   - 调用 `completeTask`，status → `completed`，completedAt 被记录
-4. 验证 status=`completed`，completedAt 不为空，context.length=2（初始 input + 步骤）
+1. 发布任务并由 Executor 认领
+2. Executor 完成主要工作，但最后输出明确表示：主体结果已齐，还需要整理最终交付口径
+3. 终态 hook 收口后，验证：
+   - `status=running`
+   - `lifecycle.phase=finalizing`
+   - `lastDecision=retain`
+4. 同一执行人继续收口并结束 session
+5. 再次收口后，验证：
+   - `status=completed`
+   - `lifecycle.phase=done`
+6. 验证 finalizing 没有无限停留：不会连续多次 retain 却无有效进展
 
 ---
 
-## TC-A4：Executor 异常退出，hook 判断 fail
+## M1-4：前序 context 被正确继承
 
-**场景描述：** Executor 认领后崩溃/异常退出，agent_end hook 检测到 success=false，直接 failTask。
+**场景描述：** 第二棒执行人接手任务时，必须基于前序 context 继续，而不是重新做第一棒。
 
 **测试步骤：**
 
-1. Publisher 发布任务，Executor 认领成功，状态 `running`
-2. Executor session 非正常结束（崩溃、超时、错误）
-3. agent_end hook 触发：
-   - 检测 event.success=false
-   - 调用 `failTask`，status → `failed`，error 记录原因
-4. 验证 status=`failed`，任务不再被认领
-5. 可手动 `relinquish` 后重新发布，或关闭任务
+1. 第一棒执行人完成后形成：`summary + handoffNote + dataRefs`
+2. 任务进入 `handoff`
+3. 第二棒执行人认领任务
+4. 查询任务详情，确认能看到前序 context
+5. 第二棒执行人按前序交接内容推进当前步骤
+6. 验证结果中没有“重复第一棒”的痕迹，context 体现的是接续执行而非回炉重做
 
 ---
 
-## TC-A5：心跳保活（executor 正常执行期间）
+## M1-5：心跳只认领，不执行
 
-**场景描述：** Executor 认领任务后正常执行（多轮对话），最终结束 session。heartbeat prompt 注入只管查任务，不干扰 executor。
+**场景描述：** heartbeat session 只负责认领，不负责在心跳窗口里执行链式步骤。
 
 **测试步骤：**
 
-1. Publisher 发布任务，Executor 认领成功，状态 `running`
-2. Executor 与用户多轮对话，执行任务步骤
-3. Executor 期间 heartbeat session 独立运行，不影响 executor
-4. Executor 执行完毕，**结束 session**
-5. agent_end hook 触发，判断 complete 或 relay
-6. 验证任务状态正确流转
+1. 让 executor heartbeat 收到一个适合自己的 pending 任务
+2. heartbeat 调用 `mteam_get_pending` 后执行 `mteam_claim_task`
+3. 验证 heartbeat 不调用 complete / fail / 执行类动作
+4. 验证任务进入 `running + executing`
+5. 后续实际执行由 task session 完成，而不是 heartbeat session 完成

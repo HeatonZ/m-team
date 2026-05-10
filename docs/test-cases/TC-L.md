@@ -1,44 +1,66 @@
-# TC-L：读 API
+# M12：查询与看板数据
 
-**背景：** pool/index.js 对外暴露的只读查询接口，依赖 db.js。
+**背景：** 只读查询接口应与链式状态机字段保持一致，返回结果要能支持 phase 驱动看板和任务诊断。
 
 ---
 
-## TC-L1：Agent 有活跃任务时不再返回待认领任务
+## M12-1：已有活跃任务的 agent 不返回待认领任务
 
-**场景描述：** getPendingTasks 如果传入 agentId 且该 Agent 有活跃任务，应返回空列表（防止一个 Agent 同时跑多个任务）。
+**场景描述：** `getPendingTasks(agentId)` 若发现该 agent 已有活跃任务，应返回空列表，防止一个 agent 同时执行多单。
 
 **测试步骤：**
 
 1. 发布两个任务
-2. alice 认领第一个任务，状态变为执行中
-3. 查询 alice 的待认领任务，返回空列表（因为 alice 已有活跃任务）
-4. 查询 bob 的待认领任务，返回至少 1 条（bob 无活跃任务，可正常看到待认领任务）
+2. alice 认领第一个任务，状态变为 `running + executing`
+3. 查询 `getPendingTasks('alice')`
+4. 验证返回空列表
+5. 查询 `getPendingTasks('bob')`
+6. 验证 bob 仍能看到待认领任务
 
 ---
 
-## TC-L2：getAgentActiveTask 返回当前 Runner
+## M12-2：getRunningTasks 返回执行中的链式任务
 
-**场景描述：** 查询某 Agent 是否在执行任务，应返回对应的 RUNNING 状态任务。
+**场景描述：** 查询运行中任务时，应返回带 `lifecycle.phase` 的结果，支持区分 `executing` 与 `finalizing`。
 
 **测试步骤：**
 
-1. Publisher 发布任务，alice 认领
-2. 查询 alice 的活跃任务，返回该任务，状态为执行中，执行人为 alice
-3. 查询 bob 的活跃任务，返回空（bob 未在执行任何任务）
+1. 发布两个任务
+2. 让 t1 处于 `running + executing`
+3. 让 t2 处于 `running + finalizing`
+4. 调用运行中任务查询接口
+5. 验证返回结果包含 t1 和 t2
+6. 验证每条记录都带正确的 `lifecycle.phase`
 
 ---
 
-## TC-L3：getTasksByExecutor 按执行人筛选
+## M12-3：getTask 返回完整 lifecycle / loopGuard / context
 
-**场景描述：** 查询某 Agent 名下的所有任务（包括各种状态）。
+**场景描述：** 详情接口应返回链式诊断所需字段，而不是只返回旧 status 基础信息。
 
 **测试步骤：**
 
-1. 发布三个任务 t1、t2、t3
-2. alice 认领 t1 并完成，t1 变为已完成
-3. bob 认领 t2（t2 仍为执行中）
-4. t3 保持待认领（无人认领）
-5. 查询 alice 名下的任务，返回 1 条（t1）
-6. 查询 bob 名下的任务，返回 1 条（t2）
-7. 查询结果均不包含 t3（因为 t3 执行人为空）
+1. 构造一个经历过 handoff 与 reworking 的任务
+2. 查询任务详情
+3. 验证返回中包含：
+   - `lifecycle.phase`
+   - `handoffCount`
+   - `reworkCount`
+   - `lastDecision`
+   - `loopGuard`
+   - `context`
+4. 验证 context 中能看到 step 输出摘要、交接说明和 unresolvedIssues
+
+---
+
+## M12-4：pending 列表可区分 ready / handoff / reworking
+
+**场景描述：** 待认领列表虽然都属于 pending，但必须能从结果中区分它是新任务、正常交接还是返工修正。
+
+**测试步骤：**
+
+1. 构造三个 pending 任务，phase 分别为：`ready`、`handoff`、`reworking`
+2. 调用 `getPendingTasks()`
+3. 验证三个任务都能返回
+4. 验证每个任务的 `lifecycle.phase` 与实际一致
+5. 验证前端或调用方可以据此分到不同看板列

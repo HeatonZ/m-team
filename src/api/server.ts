@@ -91,6 +91,7 @@ async function handle(req: http.IncomingMessage, res: http.ServerResponse) {
       const args = ['tasks', 'create'];
       if (body.goal)             { args.push('--goal', String(body.goal)); }
       if (body.description)      { args.push('--description', String(body.description)); }
+      if (body.taskType)         { args.push('--task-type', String(body.taskType)); }
       if (body.publisher)         { args.push('--publisher', String(body.publisher)); }
       if (body.priority)          { args.push('--priority', String(body.priority)); }
       if (body.tags)              { args.push('--tags', String(body.tags)); }

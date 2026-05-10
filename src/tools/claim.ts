@@ -46,6 +46,7 @@ export function register(
       const systemPrompt = `
 【任务信息】
 - 任务ID: ${taskId}
+- 任务类型: ${task?.taskType ?? 'general'}
 - 任务目录: ${taskWorkdir}
 - 执行者 agentId: ${agentId}
 
@@ -59,7 +60,8 @@ ${task?.goal ?? '（无）'}
 1. 先调用 mteam_get_task 查任务详情（含执行历史 + 当前 description）
 2. 根据上方执行历史确认当前步骤是否已在历史中完成
 3. 根据 description 执行当前步骤
-4. 做完后直接结束 session，m-team 会在 agent_end hook 收口并判断 complete / relay / fail
+4. 认领与执行只围绕 taskType + description；goal 仅用于后续 agent_end 终态复盘
+5. 做完后直接结束 session，m-team 会在 agent_end hook 收口并判断 complete / relay / fail / retain
 
 `;
 

@@ -40,7 +40,7 @@ export function registerSessionGuardHook(
       ) {
         return {
           block: true,
-          blockReason: `心跳 session（${sessionKey}）禁止调用 ${toolName}，请通过 relay 转移任务`,
+          blockReason: `心跳 session（${sessionKey}）禁止调用 ${toolName}。heartbeat 只负责认领或 publisher 验收，不负责执行链式步骤。`,
         };
       }
 

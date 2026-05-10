@@ -42,7 +42,7 @@ export async function notifyIfNeeded(
 
 /**
  * 读取 taskId 参数（带格式校验）
- * taskId 格式: task_{unix_timestamp}，必须包含前缀
+ * taskId 格式: task_{Date.now()}，必须包含前缀
  * LLM 可能截断只取数字部分，此函数显式拒绝并给出完整格式示例
  */
 export function readTaskId(

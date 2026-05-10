@@ -1,31 +1,43 @@
 # 测试用例文档
 
-> 按业务流程模块划分的端到端闭环测试用例。
+> 按模块拆分的自然语言测试用例。当前版本已对齐 **链式状态机模型**：`ready / executing / handoff / reworking / finalizing / done`。
 
 ## 模块索引
 
-| 模块 | 文件 | 内容 |
-|------|------|------|
-| 正常完成 | [TC-A.md](./TC-A.md) | Happy Path，含心跳保活、快速完成 |
-| 中转交接 | [TC-B.md](./TC-B.md) | 单次 Relay、多次 Relay、旧 Session Graceful |
-| 任务失败 | [TC-C.md](./TC-C.md) | fail 标记、重复 fail、未开始直接 fail |
-| 取消任务 | [TC-D.md](./TC-D.md) | Cancel Running、非 Publisher Cancel、Cancel PENDING、终态重复取消、Relay 后取消 |
-| 放弃任务 | [TC-E.md](./TC-E.md) | Relinquish 后他人完成、非 Executor 放弃、CANCELLED 不可放弃 |
-| Cancelled 宽容处理 | [TC-F.md](./TC-F.md) | 允许追加 Context、拒绝 Relay、拒绝 Complete |
-| 并发场景 | [TC-G.md](./TC-G.md) | 同时认领同一任务、Agent 已有活跃任务 |
-| 守卫顺序验证 | [TC-H.md](./TC-H.md) | relayTask/relinquishTask Bug 验证 |
-| 文件系统持久化 | [TC-I.md](./TC-I.md) | publishTask、relayTask、updateTask 同步写 task.json |
-| 优先级调度 | [TC-J.md](./TC-J.md) | 高优先级优先、同优先级 FIFO |
-| db.js 底层 | [TC-K.md](./TC-K.md) | 序列化、字段映射、单例、closeDb |
-| 读 API | [TC-L.md](./TC-L.md) | getPendingTasks、getAgentActiveTask、getTasksByExecutor |
+| 模块编号 | 文件 | 新名称 | 内容 |
+|------|------|------|------|
+| M1 | [TC-A.md](./TC-A.md) | 链式正常流转 | 新任务 → 执行 → 交接 → 收口 → 完成 |
+| M2 | [TC-B.md](./TC-B.md) | 交接与返工 | handoff / reworking / 旧 session 幂等 |
+| M3 | [TC-C.md](./TC-C.md) | 失败与熔断 | session transcript 为空、不可恢复失败、loop guard 熔断 |
+| M4 | [TC-D.md](./TC-D.md) | 取消与终态保护 | cancel 后的状态约束与权限边界 |
+| M5 | [TC-E.md](./TC-E.md) | 回池与回收 | publisher 超时回收、非执行人限制 |
+| M6 | [TC-F.md](./TC-F.md) | 已取消任务保护 | 已取消任务对残留动作的保护性处理 |
+| M7 | [TC-G.md](./TC-G.md) | 并发与占用 | 并发认领、已有活跃任务限制 |
+| M8 | [TC-H.md](./TC-H.md) | 守卫顺序 | cancelled / executor / phase 等 guard 顺序 |
+| M9 | [TC-I.md](./TC-I.md) | 持久化一致性 | task.json 与 lifecycle/context 持久化 |
+| M10 | [TC-J.md](./TC-J.md) | 排队与优先级 | 高优先级优先、同优先级 FIFO |
+| M11 | [TC-K.md](./TC-K.md) | 底层存储映射 | 字段映射、lifecycle 序列化、单例 |
+| M12 | [TC-L.md](./TC-L.md) | 查询与看板数据 | getPendingTasks / getRunningTasks / getTask |
 
-## 用例统计
+## 命名规则
 
-共 36 个端到端用例，覆盖核心业务流程全路径。
+- 文件名暂保持 `TC-A` ~ `TC-L`，方便沿用现有引用路径
+- 文档标题与索引名称统一使用**新业务名**，不再沿用旧“流程/读 API/db.js”式命名
+- 每个模块优先表达**业务意图**，其次才是技术实现
 
-## 运行测试
+## 编写原则
 
-```bash
-cd /mnt/d/code/m-team
-npx vitest run
-```
+- 用自然语言描述，不写测试代码
+- 先写业务期望，再写验证点
+- 优先覆盖：
+  1. phase 流转
+  2. handoff / reworking 区分
+  3. finalizing 收口
+  4. loopGuard 防循环
+  5. session 结束后的幂等保护
+- 文档中的动作名、字段名、状态名必须与当前代码行为严格一致，不写“差不多”的旧口径
+
+## 运行说明
+
+当前仓库以**测试用例文档重构**为主。
+如后续恢复自动化测试，应以这些文档为验收基线，再落具体测试实现。

@@ -7,7 +7,7 @@
  */
 
 import type { Task } from '../schema/task.js';
-import { PRIORITY_LABELS, getStatusLabel } from '../schema/task.js';
+import { PRIORITY_LABELS, TASK_TYPE_LABELS, getStatusLabel } from '../schema/task.js';
 
 /**
  * 从 Task 对象中移除 goal 字段，返回安全的展示用对象
@@ -30,7 +30,8 @@ export function sanitizeTaskList(tasks: Task[]): Array<Omit<Task, 'goal'>> {
 export function formatTaskLine(task: Omit<Task, 'goal'>, index: number): string {
   const priority = PRIORITY_LABELS[task.priority] ?? '🟡 中';
   const stepCount = task.context.length - 1;
-  return `${index}. [${priority}] ${task.taskId} — ${task.description}${stepCount > 0 ? ` (已${stepCount}步)` : ''}`;
+  const taskType = TASK_TYPE_LABELS[task.taskType] ?? task.taskType;
+  return `${index}. [${priority}] [${taskType}] ${task.taskId} — ${task.description}${stepCount > 0 ? ` (已${stepCount}步)` : ''}`;
 }
 
 // ============================================================
@@ -49,6 +50,7 @@ export function formatTaskAsText(task: Task): string {
   const lines = [
     `📋 任务详情`,
     `ID: ${task.taskId}`,
+    `类型: ${TASK_TYPE_LABELS[task.taskType] ?? task.taskType}`,
     `状态: ${status}`,
     `优先级: ${priority}`,
     `目标: ${task.goal}`,
@@ -90,7 +92,9 @@ export function formatTaskListAsText(tasks: Task[], label = '任务列表'): str
     const t = tasks[i];
     const status = getStatusLabel(t.status);
     const priority = PRIORITY_LABELS[t.priority] ?? '🟡 中';
+    const taskType = TASK_TYPE_LABELS[t.taskType] ?? t.taskType;
     lines.push(`${i + 1}. [${priority}] ${status} ${t.taskId}`);
+    lines.push(`   🏷️ ${taskType}`);
     lines.push(`   📝 ${t.description}`);
     if (t.executor) lines.push(`   👤 执行者: ${t.executor}`);
     if (t.lastExecutor) lines.push(`   👤 上一步: ${t.lastExecutor}`);
