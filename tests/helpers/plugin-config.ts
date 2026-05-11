@@ -7,6 +7,8 @@ export interface TestPluginConfig {
   notifications: NotificationConfig[];
   dashboardEnabled: boolean;
   dashboardPort?: number;
+  agentEndJudgeAgentId?: string;
+  agentEndJudgeModel?: string;
 }
 
 export function createTestPluginConfig(workspaceRoot: string, overrides: Partial<TestPluginConfig> = {}): TestPluginConfig {

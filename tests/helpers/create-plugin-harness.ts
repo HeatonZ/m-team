@@ -112,6 +112,7 @@ function createTestApi(config: TestPluginConfig): OpenClawPluginApi & { __regist
           }));
         },
       },
+      agentEndJudge: async () => null,
     },
     on(hookName: keyof HookMap, handler: unknown) {
       const list = hooks[hookName];

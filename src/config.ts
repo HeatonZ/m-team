@@ -9,4 +9,6 @@ export interface MTeamPluginConfig {
   notifications?: NotificationConfig[];
   dashboardEnabled?: boolean;
   dashboardPort?: number;
+  agentEndJudgeAgentId?: string;
+  agentEndJudgeModel?: string;
 }

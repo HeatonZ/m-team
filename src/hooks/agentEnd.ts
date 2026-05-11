@@ -6,6 +6,7 @@ import type {
   OpenClawPluginApi,
   PluginHookAgentEndEvent,
   PluginHookAgentContext,
+  PluginRuntime,
 } from 'openclaw/plugin-sdk/core';
 import {
   failTask,
@@ -14,6 +15,7 @@ import {
   retainTaskOwnership,
 } from '../pool/operations.js';
 import { getTask } from '../pool/index.js';
+import { judgeAgentEndWithLlm } from './agentEndLlm.js';
 import { writeTaskLog } from '../pool/db.js';
 import {
   sendNotifications,
@@ -211,14 +213,71 @@ export function registerAgentEndHook(api: OpenClawPluginApi): void {
 
     const text = lastAssistantText(nonSystemMessages);
     const output = inferOutput(text);
-    const nextDescription = buildNextDescription(text, task);
-    const step = nextDescription ?? task.description;
+    const fallbackNextDescription = buildNextDescription(text, task);
+    const step = fallbackNextDescription ?? task.description;
+
+    let llmDecision: Awaited<ReturnType<typeof judgeAgentEndWithLlm>> | null = null;
+    try {
+      llmDecision = await judgeAgentEndWithLlm({
+        runtime: api.runtime as PluginRuntime,
+        cfg: undefined,
+        agentId: agentId ?? task.executor ?? 'manager',
+        task,
+        transcript: text,
+        output,
+        modelRef: process.env.MTEAM_AGENT_END_MODEL,
+      });
+    } catch (err) {
+      api.logger?.warn?.(`[m-team] agent_end llm judge threw: ${err instanceof Error ? err.message : String(err)}`);
+    }
+
+    const nextDescription = llmDecision?.ok
+      ? (llmDecision.decision.nextDescription?.trim() || fallbackNextDescription)
+      : fallbackNextDescription;
+
+    if (llmDecision && !llmDecision.ok) {
+      api.logger?.warn?.(`[m-team] agent_end llm judge fallback: ${llmDecision.error}${llmDecision.raw ? ` raw=${llmDecision.raw}` : ''}`);
+    }
 
     if (shouldTripLoopGuard(task, nextDescription, output)) {
       const result = failTask(taskId, 'LOOP_GUARD_TRIGGERED', { step: '循环熔断', output: { ...output, error: 'LOOP_GUARD_TRIGGERED', unresolvedIssues: ['重复无进展，已熔断'] } }, { outcome: 'blocked', error: 'LOOP_GUARD_TRIGGERED' });
       writeTaskLog({ taskId, action: 'fail', sessionKey: sessionKey ?? undefined, agentId: agentId ?? undefined, result: { success: result.success, decision: 'fail' }, error: 'LOOP_GUARD_TRIGGERED' });
       if (result.task) await sendNotifications(formatFailNotifications(result.task, getNotifications()), api.logger ?? null).catch(() => null);
       return;
+    }
+
+    if (llmDecision?.ok) {
+      const judged = llmDecision.decision;
+      if (judged.decision === 'complete') {
+        const result = completeTask(taskId, { step, output: { ...output, summary: judged.summary ?? output.summary } });
+        writeTaskLog({ taskId, action: 'complete', sessionKey: sessionKey ?? undefined, agentId: agentId ?? undefined, result: { success: result.success, decision: 'complete', via: 'llm', confidence: judged.confidence } });
+        if (result.task) await sendNotifications(formatTaskNotifications(result.task, getNotifications()), api.logger ?? null).catch(() => null);
+        return;
+      }
+
+      if (judged.decision === 'relay' && nextDescription) {
+        const mode = judged.mode === 'reworking' || isReworkSignal(nextDescription) || output.unresolvedIssues?.length ? 'reworking' : 'handoff';
+        const result = relayTask(taskId, agentId ?? task.executor ?? 'unknown', { step, output: { ...output, summary: judged.summary ?? output.summary, unresolvedIssues: judged.unresolvedIssues ?? output.unresolvedIssues } }, nextDescription, mode);
+        writeTaskLog({ taskId, action: 'relay', sessionKey: sessionKey ?? undefined, agentId: agentId ?? undefined, result: { success: result.success, decision: 'relay', via: 'llm', nextDescription, mode, confidence: judged.confidence } });
+        if (result.task) await sendNotifications(formatRelayNotifications(result.task, getNotifications()), api.logger ?? null).catch(() => null);
+        return;
+      }
+
+      if (judged.decision === 'retain') {
+        const retainDescription = nextDescription ?? judged.reason;
+        const retainPhase = judged.phase === TaskPhase.FINALIZING ? TaskPhase.FINALIZING : TaskPhase.EXECUTING;
+        const result = retainTaskOwnership(taskId, agentId ?? task.executor ?? 'unknown', { step, output: { ...output, summary: judged.summary ?? output.summary, unresolvedIssues: judged.unresolvedIssues ?? output.unresolvedIssues } }, retainDescription, retainPhase);
+        writeTaskLog({ taskId, action: 'retain', sessionKey: sessionKey ?? undefined, agentId: agentId ?? undefined, result: { success: result.success, decision: 'retain', via: 'llm', phase: retainPhase, confidence: judged.confidence } });
+        return;
+      }
+
+      if (judged.decision === 'fail') {
+        const failReason = judged.reason || 'LLM_DECIDED_FAIL';
+        const result = failTask(taskId, failReason, { step: task.description, output: { ...output, summary: (judged.summary ?? text) || failReason, error: failReason, unresolvedIssues: judged.unresolvedIssues?.length ? judged.unresolvedIssues : (output.unresolvedIssues?.length ? output.unresolvedIssues : [failReason]) } }, { outcome: 'blocked', error: failReason });
+        writeTaskLog({ taskId, action: 'fail', sessionKey: sessionKey ?? undefined, agentId: agentId ?? undefined, result: { success: result.success, decision: 'fail', via: 'llm', confidence: judged.confidence }, error: failReason });
+        if (result.task) await sendNotifications(formatFailNotifications(result.task, getNotifications()), api.logger ?? null).catch(() => null);
+        return;
+      }
     }
 
     if (isCompleteSignal(text, task, nextDescription, output)) {

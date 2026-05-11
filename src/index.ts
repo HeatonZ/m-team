@@ -56,6 +56,10 @@ interface PluginConfig {
   executors?: string[];
   publishers?: string[];
   notifications?: NotificationConfig[];
+  dashboardEnabled?: boolean;
+  dashboardPort?: number;
+  agentEndJudgeAgentId?: string;
+  agentEndJudgeModel?: string;
 }
 
 const plugin = definePluginEntry({
