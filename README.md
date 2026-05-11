@@ -23,11 +23,10 @@ openclaw gateway restart
 openclaw plugins list | grep m-team
 ```
 
-**HEARTBEAT.md 是必须配置的。** 每个 agent 心跳时做什么，由对应 workspace 的 `HEARTBEAT.md` 决定。详细步骤见 [安装指南](docs/INSTALL.md)。
+**HEARTBEAT.md 是必须配置的。** 每个 agent 心跳时做什么，由对应 workspace 的 `HEARTBEAT.md` 决定。
 
 ## 目录
 
-- [安装指南](docs/INSTALL.md) — 完整安装步骤
 - [架构文档](docs/ARCHITECTURE.md) — 设计目标、架构图、设计原则
 - [任务格式与 Tool API](docs/TASK.md) — 任务格式、Tool API、状态流转
 - [Session 模型](docs/SESSION.md) — 双 Session 模型、心跳流程、agent_end 收口
