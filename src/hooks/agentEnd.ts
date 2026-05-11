@@ -77,7 +77,9 @@ function lastAssistantText(messages: unknown[]): string {
 function inferOutput(text: string): ContextStepOutput {
   const normalizedText = text.trim();
   const files = [...normalizedText.matchAll(/(?:\/mnt\/[^\s,，；;。]+|[\w./-]+\.(?:json|md|csv|txt|png|jpg|webp))/g)].map(m => m[0]);
-  const unresolvedIssues = [...normalizedText.matchAll(/(?:问题|缺失|未完成|待处理|需补齐|需要修正|阻塞|无法继续|报错|异常)[:：]?\s*([^\n]+)/g)].map(m => m[1].trim());
+  const unresolvedIssues = [...normalizedText.matchAll(/(?:问题|缺失|未完成|待处理|需补齐|需要修正|阻塞|无法继续|报错|异常)[:：]?\s*([^\n]+)/g)]
+    .map(m => m[1].trim())
+    .filter(issue => !/^(\*+)?\s*无未解决问题/i.test(issue));
 
   const cleanFiles = Array.from(new Set(files)).slice(0, 20);
   const cleanIssues = Array.from(new Set(unresolvedIssues)).slice(0, 10);
@@ -87,7 +89,7 @@ function inferOutput(text: string): ContextStepOutput {
     summary: hasNonTrivialSummary ? normalizedText.slice(0, 500) : undefined,
     files: cleanFiles,
     unresolvedIssues: cleanIssues,
-    error: cleanIssues[0],
+    error: cleanIssues.find(issue => /阻塞|无法|缺少|报错|异常|失败/i.test(issue)),
   };
 }
 
@@ -121,8 +123,43 @@ function hasProblemReportSignal(text: string, output: ContextStepOutput): boolea
   return /补齐|修复|重试|核对|检查|校验|重新生成|重新运行|补充|完善|排查|缺少|待补|需补|问题|阻塞/i.test(combined);
 }
 
+function parseExplicitNextStep(text: string): string | null {
+  const patterns = [
+    /下一步[：:]\s*([^\n]+)/i,
+    /等待(?:\s*next|\s*下一步)?[（(]([^()\n]{4,200})[)）]/i,
+    /继续到下一步[：:]\s*([^\n]+)/i,
+  ];
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    if (match?.[1]) {
+      const next = match[1].trim().replace(/^[-–—:\s]+/, '');
+      if (next && !/^无未解决问题/.test(next)) return next;
+    }
+  }
+  return null;
+}
+
+function isConciseCurrentStepDescription(text: string): boolean {
+  const normalized = text.trim();
+  if (!normalized) return false;
+  if (normalized.length > 120) return false;
+  if (/当前任务|本轮报告|继续围绕|问题：|结果摘要|产出文件|未解决问题|agent_end/i.test(normalized)) return false;
+  return true;
+}
+
+function sanitizeStepInstruction(raw: string): string {
+  let text = raw.trim();
+  text = text.replace(/^继续围绕当前任务[“"].*?[”"]/, '').trim();
+  text = text.replace(/^问题[：:]\s*/, '').trim();
+  text = text.replace(/[。；;，,]\s*问题[：:].*$/u, '').trim();
+  text = text.replace(/[。；;，,]\s*继续如实汇报.*$/u, '').trim();
+  text = text.replace(/^[-–—:\s]+/, '').trim();
+  if (!text) return '';
+  return text.length > 120 ? text.slice(0, 120) : text;
+}
+
 function buildConservativeNextDescription(task: Task): string {
-  return `继续处理当前任务“${task.description}”中已报告的问题，完成一个清晰、可验证的下一步结果，并继续如实汇报产物与剩余问题。`;
+  return sanitizeStepInstruction(task.description) || task.description;
 }
 
 type ProblemKind =
@@ -153,23 +190,24 @@ function classifyProblem(task: Task, text: string, output: ContextStepOutput): {
 }
 
 function buildNextDescriptionFromProblem(task: Task, problem: { kind: ProblemKind; blocking: boolean; summary: string }): string {
+  const base = sanitizeStepInstruction(task.description) || task.description;
   switch (problem.kind) {
     case 'missing_artifact':
-      return `补齐当前任务“${task.description}”缺失的产物文件，并重新提交可验证结果。问题：${problem.summary}`;
+      return `补齐缺失的产物文件，并重新提交可验证结果`;
     case 'missing_evidence':
-      return `补充当前任务“${task.description}”缺失的验证证据，并重新提交可验收结果。问题：${problem.summary}`;
+      return `补充缺失的验证证据，并重新提交可验收结果`;
     case 'quality_gap':
-      return `修正当前任务“${task.description}”中不完整或不达标的结果，并重新输出可验证产物。问题：${problem.summary}`;
+      return `修正不完整或不达标的结果，并重新输出可验证产物`;
     case 'blocked_by_permission':
-      return `处理当前任务“${task.description}”所需的权限或访问阻塞，补齐可执行前置后再继续推进。问题：${problem.summary}`;
+      return `处理权限或访问阻塞，补齐可执行前置后再继续推进`;
     case 'blocked_by_external_input':
-      return `补齐当前任务“${task.description}”缺失的外部输入或前置条件，确认输入可用后再继续推进。问题：${problem.summary}`;
+      return `补齐缺失的外部输入或前置条件，确认输入可用后再继续推进`;
     case 'needs_other_skill':
-      return `继续推进当前任务“${task.description}”的下一步专业处理动作，并补齐本轮报告问题。问题：${problem.summary}`;
+      return `继续执行下一步专业处理动作`;
     case 'incomplete_step':
-      return `继续完成当前任务“${task.description}”尚未完成的部分，补齐缺口后重新提交结果。问题：${problem.summary}`;
+      return `继续完成当前步骤尚未完成的部分`;
     default:
-      return `继续围绕当前任务“${task.description}”中本轮报告的问题推进下一步处理动作，并补齐可验证结果。问题：${problem.summary}`;
+      return base;
   }
 }
 
@@ -193,6 +231,14 @@ function decideConservativeFallback(task: Task, text: string, output: ContextSte
   }
 
   if (hasStructuredProgress(output, text)) {
+    const hintedNext = parseExplicitNextStep(text);
+    if (hintedNext) {
+      return {
+        decision: 'next',
+        reason: 'LLM_UNAVAILABLE_WITH_EXPLICIT_NEXT_STEP',
+        description: hintedNext,
+      };
+    }
     const problem = classifyProblem(task, text, output);
     return {
       decision: 'next',
@@ -282,7 +328,10 @@ export function registerAgentEndHook(api: OpenClawPluginApi): void {
       }
 
       if (judged.decision === 'next') {
-        const nextDescription = judged.nextDescription!.trim();
+        const explicitNext = parseExplicitNextStep(text);
+        const llmNext = judged.nextDescription!.trim();
+        const nextDescription = explicitNext
+          ?? (isConciseCurrentStepDescription(llmNext) ? llmNext : buildConservativeNextDescription(task));
         const result = nextTask(taskId, agentId ?? task.executor ?? 'unknown', { step, output: { ...normalizedOutput, summary: judged.summary ?? normalizedOutput.summary, unresolvedIssues: judged.unresolvedIssues ?? normalizedOutput.unresolvedIssues } }, nextDescription);
         writeTaskLog({ taskId, action: 'next', sessionKey: sessionKey ?? undefined, agentId: agentId ?? undefined, result: { success: result.success, decision: 'next', via: 'llm', nextDescription, confidence: judged.confidence, reason: judged.reason, llm_raw: llmDecision.raw, evidence: { summary: normalizedOutput.summary ?? '', files: normalizedOutput.files ?? [], unresolvedIssues: normalizedOutput.unresolvedIssues ?? [], error: normalizedOutput.error ?? null } } });
         if (result.task) await sendNotifications(formatNextNotifications(result.task, getNotifications()), api.logger ?? null).catch(() => null);

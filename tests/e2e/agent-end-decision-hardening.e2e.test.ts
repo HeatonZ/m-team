@@ -111,7 +111,8 @@ describe('agent_end conservative fallback e2e', () => {
 
       const task = harness.readTask(taskId);
       expect(task?.status).toBe('pending');
-      expect(task?.description).toContain('本轮报告的问题推进下一步修复动作');
+      expect(task?.description?.length ?? 0).toBeLessThan(80);
+      expect(task?.description).not.toContain('本轮报告的问题推进下一步修复动作');
       const nextLog = harness.readLogs(taskId, 'next').at(-1);
       expect(nextLog?.result?.via).toBe('conservative_fallback');
       expect(nextLog?.result?.reason).toBe('LLM_UNAVAILABLE_BUT_PROBLEM_REPORTED');

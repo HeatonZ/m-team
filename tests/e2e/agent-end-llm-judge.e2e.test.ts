@@ -122,7 +122,8 @@ describe('agent_end llm judge e2e', () => {
 
       const task = harness.readTask(taskId);
       expect(task?.status).toBe('pending');
-      expect(task?.description).toContain('继续处理当前任务');
+      expect(task?.description).not.toContain('继续处理当前任务');
+      expect(task?.description?.length ?? 0).toBeLessThan(80);
       const nextLog = harness.readLogs(taskId, 'next').at(-1);
       expect(nextLog?.result?.via).toBe('conservative_fallback');
       const warns = harness.readRuntimeLogs().filter(log => log.level === 'warn').map(log => log.message).join('\n');

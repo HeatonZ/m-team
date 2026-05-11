@@ -1,6 +1,6 @@
 export type TaskStatus = 'pending' | 'running' | 'completed' | 'closed' | 'failed' | 'cancelled';
 export type TaskPriority = 'high' | 'normal' | 'low';
-export type TaskPhase = 'ready' | 'executing' | 'handoff' | 'reworking' | 'finalizing' | 'done';
+export type TaskType = 'general' | 'coding' | 'research' | 'ops' | 'data' | 'design' | 'content';
 
 export interface ContextStepOutput {
   summary?: string;
@@ -23,29 +23,12 @@ export interface ContextStepEntry {
 
 export type ContextEntry = ContextStepEntry;
 
-export interface TaskLifecycle {
-  phase: TaskPhase;
-  handoffCount: number;
-  reworkCount: number;
-  lastDecision?: 'retain' | 'relay' | 'complete' | 'fail';
-  lastDecisionAt?: number;
-  loopGuard: {
-    samePhaseCount: number;
-    sameDescriptionCount: number;
-    noProgressCount: number;
-    lastDescriptionFingerprint?: string;
-    lastContextFingerprint?: string;
-    lastProgressAt?: number;
-  };
-}
-
 export interface Task {
   taskId: string;
-  taskType?: 'general' | 'coding' | 'research' | 'ops' | 'data' | 'design' | 'content';
+  taskType?: TaskType;
   goal: string;
   description: string;
   context: ContextEntry[];
-  lifecycle: TaskLifecycle;
   priority: TaskPriority;
   status: TaskStatus;
   publisher: string;
@@ -59,7 +42,7 @@ export interface Task {
 export const STATUS_LABELS: Record<TaskStatus, string> = {
   pending: '⏳ 待认领',
   running: '⚙️ 执行中',
-  completed: '✅ 完成（待验收）',
+  completed: '✅ 待验收',
   closed: '🔒 已验收',
   failed: '❌ 失败',
   cancelled: '🚫 已取消',
@@ -71,13 +54,14 @@ export const PRIORITY_LABELS: Record<TaskPriority, string> = {
   low: '🟢 低',
 };
 
-export const PHASE_LABELS: Record<TaskPhase, string> = {
-  ready: '待接手',
-  executing: '执行中',
-  handoff: '等待交接',
-  reworking: '返工中',
-  finalizing: '收口中',
-  done: '已完成',
+export const TASK_TYPE_LABELS: Record<TaskType, string> = {
+  general: '通用',
+  coding: '代码',
+  research: '调研',
+  ops: '运维',
+  data: '数据',
+  design: '设计',
+  content: '内容',
 };
 
 export const HISTORY_STATUSES: TaskStatus[] = ['completed', 'closed', 'failed', 'cancelled'];

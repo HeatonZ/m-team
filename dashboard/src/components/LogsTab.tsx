@@ -5,7 +5,7 @@ import { fetchLogs, type TaskLog } from '../api/logs';
 const ACTION_COLORS: Record<string, string> = {
   publish: '#10b981',
   claim: '#3b82f6',
-  relay: '#f59e0b',
+  next: '#f59e0b',
   complete: '#22c55e',
   fail: '#ef4444',
   cancel: '#6b7280',
@@ -16,7 +16,7 @@ const ACTION_COLORS: Record<string, string> = {
 const ACTION_LABELS: Record<string, string> = {
   publish: '发布',
   claim: '认领',
-  relay: '交接',
+  next: '下一步',
   complete: '完成',
   fail: '失败',
   cancel: '取消',
@@ -44,23 +44,12 @@ function getResultDetails(result: Record<string, unknown> | null): Record<string
   return result;
 }
 
-function isRelayWithoutNextUpdate(log: TaskLog): boolean {
-  const details = getResultDetails(log.result);
-  return log.action === 'relay' && details?.descriptionChanged === false;
-}
-
 function renderResultSummary(log: TaskLog) {
   const details = getResultDetails(log.result);
   if (!details) return '-';
 
   const success = details.success;
   const reason = asText(details.reason ?? details.error);
-  const parseStatus = asText(details.parseStatus);
-  const warning = isRelayWithoutNextUpdate(log);
-
-  if (warning) {
-    return <span style={{ color: '#ef4444', fontWeight: 600 }}>⚠️ Relay 但下一步未更新 · {parseStatus}</span>;
-  }
 
   if (success === true) {
     return <span style={{ color: '#22c55e' }}>✓ {reason}</span>;
@@ -73,21 +62,16 @@ function renderResultSummary(log: TaskLog) {
 
 function renderDecisionDetails(log: TaskLog) {
   const details = getResultDetails(log.result);
-  if (!details || !['relay', 'complete', 'fail'].includes(log.action)) return null;
+  if (!details || !['next', 'complete', 'fail'].includes(log.action)) return null;
 
   return (
-    <details className="log-details" open={isRelayWithoutNextUpdate(log)}>
+    <details className="log-details">
       <summary>agent_end 判决详情</summary>
       <div className="log-detail-grid">
         <div><strong>判决</strong><span>{asText(details.decision ?? log.action)}</span></div>
-        <div><strong>解析状态</strong><span>{asText(details.parseStatus)}</span></div>
-        <div><strong>description变化</strong><span>{details.descriptionChanged === true ? '是' : details.descriptionChanged === false ? '否' : '-'}</span></div>
         <div><strong>原因</strong><span>{asText(details.reason)}</span></div>
-        <div><strong>本轮摘要</strong><span>{asText(details.contextStep)}</span></div>
-        <div><strong>旧description</strong><span>{asText(details.previousDescription)}</span></div>
         <div><strong>下一步</strong><span>{asText(details.nextDescription)}</span></div>
-        <div><strong>本轮产物</strong><pre>{asText(details.contextOutput)}</pre></div>
-        <div><strong>原始输出尾部</strong><pre>{asText(details.rawJudgeTail)}</pre></div>
+        <div><strong>证据摘要</strong><pre>{asText(details.evidence)}</pre></div>
       </div>
     </details>
   );
@@ -130,29 +114,34 @@ export const LogsTab: FC = () => {
   };
 
   return (
-    <div className="section">
-      <h2>📋 操作日志 <span style={{ fontWeight: 'normal', fontSize: '0.8em' }}>({total}条)</span></h2>
+    <div className="section section-card">
+      <div className="section-header">
+        <div>
+          <h2>📋 操作日志 <span className="section-count">{total}</span></h2>
+          <div className="section-subtitle">重点关注 claim / next / complete / fail 的连续轨迹。</div>
+        </div>
+      </div>
 
-      <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
-        <form onSubmit={handleSearch} style={{ display: 'flex', gap: '0.5rem' }}>
+      <div className="log-toolbar">
+        <form onSubmit={handleSearch} className="log-search">
           <input
             type="text"
             placeholder="按任务ID过滤"
             value={inputTaskId}
-            onChange={e => setInputTaskId(e.target.value)}
-            style={{ padding: '0.3rem 0.6rem', border: '1px solid #ccc', borderRadius: '4px', width: '180px' }}
+            onChange={(e) => setInputTaskId(e.target.value)}
+            className="log-input"
           />
           <button type="submit" className="tab">搜索</button>
         </form>
 
         <select
           value={filterAction}
-          onChange={e => { setPage(1); setFilterAction(e.target.value); }}
-          style={{ padding: '0.3rem 0.6rem', border: '1px solid #ccc', borderRadius: '4px' }}
+          onChange={(e) => { setPage(1); setFilterAction(e.target.value); }}
+          className="log-select"
         >
           <option value="">全部操作</option>
-          {Object.entries(ACTION_LABELS).map(([k, v]) => (
-            <option key={k} value={k}>{v}</option>
+          {Object.entries(ACTION_LABELS).map(([key, label]) => (
+            <option key={key} value={key}>{label}</option>
           ))}
         </select>
 
@@ -166,43 +155,37 @@ export const LogsTab: FC = () => {
       </div>
 
       {loading && <div className="empty">加载中...</div>}
-
       {!loading && logs.length === 0 && <div className="empty">暂无日志</div>}
 
       {!loading && logs.length > 0 && (
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85em' }}>
+        <div className="log-table-wrap">
+          <table className="log-table">
             <thead>
-              <tr style={{ background: '#f5f5f5', textAlign: 'left' }}>
-                <th style={{ padding: '0.5rem' }}>时间</th>
-                <th style={{ padding: '0.5rem' }}>操作</th>
-                <th style={{ padding: '0.5rem' }}>任务ID</th>
-                <th style={{ padding: '0.5rem' }}>agentId</th>
-                <th style={{ padding: '0.5rem' }}>sessionKey</th>
-                <th style={{ padding: '0.5rem' }}>结果</th>
+              <tr>
+                <th>时间</th>
+                <th>操作</th>
+                <th>任务ID</th>
+                <th>agentId</th>
+                <th>sessionKey</th>
+                <th>结果</th>
               </tr>
             </thead>
             <tbody>
-              {logs.map(log => (
-                <tr key={log.id} className={isRelayWithoutNextUpdate(log) ? 'log-row-warning' : ''} style={{ borderBottom: '1px solid #eee' }}>
-                  <td style={{ padding: '0.4rem', whiteSpace: 'nowrap' }}>{formatTime(log.createdAt)}</td>
-                  <td style={{ padding: '0.4rem' }}>
-                    <span style={{
-                      background: ACTION_COLORS[log.action] ?? '#6b7280',
-                      color: '#fff',
-                      padding: '0.15rem 0.5rem',
-                      borderRadius: '4px',
-                      fontSize: '0.8em'
-                    }}>
+              {logs.map((log) => (
+                <tr key={log.id}>
+                  <td>{formatTime(log.createdAt)}</td>
+                  <td>
+                    <span
+                      className="log-action-badge"
+                      style={{ background: ACTION_COLORS[log.action] ?? '#6b7280' }}
+                    >
                       {ACTION_LABELS[log.action] ?? log.action}
                     </span>
                   </td>
-                  <td style={{ padding: '0.4rem', fontFamily: 'monospace' }}>{log.taskId}</td>
-                  <td style={{ padding: '0.4rem' }}>{log.agentId ?? '-'}</td>
-                  <td style={{ padding: '0.4rem', fontFamily: 'monospace', fontSize: '0.8em', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis' }} title={log.sessionKey ?? ''}>
-                    {log.sessionKey ?? '-'}
-                  </td>
-                  <td style={{ padding: '0.4rem' }}>
+                  <td className="mono">{log.taskId}</td>
+                  <td>{log.agentId ?? '-'}</td>
+                  <td className="mono truncate" title={log.sessionKey ?? ''}>{log.sessionKey ?? '-'}</td>
+                  <td>
                     {renderResultSummary(log)}
                     {renderDecisionDetails(log)}
                   </td>
@@ -210,22 +193,11 @@ export const LogsTab: FC = () => {
               ))}
             </tbody>
           </table>
+
           <div className="pagination">
-            <button
-              onClick={() => setPage(p => Math.max(1, p - 1))}
-              disabled={page <= 1 || loading}
-            >
-              上一页
-            </button>
-            <span className="page-info">
-              第 {page} 页 / 共 {Math.max(1, totalPages)} 页 · 本页 {logs.length} 条 · 共 {total} 条
-            </span>
-            <button
-              onClick={() => setPage(p => Math.min(Math.max(1, totalPages), p + 1))}
-              disabled={page >= Math.max(1, totalPages) || loading}
-            >
-              下一页
-            </button>
+            <button className="tab" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1 || loading}>上一页</button>
+            <span className="page-info">第 {page} 页 / 共 {Math.max(1, totalPages)} 页 · 本页 {logs.length} 条</span>
+            <button className="tab" onClick={() => setPage((p) => Math.min(Math.max(1, totalPages), p + 1))} disabled={page >= Math.max(1, totalPages) || loading}>下一页</button>
           </div>
         </div>
       )}

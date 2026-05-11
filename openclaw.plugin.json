@@ -1,7 +1,7 @@
 {
   "id": "m-team",
   "name": "M-Team 去中心化任务池",
-  "version": "2026.5.13",
+  "version": "2026.5.11",
   "description": "去中心化任务池协作插件 — 多Agent任务分发与执行",
   "activation": {
     "onStartup": true

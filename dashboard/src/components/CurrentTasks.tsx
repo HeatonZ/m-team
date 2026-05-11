@@ -1,4 +1,5 @@
-import { type FC } from 'react';
+import { useState } from 'react';
+import type { FC } from 'react';
 import type { Task } from '../types/task';
 import { TaskCard } from './TaskCard';
 
@@ -20,16 +21,10 @@ export default function CurrentTasks({ pending, running, onSelectTask }: Current
     <div className="section">
       <h2>{emoji} {label} (<span id={`${tab}-count`}>{tasks.length}</span>)</h2>
       <div className="tab-bar">
-        <button
-          className={`tab ${tab === 'pending' ? 'active' : ''}`}
-          onClick={() => setTab('pending')}
-        >
+        <button className={`tab ${tab === 'pending' ? 'active' : ''}`} onClick={() => setTab('pending')}>
           ⏳ 待认领 ({pending.length})
         </button>
-        <button
-          className={`tab ${tab === 'running' ? 'active' : ''}`}
-          onClick={() => setTab('running')}
-        >
+        <button className={`tab ${tab === 'running' ? 'active' : ''}`} onClick={() => setTab('running')}>
           ⚙️ 执行中 ({running.length})
         </button>
       </div>
@@ -37,8 +32,8 @@ export default function CurrentTasks({ pending, running, onSelectTask }: Current
         {tasks.length === 0 ? (
           <div className="empty">暂无{tab === 'pending' ? '待认领' : '执行中'}任务</div>
         ) : (
-          tasks.map(t => (
-            <TaskCard key={t.taskId} task={t} onClick={() => onSelectTask(t.taskId)} />
+          tasks.map((task) => (
+            <TaskCard key={task.taskId} task={task} onClick={onSelectTask} />
           ))
         )}
       </div>

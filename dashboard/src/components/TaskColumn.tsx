@@ -7,12 +7,20 @@ interface TaskColumnProps {
   subtitle?: string;
   tasks: Task[];
   onCardClick: (taskId: string) => void;
-  variant?: 'ready' | 'handoff' | 'reworking' | 'executing' | 'finalizing' | 'risk';
+  variant?: 'new' | 'next' | 'blocked' | 'running' | 'risk';
   emptyText?: string;
   cardDecorator?: (task: Task) => ReactNode;
 }
 
-export const TaskColumn: FC<TaskColumnProps> = ({ title, subtitle, tasks, onCardClick, variant = 'ready', emptyText = '暂无任务', cardDecorator }) => {
+export const TaskColumn: FC<TaskColumnProps> = ({
+  title,
+  subtitle,
+  tasks,
+  onCardClick,
+  variant = 'new',
+  emptyText = '暂无任务',
+  cardDecorator,
+}) => {
   return (
     <div className={`section section-card section-${variant}`}>
       <div className="section-header">
@@ -27,8 +35,8 @@ export const TaskColumn: FC<TaskColumnProps> = ({ title, subtitle, tasks, onCard
         {tasks.length === 0 ? (
           <div className="empty">{emptyText}</div>
         ) : (
-          tasks.map((t) => (
-            <TaskCard key={t.taskId} task={t} onClick={onCardClick} decorator={cardDecorator?.(t)} />
+          tasks.map((task) => (
+            <TaskCard key={task.taskId} task={task} onClick={onCardClick} decorator={cardDecorator?.(task)} />
           ))
         )}
       </div>

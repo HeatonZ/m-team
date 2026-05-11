@@ -1,6 +1,6 @@
 import { useMemo, useState, useCallback } from 'react';
-import type { Task, TaskPhase, TaskStatus } from './types/task';
-import { PHASE_LABELS } from './types/task';
+import type { Task, TaskStatus } from './types/task';
+import { STATUS_LABELS } from './types/task';
 import { Header } from './components/Header';
 import { TaskColumn } from './components/TaskColumn';
 import { HistoryTab } from './components/HistoryTab';
@@ -10,44 +10,48 @@ import { usePendingTasks, useRunningTasks, useHistoryTasks } from './hooks/useTa
 import { fetchTaskDetail } from './api/client';
 
 type MainTab = 'board' | 'logs';
-type RiskFilter = 'all' | 'risk_only';
-type HeatFilter = 'all' | 'fresh' | 'aging' | 'stale';
+type BoardFilter = 'all' | 'needs_next' | 'blocked' | 'fresh';
 
-function getLoopRiskLevel(task: Task): 'normal' | 'warning' | 'danger' {
-  const guard = task.lifecycle?.loopGuard;
-  if (!guard) return 'normal';
-  if (guard.noProgressCount >= 2 || guard.sameDescriptionCount >= 3 || guard.samePhaseCount >= 4) return 'danger';
-  if (guard.noProgressCount >= 1 || guard.sameDescriptionCount >= 2 || guard.samePhaseCount >= 3) return 'warning';
-  return 'normal';
+function getLatestStep(task: Task) {
+  return [...task.context].reverse().find((entry) => entry.type === 'step');
 }
 
 function getLatestSummary(task: Task): string {
-  const latest = [...task.context].reverse().find((entry) => entry.output?.summary || entry.output?.handoffNote || entry.output?.completionNote);
-  return latest?.output?.handoffNote || latest?.output?.summary || latest?.output?.completionNote || '暂无最新摘要';
+  const latest = getLatestStep(task);
+  return latest?.output?.summary || latest?.step || '暂无最新摘要';
 }
 
-function getHeatBucket(updatedAt: number): HeatFilter {
+function getLatestIssues(task: Task): string[] {
+  const latest = getLatestStep(task);
+  return latest?.output?.unresolvedIssues ?? [];
+}
+
+function getHeatBucket(updatedAt: number): 'fresh' | 'aging' | 'stale' {
   const ageMinutes = Math.max(0, (Date.now() - updatedAt) / 60_000);
   if (ageMinutes < 10) return 'fresh';
   if (ageMinutes < 30) return 'aging';
   return 'stale';
 }
 
-function filterTasks(tasks: Task[], riskFilter: RiskFilter, heatFilter: HeatFilter) {
+function isBlocked(task: Task): boolean {
+  return getLatestIssues(task).some((issue) => /阻塞|权限|前置|外部|失败|无法继续/i.test(issue));
+}
+
+function filterTasks(tasks: Task[], filter: BoardFilter) {
   return tasks.filter((task) => {
-    const riskOk = riskFilter === 'all' || getLoopRiskLevel(task) !== 'normal';
-    const heatOk = heatFilter === 'all' || getHeatBucket(task.updatedAt) === heatFilter;
-    return riskOk && heatOk;
+    if (filter === 'all') return true;
+    if (filter === 'fresh') return getHeatBucket(task.updatedAt) === 'fresh';
+    if (filter === 'blocked') return isBlocked(task);
+    if (filter === 'needs_next') return task.status === 'pending' && task.context.length > 0;
+    return true;
   });
 }
 
 export function App() {
   const [mainTab, setMainTab] = useState<MainTab>('board');
-  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [activeHistoryStatus, setActiveHistoryStatus] = useState<TaskStatus>('completed');
-  const [riskFilter, setRiskFilter] = useState<RiskFilter>('all');
-  const [heatFilter, setHeatFilter] = useState<HeatFilter>('all');
+  const [boardFilter, setBoardFilter] = useState<BoardFilter>('all');
 
   const { tasks: pendingTasks, reload: reloadPending } = usePendingTasks();
   const { tasks: runningTasks, reload: reloadRunning } = useRunningTasks();
@@ -63,64 +67,42 @@ export function App() {
     try {
       const task = await fetchTaskDetail(taskId);
       setSelectedTask(task);
-      setSelectedTaskId(taskId);
     } catch (err) {
       console.error('Failed to load task detail:', err);
     }
   }, []);
 
-  const handleCloseModal = useCallback(() => {
-    setSelectedTask(null);
-    setSelectedTaskId(null);
-  }, []);
+  const board = useMemo(() => {
+    const filteredPending = filterTasks(pendingTasks, boardFilter);
+    const filteredRunning = filterTasks(runningTasks, boardFilter);
 
-  const boardGroups = useMemo(() => {
-    const pendingByPhase: Record<TaskPhase, Task[]> = {
-      ready: [], handoff: [], reworking: [], executing: [], finalizing: [], done: [],
-    };
+    const newTasks = filteredPending.filter((task) => task.context.length === 0);
+    const queuedNext = filteredPending.filter((task) => task.context.length > 0 && !isBlocked(task));
+    const blockedNext = filteredPending.filter((task) => task.context.length > 0 && isBlocked(task));
+    const activeWork = filteredRunning;
+    const risky = [...filteredPending, ...filteredRunning].filter((task) => isBlocked(task) || getHeatBucket(task.updatedAt) === 'stale');
 
-    for (const task of filterTasks(pendingTasks, riskFilter, heatFilter)) {
-      pendingByPhase[task.lifecycle?.phase ?? 'ready']?.push(task);
-    }
+    return { newTasks, queuedNext, blockedNext, activeWork, risky };
+  }, [pendingTasks, runningTasks, boardFilter]);
 
-    const filteredRunning = filterTasks(runningTasks, riskFilter, heatFilter);
-    const runningExecuting = filteredRunning.filter((task) => task.lifecycle?.phase === 'executing');
-    const runningFinalizing = filteredRunning.filter((task) => task.lifecycle?.phase === 'finalizing');
-    const riskyTasks = [...pendingTasks, ...runningTasks].filter((task) => getLoopRiskLevel(task) !== 'normal');
+  const stats = useMemo(() => ({
+    totalActive: pendingTasks.length + runningTasks.length,
+    waitingNext: pendingTasks.filter((task) => task.context.length > 0).length,
+    blocked: [...pendingTasks, ...runningTasks].filter(isBlocked).length,
+    running: runningTasks.length,
+    fresh: [...pendingTasks, ...runningTasks].filter((task) => getHeatBucket(task.updatedAt) === 'fresh').length,
+  }), [pendingTasks, runningTasks]);
 
-    return {
-      ready: pendingByPhase.ready,
-      handoff: pendingByPhase.handoff,
-      reworking: pendingByPhase.reworking,
-      executing: runningExecuting,
-      finalizing: runningFinalizing,
-      risk: riskyTasks,
-    };
-  }, [pendingTasks, runningTasks, riskFilter, heatFilter]);
-
-  const stats = useMemo(() => {
-    const allActive = [...pendingTasks, ...runningTasks];
-    return {
-      active: allActive.length,
-      handoff: boardGroups.handoff.length,
-      reworking: boardGroups.reworking.length,
-      finalizing: boardGroups.finalizing.length,
-      risk: boardGroups.risk.length,
-    };
-  }, [pendingTasks, runningTasks, boardGroups]);
-
-  const heatline = useMemo(() => {
-    const active = [...pendingTasks, ...runningTasks]
+  const spotlight = useMemo(() => {
+    return [...pendingTasks, ...runningTasks]
       .sort((a, b) => b.updatedAt - a.updatedAt)
-      .slice(0, 12)
+      .slice(0, 8)
       .map((task) => ({
         taskId: task.taskId,
-        phase: task.lifecycle.phase,
-        bucket: getHeatBucket(task.updatedAt),
+        status: task.status,
         summary: getLatestSummary(task),
-        updatedAt: task.updatedAt,
+        heat: getHeatBucket(task.updatedAt),
       }));
-    return active;
   }, [pendingTasks, runningTasks]);
 
   return (
@@ -129,46 +111,44 @@ export function App() {
 
       <div className="hero-panel">
         <div>
-          <div className="hero-eyebrow">M-Team Chain View</div>
-          <h2 className="hero-title">链式任务看板</h2>
-          <p className="hero-subtitle">按阶段看任务接力：新任务、交接、返工、执行、收口、风险，一眼看清。</p>
+          <div className="hero-eyebrow">M-Team Task Loop</div>
+          <h2 className="hero-title">任务闭环看板</h2>
+          <p className="hero-subtitle">
+            以 next / complete / fail 为主线，清晰查看当前执行、等待下一步、阻塞问题和验收历史。
+          </p>
         </div>
         <div className="hero-stats">
-          <div className="hero-stat-card"><span>活跃任务</span><strong>{stats.active}</strong></div>
-          <div className="hero-stat-card"><span>等待交接</span><strong>{stats.handoff}</strong></div>
-          <div className="hero-stat-card"><span>返工中</span><strong>{stats.reworking}</strong></div>
-          <div className="hero-stat-card"><span>收口中</span><strong>{stats.finalizing}</strong></div>
-          <div className="hero-stat-card hero-stat-card-risk"><span>风险任务</span><strong>{stats.risk}</strong></div>
+          <div className="hero-stat-card"><span>活跃任务</span><strong>{stats.totalActive}</strong></div>
+          <div className="hero-stat-card"><span>等待下一步</span><strong>{stats.waitingNext}</strong></div>
+          <div className="hero-stat-card"><span>执行中</span><strong>{stats.running}</strong></div>
+          <div className="hero-stat-card hero-stat-card-warn"><span>阻塞问题</span><strong>{stats.blocked}</strong></div>
+          <div className="hero-stat-card"><span>10分钟内更新</span><strong>{stats.fresh}</strong></div>
         </div>
       </div>
 
       <div className="toolbar-panel">
         <div className="toolbar-group">
-          <span className="toolbar-label">风险筛选</span>
-          <button className={`filter-chip${riskFilter === 'all' ? ' active' : ''}`} onClick={() => setRiskFilter('all')}>全部</button>
-          <button className={`filter-chip${riskFilter === 'risk_only' ? ' active' : ''}`} onClick={() => setRiskFilter('risk_only')}>只看风险</button>
-        </div>
-        <div className="toolbar-group">
-          <span className="toolbar-label">热度筛选</span>
-          <button className={`filter-chip${heatFilter === 'all' ? ' active' : ''}`} onClick={() => setHeatFilter('all')}>全部</button>
-          <button className={`filter-chip${heatFilter === 'fresh' ? ' active' : ''}`} onClick={() => setHeatFilter('fresh')}>10分钟内</button>
-          <button className={`filter-chip${heatFilter === 'aging' ? ' active' : ''}`} onClick={() => setHeatFilter('aging')}>10-30分钟</button>
-          <button className={`filter-chip${heatFilter === 'stale' ? ' active' : ''}`} onClick={() => setHeatFilter('stale')}>30分钟以上</button>
+          <span className="toolbar-label">看板筛选</span>
+          <button className={`filter-chip${boardFilter === 'all' ? ' active' : ''}`} onClick={() => setBoardFilter('all')}>全部</button>
+          <button className={`filter-chip${boardFilter === 'needs_next' ? ' active' : ''}`} onClick={() => setBoardFilter('needs_next')}>只看下一步</button>
+          <button className={`filter-chip${boardFilter === 'blocked' ? ' active' : ''}`} onClick={() => setBoardFilter('blocked')}>只看阻塞</button>
+          <button className={`filter-chip${boardFilter === 'fresh' ? ' active' : ''}`} onClick={() => setBoardFilter('fresh')}>只看最近更新</button>
         </div>
       </div>
 
-      <div className="heatline-panel">
+      <div className="spotlight-panel">
         <div className="section-header">
           <div>
-            <h2>🌡️ 任务热度带</h2>
-            <div className="section-subtitle">按最近更新时间排序。蓝 = 新鲜，黄 = 变老，红 = 久未更新。</div>
+            <h2>🛰️ 最近动态</h2>
+            <div className="section-subtitle">用于快速定位正在变化的任务和最新问题摘要。</div>
           </div>
         </div>
-        <div className="heatline-track">
-          {heatline.map((item) => (
-            <button key={item.taskId} className={`heatline-node heat-${item.bucket}`} onClick={() => handleCardClick(item.taskId)} title={`${item.taskId} · ${item.summary}`}>
-              <span className="heatline-phase">{PHASE_LABELS[item.phase]}</span>
-              <strong>{item.taskId.slice(-6)}</strong>
+        <div className="spotlight-grid">
+          {spotlight.map((item) => (
+            <button key={item.taskId} className={`spotlight-card heat-${item.heat}`} onClick={() => handleCardClick(item.taskId)}>
+              <span className={`status-chip status-${item.status}`}>{STATUS_LABELS[item.status]}</span>
+              <strong>{item.taskId.slice(-8)}</strong>
+              <div>{item.summary}</div>
             </button>
           ))}
         </div>
@@ -182,15 +162,22 @@ export function App() {
       {mainTab === 'board' && (
         <>
           <div className="board-grid board-grid-top">
-            <TaskColumn title="🆕 新任务" subtitle={`phase = ${PHASE_LABELS.ready}`} tasks={boardGroups.ready} onCardClick={handleCardClick} variant="ready" />
-            <TaskColumn title="🤝 等待下一棒" subtitle={`phase = ${PHASE_LABELS.handoff}`} tasks={boardGroups.handoff} onCardClick={handleCardClick} variant="handoff" />
-            <TaskColumn title="🛠️ 返工修正" subtitle={`phase = ${PHASE_LABELS.reworking}`} tasks={boardGroups.reworking} onCardClick={handleCardClick} variant="reworking" />
+            <TaskColumn title="🆕 新任务" subtitle="首次发布，尚未形成历史步骤" tasks={board.newTasks} onCardClick={handleCardClick} variant="new" />
+            <TaskColumn title="🔄 等待下一步" subtitle="agent_end 已生成 nextDescription，等待下一棒认领" tasks={board.queuedNext} onCardClick={handleCardClick} variant="next" />
+            <TaskColumn title="🚧 阻塞待处理" subtitle="上一棒已报告问题，下一步需要先处理阻塞项" tasks={board.blockedNext} onCardClick={handleCardClick} variant="blocked" />
           </div>
 
           <div className="board-grid board-grid-bottom">
-            <TaskColumn title="⚙️ 执行中" subtitle={`phase = ${PHASE_LABELS.executing}`} tasks={boardGroups.executing} onCardClick={handleCardClick} variant="executing" />
-            <TaskColumn title="✨ 收口中" subtitle={`phase = ${PHASE_LABELS.finalizing}`} tasks={boardGroups.finalizing} onCardClick={handleCardClick} variant="finalizing" />
-            <TaskColumn title="🚨 风险雷达" subtitle="疑似循环 / 无进展 / 重复 description" tasks={boardGroups.risk} onCardClick={handleCardClick} variant="risk" emptyText="当前没有风险任务" cardDecorator={(task) => `${getLatestSummary(task)}`} />
+            <TaskColumn title="⚙️ 当前执行中" subtitle="已有 executor 持有，正在完成当前一棒" tasks={board.activeWork} onCardClick={handleCardClick} variant="running" />
+            <TaskColumn
+              title="🧭 风险与关注"
+              subtitle="长时间未更新、带阻塞问题或需重点关注的任务"
+              tasks={board.risky}
+              onCardClick={handleCardClick}
+              variant="risk"
+              emptyText="当前没有需要特别关注的任务"
+              cardDecorator={(task) => getLatestSummary(task)}
+            />
           </div>
 
           <HistoryTab activeStatus={activeHistoryStatus} tasks={historyTasks} onStatusChange={setActiveHistoryStatus} onCardClick={handleCardClick} page={historyPage} totalPages={historyTotalPages} total={historyTotal} onPageChange={setHistoryPage} />
@@ -199,7 +186,7 @@ export function App() {
 
       {mainTab === 'logs' && <LogsTab />}
 
-      <TaskDetailModal task={selectedTask} onClose={handleCloseModal} onUpdate={(updated) => { handleRefresh(); setSelectedTask(updated); }} />
+      <TaskDetailModal task={selectedTask} onClose={() => setSelectedTask(null)} onUpdate={(updated) => { handleRefresh(); setSelectedTask(updated); }} />
     </div>
   );
 }
