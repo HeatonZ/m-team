@@ -44,7 +44,7 @@ function buildDecisionPrompt(params: {
     '2. relay：已有有效进展，但整体 goal 未完成，且下一步明确可交接。',
     '3. retain：有进展但信息不足以安全 complete/relay，或当前 executor 应继续收口。',
     '4. fail：当前阻塞或无有效进展，且无法形成可执行下一步。',
-    '5. 如果 transcript 里出现“下一步：...”，且内容明确，应优先考虑 relay。',
+    '5. 不要依赖 executor 显式写“下一步：...”。是否需要 relay、以及 nextDescription 写什么，都由你根据 goal、当前 description、context 和本轮产出自行判断。',
     '6. 如果 transcript 只有模糊完成口径，没有结构化结果/产物/证据，不得 complete。',
     '7. nextDescription 只能是单步、可执行指令；若 decision 不是 relay，可留空。',
     '',

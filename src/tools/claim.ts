@@ -63,13 +63,13 @@ export function register(
 1. 先调用 mteam_get_task 查任务详情（含执行历史 + 当前 description）
 2. 根据执行历史确认：前面已完成什么、当前这一棒要补什么、哪些问题正待处理
 3. 只围绕当前 description 执行当前这一步，不要自行扩展为整条任务计划
-4. 做完后最后一条消息必须结构化汇报 4 件事：
+4. 做完后最后一条消息必须结构化汇报 3 件事：
    - 结果摘要：当前步骤完成了什么
    - 产出文件 / 数据引用：留下了什么可验证产物
    - 未解决问题：当前还卡在哪、是否阻塞；如果无问题，也要明确写“无未解决问题”
-   - 下一步：明确建议下一棒的单步动作；如果你判断当前已无需下一步，也只写“无下一步建议”，不要解释整体任务是否完成
-5. 不要只写“任务完成”或“已完成”；必须同时写出产物、问题、下一步建议
-6. 做完后直接结束 session，m-team 会在 agent_end hook 收口并判断 complete / relay / fail / retain
+5. 不要写“下一步建议”或替下一棒下指令；下一步由 agent_end 统一裁决
+6. 不要只写“任务完成”或“已完成”；必须同时写出产物和问题状态
+7. 做完后直接结束 session，m-team 会在 agent_end hook 收口并判断 complete / relay / fail / retain
 
 【禁止事项】
 - 禁止主动调用 mteam_relinquish_task / mteam_update_task / mteam_close_task

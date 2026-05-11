@@ -94,11 +94,9 @@ function fingerprint(text: string): string {
 function inferOutput(text: string): ContextStepOutput {
   const files = [...text.matchAll(/(?:\/mnt\/[^\s,，；;。]+|[\w./-]+\.(?:json|md|csv|txt|png|jpg|webp))/g)].map(m => m[0]);
   const unresolvedIssues = [...text.matchAll(/(?:问题|缺失|未完成|待处理|需补齐|需要修正|阻塞|无法继续|报错|异常)[:：]?\s*([^\n]+)/g)].map(m => m[1].trim());
-  const handoffMatch = text.match(/(?:下一步|建议)[:：]\s*([^\n]+)/i);
   return {
     summary: text.slice(0, 500),
     files: Array.from(new Set(files)).slice(0, 20),
-    handoffNote: handoffMatch?.[1]?.trim(),
     unresolvedIssues: Array.from(new Set(unresolvedIssues)).slice(0, 10),
   };
 }

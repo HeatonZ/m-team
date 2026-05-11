@@ -24,12 +24,13 @@ describe('executor prompt contract e2e', () => {
       expect(claimText).not.toContain('目标:');
 
       const runMessage = harness.readSubagentRuns().at(-1)?.message ?? '';
-      expect(runMessage).toContain('最后一条消息必须结构化汇报 4 件事');
+      expect(runMessage).toContain('最后一条消息必须结构化汇报 3 件事');
       expect(runMessage).toContain('结果摘要');
       expect(runMessage).toContain('未解决问题');
       expect(runMessage).toContain('无未解决问题');
-      expect(runMessage).toContain('无下一步建议');
+      expect(runMessage).toContain('不要写“下一步建议”或替下一棒下指令');
       expect(runMessage).toContain('你不拥有 goal 视角，不判断整任务是否完成');
+      expect(runMessage).not.toContain('无下一步建议');
       expect(runMessage).not.toContain('如果没有下一步，要说明为什么整个任务已满足 goal');
       expect(runMessage).not.toContain('本步完成 ≠ 整任务完成');
       expect(runMessage).not.toContain('目标: 形成最终选品结论');

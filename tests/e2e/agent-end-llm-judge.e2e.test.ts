@@ -84,9 +84,7 @@ describe('agent_end llm judge e2e', () => {
 
       await harness.runAgentEnd({
         success: true,
-        messages: [
-          { role: 'assistant', content: '结果摘要：已完成首轮筛选，保留 2 个候选。下一步：继续搜索宠物玩具，筛选 costPrice ≤ 5 RMB、规格数 ≤ 8，找够剩余 3 个' },
-        ],
+        messages: [{ role: 'assistant', content: '结果摘要：已保留 2 个候选。建议：继续搜索宠物玩具，筛选 costPrice ≤ 5 RMB、规格数 ≤ 8，找够剩余 3 个' }],
       } as never, { agentId: 'maker', sessionKey: `agent:maker:m-team:${taskId}` });
 
       const task = harness.readTask(taskId);
