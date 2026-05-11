@@ -20,7 +20,7 @@ export function register(
   api.registerTool({
     name: 'mteam_cancel_task',
     label: '取消任务',
-    description: 'Publisher 取消任务（不可再 relay）',
+    description: 'Publisher 取消任务（取消后不可再进入下一步）',
     parameters: CancelTaskParams,
     async execute(_toolCallId: string, rawParams: CancelTaskParamsInterface) {
       const taskId = readTaskId(rawParams, 'taskId', { required: true })!;

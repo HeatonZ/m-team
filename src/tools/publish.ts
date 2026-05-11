@@ -3,8 +3,8 @@
  */
 
 import type { OpenClawPluginApi } from 'openclaw/plugin-sdk';
-import type { PluginHookToolContext } from 'openclaw/plugin-sdk/core';
 import type { MTeamPluginConfig } from '../config.js';
+import type { OpenClawPluginToolContext } from '../types/openclaw-hooks.js';
 import { textResult } from './shared.js';
 import { publishTask, getTask } from '../pool/index.js';
 import { formatTaskAsText } from './helpers.js';
@@ -12,7 +12,7 @@ import { formatPublishNotifications, sendNotifications } from '../notifications.
 import { PublishTaskParams } from '../types/tools.js';
 import type { PublishTaskParamsInterface } from '../types/tools.js';
 
-function inferPublisher(rawParams: PublishTaskParamsInterface, toolContext?: PluginHookToolContext): string {
+function inferPublisher(rawParams: PublishTaskParamsInterface, toolContext?: OpenClawPluginToolContext): string {
   const explicitPublisher = rawParams.publisher?.trim();
   if (explicitPublisher) return explicitPublisher;
 
@@ -21,6 +21,10 @@ function inferPublisher(rawParams: PublishTaskParamsInterface, toolContext?: Plu
 
   throw new Error('mteam_publish_task 缺少 publisher：既未显式传 publisher，也未从 toolContext.agentId 推断到调用者');
 }
+
+type PublishToolParams = PublishTaskParamsInterface & {
+  toolContext?: OpenClawPluginToolContext;
+};
 
 export function register(
   api: OpenClawPluginApi,
@@ -32,10 +36,12 @@ export function register(
     label: '发布任务',
     description: '发布任务到 M-Team 任务池',
     parameters: PublishTaskParams,
-    async execute(_toolCallId: string, rawParams: PublishTaskParamsInterface, toolContext?: PluginHookToolContext) {
-      const publisher = inferPublisher(rawParams, toolContext);
-      api.logger?.info?.(`[m-team] publish execute sessionKey=${toolContext?.sessionKey ?? 'missing-session-key'} agentId=${toolContext?.agentId?.trim() ?? 'missing-agent-id'} rawPublisher=${rawParams.publisher?.trim() ?? 'missing'} effectivePublisher=${publisher}`);
-      const { description, goal, taskType, priority } = rawParams;
+    async execute(_toolCallId: string, rawParams: unknown) {
+      const params = rawParams as PublishToolParams;
+      const toolContext = params.toolContext;
+      const publisher = inferPublisher(params, toolContext);
+      api.logger?.info?.(`[m-team] publish execute sessionKey=${toolContext?.sessionKey ?? 'missing-session-key'} agentId=${toolContext?.agentId?.trim() ?? 'missing-agent-id'} rawPublisher=${params.publisher?.trim() ?? 'missing'} effectivePublisher=${publisher}`);
+      const { description, goal, taskType, priority } = params;
 
       const taskId = publishTask({
         taskType,

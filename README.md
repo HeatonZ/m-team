@@ -9,7 +9,7 @@
 - **共享任务池** — SQLite 持久化，所有节点可读写
 - **接力执行** — executor 只做当前步骤，没完成就放回池子让下一个接上
 - **context 追溯** — 完整步骤历史，下一个 executor 能看到上一步做了什么
-- **自动完成** — Executor Session 结束时 hook 自动标记完成/失败
+- **LLM 裁决** — Executor Session 结束后由 `agent_end` 统一决定 next / complete / fail
 
 ## 快速安装
 

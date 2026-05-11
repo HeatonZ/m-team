@@ -4,32 +4,29 @@
 
 import { openDb, getTaskRow, getTaskRowByExecutor } from './db';
 import { getTaskRowsByStatus as _db_getTaskRowsByStatus, getAllTaskRows as _db_getAllTaskRows } from './db';
-import { TaskPhase, TaskStatus, type Task } from '../schema/task';
+import { TaskStatus, type Task } from '../schema/task';
 import { setWorkspaceRoot, DB_PATH } from './operations';
 import {
   publishTask,
   claimTask,
   updateTask,
   relinquishTask,
-  relayTask,
+  nextTask,
   cancelTask,
   completeTask,
   failTask,
   closeTask,
-  retainTaskOwnership,
   type ClaimResult,
   type CancelResult,
   type RelinquishResult,
-  type RelayResult,
   type CompleteResult,
   type CloseResult,
   type ContextStepInput,
-  type RetainResult
 } from './operations';
 
 export { setWorkspaceRoot, DB_PATH };
-export { publishTask, claimTask, updateTask, relinquishTask, relayTask, cancelTask, completeTask, failTask, closeTask, retainTaskOwnership };
-export type { ClaimResult, CancelResult, RelinquishResult, RelayResult, CompleteResult, CloseResult, ContextStepInput, RetainResult };
+export { publishTask, claimTask, updateTask, relinquishTask, nextTask, cancelTask, completeTask, failTask, closeTask };
+export type { ClaimResult, CancelResult, RelinquishResult, CompleteResult, CloseResult, ContextStepInput };
 export { getTaskLogs } from './db';
 export type { TaskLog, TaskLogInput } from './db';
 
@@ -55,7 +52,7 @@ export function getRunningTasks(): Task[] {
 export function getPendingTasks(agentId?: string | null): Task[] {
   init();
   if (agentId && getAgentActiveTask(agentId)) return [];
-  return getTaskRowsByStatus(TaskStatus.PENDING).filter(task => [TaskPhase.READY, TaskPhase.HANDOFF, TaskPhase.REWORKING].includes(task.lifecycle.phase));
+  return getTaskRowsByStatus(TaskStatus.PENDING);
 }
 
 export function getAgentActiveTask(agentId: string): Task | null {

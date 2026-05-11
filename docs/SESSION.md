@@ -11,7 +11,7 @@
 
 如果你要看：
 - 为什么采用当前架构 → 看 `ARCHITECTURE.md`
-- Task 对象和状态模型 → 看 `TASK.md`
+- Task 对象和最小状态模型 → 看 `TASK.md`
 - 代码模块在哪 → 看 `IMPLEMENTATION.md`
 
 ---
@@ -35,10 +35,10 @@ M-Team 运行时至少有四个职责位：
 
 ```text
 Publisher publish task
-→ task 进入 pending + ready
+→ task 进入 pending
 → idle executor heartbeat 看到可认领任务
 → claim
-→ task 进入 running + executing
+→ task 进入 running
 → executor session 执行当前一棒
 → executor 结束 session
 → agent_end 裁决
@@ -46,9 +46,9 @@ Publisher publish task
    → retain
    → complete
    → fail
-→ 若 relay，则回到 pending + handoff / reworking
-→ 若 retain，则继续 running + executing / finalizing
-→ 若 complete，则进入 completed + done
+→ 若 relay，则回到 pending
+→ 若 retain，则继续 running
+→ 若 complete，则进入 completed
 → Publisher heartbeat 验收
 → close 或 reject
 ```
@@ -70,7 +70,6 @@ Publisher 的输入是：
 
 发布后，任务进入：
 - `status = pending`
-- `lifecycle.phase = ready`
 
 ### 4.2 Publisher 不直接执行链路
 Publisher 负责定义目标和验收，不负责顶替 executor 把链跑完。
@@ -149,7 +148,6 @@ Heartbeat session 不应：
 - 当前 task 已由某 agent 持有
 - 当前只需要完成 `description` 这一棒
 - 主状态为 `running`
-- 常见 phase 为 `executing`
 
 ### 6.2 Executor session 的职责
 Executor 只负责：
@@ -196,7 +194,7 @@ Executor 不应：
 
 这里的重点不是继续堆 fallback 规则，而是：
 
-> **把任务理解集中到 `agent_end`，把系统代码保留为状态、phase 和权限约束层。**
+> **把任务理解集中到 `agent_end`，把系统代码保留为状态和权限约束层。**
 
 ### 7.1 测试要求
 当测试 `runAgentEnd()` 行为时，应显式 stub `agentEndJudge`/runtime judge，不能依赖隐式默认行为猜测任务会自动进入 `completed` 或 `pending`。
@@ -223,7 +221,6 @@ Executor 不应：
 
 结果通常是：
 - `status = completed`
-- `phase = done`
 
 ### 8.3 `relay`
 当以下条件成立时应优先 relay：
@@ -235,7 +232,6 @@ Executor 不应：
 
 结果通常是：
 - `status = pending`
-- `phase = handoff`
 
 ### 8.4 `retain`
 只有在以下场景才 retain：
@@ -247,7 +243,6 @@ retain 不是“先收着再说”的规则兜底区。
 
 结果通常是：
 - `status = running`
-- `phase = executing` 或 `finalizing`
 
 ---
 
@@ -260,16 +255,12 @@ retain 不是“先收着再说”的规则兜底区。
 3. 清空当前 `executor`
 4. 记录 `lastExecutor`
 5. 把任务转回 `pending`
-6. 把 `phase` 设为 `handoff`
-
-如果是 Publisher 驳回后的返工回池，phase 语义应是 `reworking`，而不是普通 handoff。
 
 ### 9.2 retain
 当 `agent_end` 决定 retain 时：
 - 当前 executor 继续持有任务
 - 任务仍是 `running`
 - `description` 保持当前棒，或切成当前 executor 的补充动作
-- phase 保持 `executing`，或进入 `finalizing`
 
 ### 9.3 complete
 当 `agent_end` 决定 complete 时：
@@ -277,7 +268,6 @@ retain 不是“先收着再说”的规则兜底区。
 - `executor` 清空
 - 任务进入 `completed`
 - `completedAt` 赋值
-- phase 进入 `done`
 
 注意：
 - `complete` 只是 executor 侧的完成提交
@@ -318,7 +308,6 @@ Publisher 发现 `completed` 任务不合格：
   - 下一步描述
 - 系统从 reason 中解析新的 `nextDescription`
 - 任务重新回到 `pending`
-- phase 应体现返工语义（`reworking`）
 
 ### 11.2 timeout relinquish
 Publisher heartbeat 发现：
@@ -353,7 +342,7 @@ Publisher heartbeat 发现：
 对应测试：
 - `tests/e2e/publisher-acceptance-full-chain.e2e.test.ts`
 - `tests/e2e/publisher-heartbeat-acceptance.e2e.test.ts`
-- `tests/e2e/hook-lifecycle.e2e.test.ts`
+- `tests/e2e/hook-runtime.e2e.test.ts`
 - `tests/e2e/publisher-terminal-actions.e2e.test.ts`
 - `tests/e2e/agent-end-llm-judge.e2e.test.ts`
 

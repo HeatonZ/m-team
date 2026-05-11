@@ -28,11 +28,11 @@ export const failedTextResult = textResult;
 export async function notifyIfNeeded(
   shouldNotify: boolean,
   getNotifications: () => FormattedNotification[],
-  logger: PluginLogger | null
+  logger?: PluginLogger | null
 ): Promise<void> {
   if (!shouldNotify) return;
   try {
-    await sendNotifications(getNotifications(), logger);
+    await sendNotifications(getNotifications(), logger ?? undefined);
   } catch (e) {
     logger?.warn('[m-team] 通知发送失败');
   }

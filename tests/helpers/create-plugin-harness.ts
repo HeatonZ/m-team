@@ -1,14 +1,16 @@
 import type {
   OpenClawPluginApi,
+} from 'openclaw/plugin-sdk/core';
+import type {
+  OpenClawPluginToolContext,
   PluginHookAgentEndEvent,
   PluginHookAgentContext,
   PluginHookAfterToolCallEvent,
   PluginHookBeforeToolCallEvent,
   PluginHookBeforeToolCallResult,
-  PluginHookToolContext,
   PluginHeartbeatPromptContributionEvent,
   PluginHeartbeatPromptContributionResult,
-} from 'openclaw/plugin-sdk/core';
+} from '../../src/types/openclaw-hooks.js';
 import type { SubagentRunInput } from 'openclaw/plugin-sdk';
 import plugin from '../../src/index.ts';
 import { setWorkspaceRoot, getTask, getTaskLogs, getAllTasks } from '../../src/pool/index.js';
@@ -21,17 +23,17 @@ export interface RegisteredTool {
   label?: string;
   description?: string;
   parameters?: unknown;
-  execute: (toolCallId: string, rawParams: Record<string, unknown>, toolContext?: PluginHookToolContext) => Promise<unknown>;
+  execute: (toolCallId: string, rawParams: Record<string, unknown>, toolContext?: OpenClawPluginToolContext) => Promise<unknown>;
 }
 
 type HookMap = {
   before_tool_call: Array<(
     event: PluginHookBeforeToolCallEvent,
-    ctx: PluginHookToolContext,
+    ctx: OpenClawPluginToolContext,
   ) => PluginHookBeforeToolCallResult | void>;
   after_tool_call: Array<(
     event: PluginHookAfterToolCallEvent,
-    ctx: PluginHookToolContext,
+    ctx: OpenClawPluginToolContext,
   ) => void | Promise<void>>;
   heartbeat_prompt_contribution: Array<(
     event: PluginHeartbeatPromptContributionEvent,
@@ -46,7 +48,7 @@ type HookMap = {
 export interface ExecOptions {
   agentId?: string;
   sessionKey?: string;
-  toolContext?: PluginHookToolContext;
+  toolContext?: OpenClawPluginToolContext;
 }
 
 export interface PluginHarness {
@@ -129,7 +131,7 @@ function createTestApi(config: TestPluginConfig): OpenClawPluginApi & { __regist
   return api as OpenClawPluginApi & { __registeredTools: RegisteredTool[]; __hooks: HookMap; __logRecords: Array<{ level: 'info' | 'warn' | 'error'; message: string }>; __subagentRuns: SubagentRunInput[] };
 }
 
-function buildToolContext(name: string, params: Record<string, unknown>, options: ExecOptions): PluginHookToolContext {
+function buildToolContext(name: string, params: Record<string, unknown>, options: ExecOptions): OpenClawPluginToolContext {
   if (options.toolContext) return options.toolContext;
 
   const agentId = options.agentId ?? (typeof params.agentId === 'string' ? params.agentId : undefined) ?? 'manager';
@@ -138,7 +140,7 @@ function buildToolContext(name: string, params: Record<string, unknown>, options
   return {
     agentId,
     sessionKey,
-  } as PluginHookToolContext;
+  } as OpenClawPluginToolContext;
 }
 
 export async function createPluginHarness(overrides: Partial<TestPluginConfig> = {}): Promise<PluginHarness> {
@@ -179,7 +181,7 @@ export async function createPluginHarness(overrides: Partial<TestPluginConfig> =
       let result: unknown;
       let error: string | undefined;
       try {
-        result = await tool.execute('test-tool-call', params, ctx);
+        result = await tool.execute('test-tool-call', { ...params, toolContext: ctx });
       } catch (err) {
         error = err instanceof Error ? err.message : String(err);
         throw err;
@@ -221,11 +223,14 @@ export async function createPluginHarness(overrides: Partial<TestPluginConfig> =
       if (!task) throw new Error(`Task not found: ${taskId}`);
       mutator(task);
       const db = getDb();
-      db.prepare('UPDATE tasks SET status = ?, completed_at = ?, updated_at = ?, lifecycle = ? WHERE task_id = ?').run(
+      db.prepare('UPDATE tasks SET status = ?, completed_at = ?, updated_at = ?, executor = ?, last_executor = ?, description = ?, context = ? WHERE task_id = ?').run(
         task.status,
         task.completedAt,
         task.updatedAt,
-        JSON.stringify(task.lifecycle),
+        task.executor,
+        task.lastExecutor,
+        task.description,
+        JSON.stringify(task.context),
         taskId,
       );
     },

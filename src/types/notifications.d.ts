@@ -13,7 +13,7 @@ declare module '../notifications' {
   export function getNotifications(): Notification[];
   export function formatTaskNotifications(task: unknown, notifications: Notification[]): Notification[];
   export function formatRelinquishNotifications(task: unknown, notifications: Notification[]): Notification[];
-  export function formatRelayNotifications(task: unknown, notifications: Notification[]): Notification[];
+  export function formatNextNotifications(task: unknown, notifications: Notification[]): Notification[];
   export function formatPublishNotifications(task: unknown, notifications: Notification[]): Notification[];
   export function formatClaimNotifications(task: unknown, notifications: Notification[]): Notification[];
   export function formatCancelNotifications(task: unknown, notifications: Notification[]): Notification[];

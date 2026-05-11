@@ -62,35 +62,6 @@ export const VALID_TASK_TYPES: TaskType[] = [
   TaskType.CONTENT
 ];
 
-export const TaskPhase = {
-  READY: 'ready',
-  EXECUTING: 'executing',
-  HANDOFF: 'handoff',
-  REWORKING: 'reworking',
-  FINALIZING: 'finalizing',
-  DONE: 'done'
-} as const;
-
-export type TaskPhase = typeof TaskPhase[keyof typeof TaskPhase];
-
-export const VALID_TASK_PHASES: TaskPhase[] = [
-  TaskPhase.READY,
-  TaskPhase.EXECUTING,
-  TaskPhase.HANDOFF,
-  TaskPhase.REWORKING,
-  TaskPhase.FINALIZING,
-  TaskPhase.DONE
-];
-
-export const LifecycleDecision = {
-  RETAIN: 'retain',
-  RELAY: 'relay',
-  COMPLETE: 'complete',
-  FAIL: 'fail'
-} as const;
-
-export type LifecycleDecision = typeof LifecycleDecision[keyof typeof LifecycleDecision];
-
 // ============================================================
 // 核心类型
 // ============================================================
@@ -117,24 +88,6 @@ export interface ContextStepEntry {
 
 export type ContextEntry = ContextStepEntry;
 
-export interface LoopGuardState {
-  samePhaseCount: number;
-  sameDescriptionCount: number;
-  noProgressCount: number;
-  lastDescriptionFingerprint?: string;
-  lastContextFingerprint?: string;
-  lastProgressAt?: number;
-}
-
-export interface TaskLifecycle {
-  phase: TaskPhase;
-  handoffCount: number;
-  reworkCount: number;
-  lastDecision?: LifecycleDecision;
-  lastDecisionAt?: number;
-  loopGuard: LoopGuardState;
-}
-
 /**
  * M-Team 任务 — 内存中的完整任务对象
  *
@@ -149,7 +102,6 @@ export interface Task {
   goal: string;
   description: string;
   context: ContextEntry[];
-  lifecycle: TaskLifecycle;
   priority: TaskPriority;
   publisher: string;
   status: TaskStatus;
@@ -169,36 +121,6 @@ export interface ValidationResult {
   errors: string[];
 }
 
-function isValidLoopGuard(value: unknown): boolean {
-  if (!value || typeof value !== 'object') return false;
-  const guard = value as Record<string, unknown>;
-  return typeof guard.samePhaseCount === 'number'
-    && typeof guard.sameDescriptionCount === 'number'
-    && typeof guard.noProgressCount === 'number';
-}
-
-function isValidLifecycle(value: unknown): boolean {
-  if (!value || typeof value !== 'object') return false;
-  const lifecycle = value as Record<string, unknown>;
-  return VALID_TASK_PHASES.includes(lifecycle.phase as TaskPhase)
-    && typeof lifecycle.handoffCount === 'number'
-    && typeof lifecycle.reworkCount === 'number'
-    && isValidLoopGuard(lifecycle.loopGuard);
-}
-
-export function createDefaultLifecycle(phase: TaskPhase = TaskPhase.READY): TaskLifecycle {
-  return {
-    phase,
-    handoffCount: 0,
-    reworkCount: 0,
-    loopGuard: {
-      samePhaseCount: 0,
-      sameDescriptionCount: 0,
-      noProgressCount: 0,
-    }
-  };
-}
-
 export function normalizeTask(task: Task): Task {
   const normalizedContext = (task.context ?? []).filter((entry): entry is ContextStepEntry => {
     return entry?.type === 'step'
@@ -213,7 +135,6 @@ export function normalizeTask(task: Task): Task {
   return {
     ...task,
     context: normalizedContext,
-    lifecycle: isValidLifecycle(task.lifecycle) ? task.lifecycle : createDefaultLifecycle(),
   };
 }
 
@@ -262,9 +183,6 @@ export function validateTask(task: unknown): ValidationResult {
   if (t.priority && !VALID_PRIORITIES.includes(t.priority as TaskPriority)) {
     errors.push(`priority 无效，可选值: ${VALID_PRIORITIES.join(', ')}`);
   }
-  if (!isValidLifecycle(t.lifecycle)) {
-    errors.push('lifecycle 无效，缺少合法 phase / 计数器 / loopGuard');
-  }
 
   return { valid: errors.length === 0, errors };
 }
@@ -280,8 +198,7 @@ export interface TaskPatch {
   lastExecutor?: string | null;
   description?: string;
   context?: string; // JSON stringified ContextEntry[]
-  lifecycle?: string; // JSON stringified TaskLifecycle
-  completedAt?: number;
+  completedAt?: number | null;
   updatedAt?: number;
 }
 
@@ -312,7 +229,6 @@ export function createTask(input: CreateTaskInput): Task {
     description: String(description),
     goal: String(goal),
     context: [],
-    lifecycle: createDefaultLifecycle(TaskPhase.READY),
     priority,
     publisher: publisher || 'user',
     status: TaskStatus.PENDING,
@@ -353,25 +269,12 @@ export const TASK_TYPE_LABELS: Record<TaskType, string> = {
   [TaskType.CONTENT]: '内容'
 };
 
-export const TASK_PHASE_LABELS: Record<TaskPhase, string> = {
-  [TaskPhase.READY]: '待接手',
-  [TaskPhase.EXECUTING]: '执行中',
-  [TaskPhase.HANDOFF]: '等待交接',
-  [TaskPhase.REWORKING]: '返工中',
-  [TaskPhase.FINALIZING]: '收口中',
-  [TaskPhase.DONE]: '已完成'
-};
-
 export function getTaskTypeLabel(taskType: TaskType): string {
   return TASK_TYPE_LABELS[taskType] ?? taskType;
 }
 
 export function getStatusLabel(status: TaskStatus): string {
   return STATUS_LABELS[status] ?? status;
-}
-
-export function getPhaseLabel(phase: TaskPhase): string {
-  return TASK_PHASE_LABELS[phase] ?? phase;
 }
 
 export function formatTaskForHuman(input: Task): string {
@@ -382,8 +285,7 @@ export function formatTaskForHuman(input: Task): string {
     `📋 当前：${task.description}`,
     `ID: ${task.taskId}`,
     `优先级: ${PRIORITY_LABELS[task.priority] ?? '🟡 中'}`,
-    `状态: ${getStatusLabel(task.status)}`,
-    `阶段: ${getPhaseLabel(task.lifecycle.phase)}`
+    `状态: ${getStatusLabel(task.status)}`
   ];
 
   const stepCount = task.context.length;

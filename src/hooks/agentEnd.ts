@@ -4,15 +4,13 @@
 
 import type {
   OpenClawPluginApi,
-  PluginHookAgentEndEvent,
-  PluginHookAgentContext,
   PluginRuntime,
 } from 'openclaw/plugin-sdk/core';
+import type { PluginHookAgentEndEvent, PluginHookAgentContext } from '../types/openclaw-hooks.js';
 import {
   failTask,
   completeTask,
-  relayTask,
-  retainTaskOwnership,
+  nextTask,
 } from '../pool/operations.js';
 import { getTask } from '../pool/index.js';
 import { judgeAgentEndWithLlm } from './agentEndLlm.js';
@@ -21,14 +19,16 @@ import {
   sendNotifications,
   getNotifications,
   formatFailNotifications,
-  formatRelayNotifications,
+  formatNextNotifications,
   formatTaskNotifications,
 } from '../notifications.js';
-import {
-  TaskPhase,
-  type ContextStepOutput,
-  type Task,
-} from '../schema/task.js';
+import { TaskStatus, type ContextStepOutput, type Task } from '../schema/task.js';
+
+type RuntimeWithTaskStorage = PluginRuntime & {
+  storage?: {
+    get?: <T>(key: string) => Promise<T | null>;
+  };
+};
 
 function parseTaskId(sessionKey: string): string | null {
   if (!sessionKey?.startsWith('agent:')) return null;
@@ -116,12 +116,65 @@ function hasExplicitBlocker(text: string, output: ContextStepOutput): boolean {
     || Boolean(output.unresolvedIssues?.some(issue => /阻塞|无法|缺少|报错|异常|失败/i.test(issue)));
 }
 
-function buildConservativeRetainDescription(task: Task): string {
-  return `继续补齐当前步骤“${task.description}”的结构化结果，并明确是否满足 goal；若需交接，请给出下一棒单步 description。`;
+function hasProblemReportSignal(text: string, output: ContextStepOutput): boolean {
+  const combined = [text, ...(output.unresolvedIssues ?? [])].join('\n');
+  return /补齐|修复|重试|核对|检查|校验|重新生成|重新运行|补充|完善|排查|缺少|待补|需补|问题|阻塞/i.test(combined);
+}
+
+function buildConservativeNextDescription(task: Task): string {
+  return `继续处理当前任务“${task.description}”中已报告的问题，完成一个清晰、可验证的下一步结果，并继续如实汇报产物与剩余问题。`;
+}
+
+type ProblemKind =
+  | 'missing_artifact'
+  | 'missing_evidence'
+  | 'quality_gap'
+  | 'blocked_by_permission'
+  | 'blocked_by_external_input'
+  | 'needs_other_skill'
+  | 'incomplete_step'
+  | 'generic_problem';
+
+function classifyProblem(task: Task, text: string, output: ContextStepOutput): {
+  kind: ProblemKind;
+  blocking: boolean;
+  summary: string;
+} {
+  const joined = `${text}\n${(output.unresolvedIssues ?? []).join('\n')}`.trim();
+  const summary = (output.unresolvedIssues?.[0] ?? output.summary ?? joined ?? task.description).trim() || task.description;
+  if (/权限不足|无权限|permission/i.test(joined)) return { kind: 'blocked_by_permission', blocking: true, summary };
+  if (/缺少前置|前置条件不足|需要外部输入|等待外部|缺少数据源|缺少素材/i.test(joined)) return { kind: 'blocked_by_external_input', blocking: true, summary };
+  if (/需要测试|需要设计|需要研究|需要调研|需要运维|需要人工验收/i.test(joined)) return { kind: 'needs_other_skill', blocking: false, summary };
+  if (/文件不存在|缺少文件|未生成文件|缺失产物/i.test(joined)) return { kind: 'missing_artifact', blocking: false, summary };
+  if (/缺少证据|无法验证|未校验|缺少截图|缺少证明/i.test(joined)) return { kind: 'missing_evidence', blocking: false, summary };
+  if (/质量不达标|结果不完整|字段缺失|数据不全/i.test(joined)) return { kind: 'quality_gap', blocking: false, summary };
+  if (/未完成|待补齐|需补齐|还需继续|还差|继续处理/i.test(joined)) return { kind: 'incomplete_step', blocking: false, summary };
+  return { kind: 'generic_problem', blocking: hasExplicitBlocker(text, output), summary };
+}
+
+function buildNextDescriptionFromProblem(task: Task, problem: { kind: ProblemKind; blocking: boolean; summary: string }): string {
+  switch (problem.kind) {
+    case 'missing_artifact':
+      return `补齐当前任务“${task.description}”缺失的产物文件，并重新提交可验证结果。问题：${problem.summary}`;
+    case 'missing_evidence':
+      return `补充当前任务“${task.description}”缺失的验证证据，并重新提交可验收结果。问题：${problem.summary}`;
+    case 'quality_gap':
+      return `修正当前任务“${task.description}”中不完整或不达标的结果，并重新输出可验证产物。问题：${problem.summary}`;
+    case 'blocked_by_permission':
+      return `处理当前任务“${task.description}”所需的权限或访问阻塞，补齐可执行前置后再继续推进。问题：${problem.summary}`;
+    case 'blocked_by_external_input':
+      return `补齐当前任务“${task.description}”缺失的外部输入或前置条件，确认输入可用后再继续推进。问题：${problem.summary}`;
+    case 'needs_other_skill':
+      return `继续推进当前任务“${task.description}”的下一步专业处理动作，并补齐本轮报告问题。问题：${problem.summary}`;
+    case 'incomplete_step':
+      return `继续完成当前任务“${task.description}”尚未完成的部分，补齐缺口后重新提交结果。问题：${problem.summary}`;
+    default:
+      return `继续围绕当前任务“${task.description}”中本轮报告的问题推进下一步处理动作，并补齐可验证结果。问题：${problem.summary}`;
+  }
 }
 
 function decideConservativeFallback(task: Task, text: string, output: ContextStepOutput): {
-  decision: 'retain' | 'fail';
+  decision: 'next' | 'fail';
   reason: string;
   description?: string;
 } {
@@ -140,10 +193,20 @@ function decideConservativeFallback(task: Task, text: string, output: ContextSte
   }
 
   if (hasStructuredProgress(output, text)) {
+    const problem = classifyProblem(task, text, output);
     return {
-      decision: 'retain',
+      decision: 'next',
       reason: 'LLM_UNAVAILABLE_WITH_PARTIAL_PROGRESS',
-      description: buildConservativeRetainDescription(task),
+      description: buildNextDescriptionFromProblem(task, problem),
+    };
+  }
+
+  if (hasProblemReportSignal(text, output)) {
+    const problem = classifyProblem(task, text, output);
+    return {
+      decision: 'next',
+      reason: 'LLM_UNAVAILABLE_BUT_PROBLEM_REPORTED',
+      description: buildNextDescriptionFromProblem(task, problem),
     };
   }
 
@@ -159,14 +222,15 @@ export function registerAgentEndHook(api: OpenClawPluginApi): void {
     const taskId = parseTaskId(sessionKey ?? '');
     if (!taskId || !isExecutorSessionForTask(sessionKey, agentId, taskId)) return;
 
-    const task = await api.runtime.storage?.get?.<Task>(`mteam:task:${taskId}`).catch(() => null) ?? getTask(taskId) ?? null;
+    const runtime = api.runtime as RuntimeWithTaskStorage;
+    const task = await runtime.storage?.get?.<Task>(`mteam:task:${taskId}`).catch(() => null) ?? getTask(taskId) ?? null;
     if (!task) {
       api.logger?.warn?.(`[m-team] agent_end task lookup miss taskId=${taskId} sessionKey=${sessionKey ?? 'missing-session-key'} agentId=${agentId ?? 'missing-agent-id'}`);
       return;
     }
-    if (![TaskPhase.EXECUTING, TaskPhase.FINALIZING].includes(task.lifecycle.phase)) return;
+    if (task.status !== TaskStatus.RUNNING) return;
 
-    const nonSystemMessages = (event.messages ?? []).filter(msg => (msg as Record<string, unknown>).role !== 'system');
+    const nonSystemMessages = (event.messages ?? []).filter((msg: unknown) => (msg as Record<string, unknown>).role !== 'system');
     if (nonSystemMessages.length === 0) {
       const result = failTask(taskId, 'AGENT_END_MESSAGES_EMPTY', null, { outcome: 'error', error: 'AGENT_END_MESSAGES_EMPTY' });
       writeTaskLog({ taskId, action: 'fail', sessionKey: sessionKey ?? undefined, agentId: agentId ?? undefined, result: { success: result.success, decision: 'fail' }, error: 'AGENT_END_MESSAGES_EMPTY' });
@@ -217,18 +281,11 @@ export function registerAgentEndHook(api: OpenClawPluginApi): void {
         return;
       }
 
-      if (judged.decision === 'relay') {
+      if (judged.decision === 'next') {
         const nextDescription = judged.nextDescription!.trim();
-        const result = relayTask(taskId, agentId ?? task.executor ?? 'unknown', { step, output: { ...normalizedOutput, summary: judged.summary ?? normalizedOutput.summary, unresolvedIssues: judged.unresolvedIssues ?? normalizedOutput.unresolvedIssues } }, nextDescription, 'handoff');
-        writeTaskLog({ taskId, action: 'relay', sessionKey: sessionKey ?? undefined, agentId: agentId ?? undefined, result: { success: result.success, decision: 'relay', via: 'llm', nextDescription, confidence: judged.confidence, reason: judged.reason, llm_raw: llmDecision.raw, evidence: { summary: normalizedOutput.summary ?? '', files: normalizedOutput.files ?? [], unresolvedIssues: normalizedOutput.unresolvedIssues ?? [], error: normalizedOutput.error ?? null } } });
-        if (result.task) await sendNotifications(formatRelayNotifications(result.task, getNotifications()), api.logger ?? null).catch(() => null);
-        return;
-      }
-
-      if (judged.decision === 'retain') {
-        const retainDescription = judged.reason.trim() || buildConservativeRetainDescription(task);
-        const result = retainTaskOwnership(taskId, agentId ?? task.executor ?? 'unknown', { step, output: { ...normalizedOutput, summary: judged.summary ?? normalizedOutput.summary, unresolvedIssues: judged.unresolvedIssues ?? normalizedOutput.unresolvedIssues } }, retainDescription, TaskPhase.EXECUTING);
-        writeTaskLog({ taskId, action: 'retain', sessionKey: sessionKey ?? undefined, agentId: agentId ?? undefined, result: { success: result.success, decision: 'retain', via: 'llm', confidence: judged.confidence, reason: judged.reason, llm_raw: llmDecision.raw, evidence: { summary: normalizedOutput.summary ?? '', files: normalizedOutput.files ?? [], unresolvedIssues: normalizedOutput.unresolvedIssues ?? [], error: normalizedOutput.error ?? null } } });
+        const result = nextTask(taskId, agentId ?? task.executor ?? 'unknown', { step, output: { ...normalizedOutput, summary: judged.summary ?? normalizedOutput.summary, unresolvedIssues: judged.unresolvedIssues ?? normalizedOutput.unresolvedIssues } }, nextDescription);
+        writeTaskLog({ taskId, action: 'next', sessionKey: sessionKey ?? undefined, agentId: agentId ?? undefined, result: { success: result.success, decision: 'next', via: 'llm', nextDescription, confidence: judged.confidence, reason: judged.reason, llm_raw: llmDecision.raw, evidence: { summary: normalizedOutput.summary ?? '', files: normalizedOutput.files ?? [], unresolvedIssues: normalizedOutput.unresolvedIssues ?? [], error: normalizedOutput.error ?? null } } });
+        if (result.task) await sendNotifications(formatNextNotifications(result.task, getNotifications()), api.logger ?? null).catch(() => null);
         return;
       }
 
@@ -246,9 +303,10 @@ export function registerAgentEndHook(api: OpenClawPluginApi): void {
     }
 
     const fallback = decideConservativeFallback(task, text, output);
-    if (fallback.decision === 'retain') {
-      const result = retainTaskOwnership(taskId, agentId ?? task.executor ?? 'unknown', { step, output: normalizedOutput }, fallback.description ?? buildConservativeRetainDescription(task), TaskPhase.EXECUTING);
-      writeTaskLog({ taskId, action: 'retain', sessionKey: sessionKey ?? undefined, agentId: agentId ?? undefined, result: { success: result.success, decision: 'retain', via: 'conservative_fallback', reason: fallback.reason, llm_raw: llmDecision?.raw ?? null, evidence: { summary: normalizedOutput.summary ?? '', files: normalizedOutput.files ?? [], unresolvedIssues: normalizedOutput.unresolvedIssues ?? [], error: normalizedOutput.error ?? null } } });
+    if (fallback.decision === 'next') {
+      const result = nextTask(taskId, agentId ?? task.executor ?? 'unknown', { step, output: normalizedOutput }, fallback.description ?? buildConservativeNextDescription(task));
+      writeTaskLog({ taskId, action: 'next', sessionKey: sessionKey ?? undefined, agentId: agentId ?? undefined, result: { success: result.success, decision: 'next', via: 'conservative_fallback', reason: fallback.reason, llm_raw: llmDecision?.raw ?? null, evidence: { summary: normalizedOutput.summary ?? '', files: normalizedOutput.files ?? [], unresolvedIssues: normalizedOutput.unresolvedIssues ?? [], error: normalizedOutput.error ?? null } } });
+      if (result.task) await sendNotifications(formatNextNotifications(result.task, getNotifications()), api.logger ?? null).catch(() => null);
       return;
     }
 

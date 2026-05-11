@@ -360,33 +360,33 @@ export function formatCancelNotifications(
 
 
 // ============================================================
-// 通知格式化 — relay / relinquish
+// 通知格式化 — next / relinquish
 // ============================================================
 
 export function formatRelinquishNotifications(
   task: Task,
   notifications: NotificationConfig[]
 ): FormattedNotification[] {
-  return formatRelayOrRelinquishNotifications(task, notifications, 'relinquish');
+  return formatNextOrRelinquishNotifications(task, notifications, 'relinquish');
 }
 
-export function formatRelayNotifications(
+export function formatNextNotifications(
   task: Task,
   notifications: NotificationConfig[]
 ): FormattedNotification[] {
-  return formatRelayOrRelinquishNotifications(task, notifications, 'relay');
+  return formatNextOrRelinquishNotifications(task, notifications, 'next');
 }
 
-function formatRelayOrRelinquishNotifications(
+function formatNextOrRelinquishNotifications(
   task: Task,
   notifications: NotificationConfig[],
-  type: 'relay' | 'relinquish'
+  type: 'next' | 'relinquish'
 ): FormattedNotification[] {
   if (!notifications || notifications.length === 0) return [];
   if (!task) return [];
 
-  const stepLabel = type === 'relay' ? '交接' : '放弃';
-  const stepEmoji = type === 'relay' ? '🔄' : '↩️';
+  const stepLabel = type === 'next' ? '下一步' : '放弃';
+  const stepEmoji = type === 'next' ? '🔄' : '↩️';
   const lastExecutor = task.lastExecutor ?? 'unknown';
   const lastEntry = task.context[task.context.length - 1];
   const stepText = (lastEntry as { type: string; step?: string })?.type === 'step'
@@ -398,7 +398,6 @@ function formatRelayOrRelinquishNotifications(
     `${stepEmoji} 任务放回池子 [${task.taskId}]`,
     ``,
     `📋 ${task.description}`,
-    `阶段: ${task.lifecycle.phase}`,
     `执行者: ${lastExecutor}`,
     `动作: ${stepText}`,
     ...(duration ? [`耗时: ${duration}`] : [])
@@ -429,7 +428,7 @@ export function formatRejectNotifications(
   if (!task) return [];
 
   const lastEntry = task.context[task.context.length - 1];
-  const rejectReason = (lastEntry as { step?: string })?.step ?? '';
+  void lastEntry;
 
   const lines = [
     `🔁 任务已驳回并放回池子 [${task.taskId}]`,
@@ -476,7 +475,7 @@ export function formatFailNotifications(
     `执行者: ${effectiveExecutor}`,
     ...(failureReason ? [`原因: ${failureReason}`] : []),
     ...(duration ? [`耗时: ${duration}`] : []),
-    `建议下一步: 如属可恢复的数据质量/约束校验问题，重新生成明确纠偏 description 后再 relay；否则补充缺失前置条件后重发任务`
+    `建议下一步: 如属可恢复的数据质量/约束校验问题，生成明确的下一步 description 并重新回池；否则补充缺失前置条件后重发任务`
   ].filter(Boolean);
 
   const message = lines.join('\n');

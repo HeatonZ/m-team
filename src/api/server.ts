@@ -15,12 +15,10 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const ROOT = path.resolve(__dirname, '../..'); // m-team repo root
+const ROOT = path.resolve(__dirname, '../..');
 const PORT = parseInt(process.env.PORT ?? '3001', 10);
 const CLI_SCRIPT = path.join(ROOT, 'src/cli/index.ts');
 const TSX = path.join(ROOT, 'node_modules/.bin/tsx');
-
-// ─── Utilities ────────────────────────────────────────────────────────────────
 
 function json(res: http.ServerResponse, status: number, data: unknown): void {
   res.writeHead(status, {
@@ -65,7 +63,6 @@ function cli(args: string[], timeoutMs = 10000): Promise<{ stdout: string; stder
     child.stderr.on('data', d => { stderr += d; });
     child.on('close', code => {
       clearTimeout(timer);
-      // 过滤掉 pool operations 的 console.log 输出（[m-team-pool] 前缀）
       const clean = stdout.split('\n').filter(l => !l.startsWith('[m-team-pool]')).join('\n').trim();
       resolve({ stdout: clean, stderr, code: code ?? 0 });
     });
@@ -79,31 +76,29 @@ async function handle(req: http.IncomingMessage, res: http.ServerResponse) {
     return;
   }
 
-  const url = new URL(req.url, `http://localhost:${PORT}`);
-  const pathname = url.pathname.replace(/^\/api\/mteam/, ''); // strip /api/mteam prefix
+  const url = new URL(req.url ?? '/', `http://localhost:${PORT}`);
+  const pathname = url.pathname.replace(/^\/api\/mteam/, '');
+  const readContextOutput = (body: Record<string, unknown>) => (body.contextOutput ?? {}) as {
+    summary?: string;
+    files?: string[] | string;
+  };
 
-  // ── Tasks ────────────────────────────────────────────────────────
-
-  // POST /api/mteam/tasks  → create
   if (req.method === 'POST' && pathname === '/tasks') {
     try {
       const body = await parseBody(req);
       const args = ['tasks', 'create'];
-      if (body.goal)             { args.push('--goal', String(body.goal)); }
-      if (body.description)      { args.push('--description', String(body.description)); }
-      if (body.taskType)         { args.push('--task-type', String(body.taskType)); }
-      if (body.publisher)         { args.push('--publisher', String(body.publisher)); }
-      if (body.priority)          { args.push('--priority', String(body.priority)); }
-      if (body.tags)              { args.push('--tags', String(body.tags)); }
+      if (body.goal) { args.push('--goal', String(body.goal)); }
+      if (body.description) { args.push('--description', String(body.description)); }
+      if (body.taskType) { args.push('--task-type', String(body.taskType)); }
+      if (body.publisher) { args.push('--publisher', String(body.publisher)); }
+      if (body.priority) { args.push('--priority', String(body.priority)); }
 
       const result = await cli(args);
       if (result.code !== 0) return error(res, 400, result.stderr || 'CLI error');
-      const data = JSON.parse(result.stdout);
-      return json(res, 201, data);
+      return json(res, 201, JSON.parse(result.stdout));
     } catch (e: any) { return error(res, 400, e.message); }
   }
 
-  // GET /api/mteam/tasks → list
   if (req.method === 'GET' && pathname === '/tasks') {
     const status = url.searchParams.get('status') ?? 'pending';
     const result = await cli(['tasks', 'list', '--status', status]);
@@ -111,7 +106,6 @@ async function handle(req: http.IncomingMessage, res: http.ServerResponse) {
     catch { return error(res, 500, result.stderr || 'CLI parse error'); }
   }
 
-  // GET /api/mteam/tasks/:id → get
   const taskIdMatch = pathname.match(/^\/tasks\/(task_\w+)$/);
   if (req.method === 'GET' && taskIdMatch) {
     const result = await cli(['tasks', 'get', taskIdMatch[1]]);
@@ -120,7 +114,6 @@ async function handle(req: http.IncomingMessage, res: http.ServerResponse) {
     catch { return error(res, 500, result.stderr); }
   }
 
-  // POST /api/mteam/tasks/:id/claim → claim
   const claimMatch = pathname.match(/^\/tasks\/(task_\w+)\/claim$/);
   if (req.method === 'POST' && claimMatch) {
     try {
@@ -132,37 +125,37 @@ async function handle(req: http.IncomingMessage, res: http.ServerResponse) {
     } catch (e: any) { return error(res, 400, e.message); }
   }
 
-  // POST /api/mteam/tasks/:id/complete → complete
   const completeMatch = pathname.match(/^\/tasks\/(task_\w+)\/complete$/);
   if (req.method === 'POST' && completeMatch) {
     try {
       const body = await parseBody(req);
       if (!body.contextStep) return error(res, 400, 'contextStep required');
       const args = ['tasks', 'complete', completeMatch[1], '--step', String(body.contextStep)];
-      if (body.contextOutput?.summary) args.push('--summary', String(body.contextOutput.summary));
-      if (body.contextOutput?.files)  args.push('--files', String(body.contextOutput.files));
+      const contextOutput = readContextOutput(body);
+      if (contextOutput.summary) args.push('--summary', String(contextOutput.summary));
+      if (contextOutput.files) args.push('--files', Array.isArray(contextOutput.files) ? contextOutput.files.join(',') : String(contextOutput.files));
       const result = await cli(args);
       if (result.code !== 0) return error(res, 400, result.stderr);
       return json(res, 200, JSON.parse(result.stdout));
     } catch (e: any) { return error(res, 400, e.message); }
   }
 
-  // POST /api/mteam/tasks/:id/relay → relay
-  const relayMatch = pathname.match(/^\/tasks\/(task_\w+)\/relay$/);
-  if (req.method === 'POST' && relayMatch) {
+  const nextMatch = pathname.match(/^\/tasks\/(task_\w+)\/next$/);
+  if (req.method === 'POST' && nextMatch) {
     try {
       const body = await parseBody(req);
       if (!body.agentId) return error(res, 400, 'agentId required');
       if (!body.contextStep) return error(res, 400, 'contextStep required');
-      const args = ['tasks', 'relay', relayMatch[1], '--agent-id', String(body.agentId), '--step', String(body.contextStep)];
-      if (body.contextOutput?.summary) args.push('--summary', String(body.contextOutput.summary));
+      const args = ['tasks', 'next', nextMatch[1], '--agent-id', String(body.agentId), '--step', String(body.contextStep)];
+      const contextOutput = readContextOutput(body);
+      if (contextOutput.summary) args.push('--summary', String(contextOutput.summary));
+      if (body.description) args.push('--description', String(body.description));
       const result = await cli(args);
       if (result.code !== 0) return error(res, 400, result.stderr);
       return json(res, 200, JSON.parse(result.stdout));
     } catch (e: any) { return error(res, 400, e.message); }
   }
 
-  // POST /api/mteam/tasks/:id/cancel → cancel
   const cancelMatch = pathname.match(/^\/tasks\/(task_\w+)\/cancel$/);
   if (req.method === 'POST' && cancelMatch) {
     try {
@@ -176,7 +169,6 @@ async function handle(req: http.IncomingMessage, res: http.ServerResponse) {
     } catch (e: any) { return error(res, 400, e.message); }
   }
 
-  // POST /api/mteam/tasks/:id/close → close
   const closeMatch = pathname.match(/^\/tasks\/(task_\w+)\/close$/);
   if (req.method === 'POST' && closeMatch) {
     try {
@@ -188,13 +180,12 @@ async function handle(req: http.IncomingMessage, res: http.ServerResponse) {
     } catch (e: any) { return error(res, 400, e.message); }
   }
 
-  // POST /api/mteam/tasks/:id/relinquish → relinquish
-  const relinquMatch = pathname.match(/^\/tasks\/(task_\w+)\/relinquish$/);
-  if (req.method === 'POST' && relinquMatch) {
+  const relinquishMatch = pathname.match(/^\/tasks\/(task_\w+)\/relinquish$/);
+  if (req.method === 'POST' && relinquishMatch) {
     try {
       const body = await parseBody(req);
       if (!body.executorId) return error(res, 400, 'executorId required');
-      const args = ['tasks', 'relinquish', relinquMatch[1], '--executor-id', String(body.executorId)];
+      const args = ['tasks', 'relinquish', relinquishMatch[1], '--executor-id', String(body.executorId)];
       if (body.reason) args.push('--reason', String(body.reason));
       const result = await cli(args);
       if (result.code !== 0) return error(res, 400, result.stderr);
@@ -202,31 +193,26 @@ async function handle(req: http.IncomingMessage, res: http.ServerResponse) {
     } catch (e: any) { return error(res, 400, e.message); }
   }
 
-  // PUT /api/mteam/tasks/:id → update
   if (req.method === 'PUT' && taskIdMatch) {
     try {
       const body = await parseBody(req);
       const args = ['tasks', 'update', taskIdMatch[1]];
-      if (body.status)      args.push('--status', String(body.status));
-      if (body.contextStep)  args.push('--step', String(body.contextStep));
+      if (body.status) args.push('--status', String(body.status));
+      if (body.contextStep) args.push('--step', String(body.contextStep));
       if (body.description) args.push('--description', String(body.description));
-      if (body.executorId)   args.push('--executor-id', String(body.executorId));
+      if (body.executorId) args.push('--executor-id', String(body.executorId));
       const result = await cli(args);
       if (result.code !== 0) return error(res, 400, result.stderr);
       return json(res, 200, JSON.parse(result.stdout));
     } catch (e: any) { return error(res, 400, e.message); }
   }
 
-  // ── Executors ────────────────────────────────────────────────────
-
-  // GET /api/mteam/executors → list
   if (req.method === 'GET' && pathname === '/executors') {
     const result = await cli(['executors', 'list']);
     try { return json(res, 200, JSON.parse(result.stdout)); }
     catch { return error(res, 500, result.stderr || 'CLI parse error'); }
   }
 
-  // GET /api/mteam/executors/active?agentId=X → active
   if (req.method === 'GET' && pathname === '/executors/active') {
     const agentId = url.searchParams.get('agentId');
     if (!agentId) return error(res, 400, 'agentId query param required');
@@ -235,9 +221,6 @@ async function handle(req: http.IncomingMessage, res: http.ServerResponse) {
     catch { return error(res, 500, result.stderr || 'CLI parse error'); }
   }
 
-  // ── Heartbeat ───────────────────────────────────────────────────
-
-  // POST /api/mteam/heartbeat → heartbeat
   if (req.method === 'POST' && pathname === '/heartbeat') {
     try {
       const body = await parseBody(req);
@@ -248,12 +231,8 @@ async function handle(req: http.IncomingMessage, res: http.ServerResponse) {
     } catch (e: any) { return error(res, 400, e.message); }
   }
 
-  // ── 404 ─────────────────────────────────────────────────────────
-
   return error(res, 404, `Route not found: ${req.method} ${pathname}`);
 }
-
-// ─── Start ───────────────────────────────────────────────────────────────────
 
 http.createServer(handle).listen(PORT, () => {
   console.log(`[mteam-api] listening on http://localhost:${PORT}`);

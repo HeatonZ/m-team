@@ -7,7 +7,7 @@
  *   npx tsx src/cli/index.ts tasks get <taskId>
  *   npx tsx src/cli/index.ts tasks claim <taskId> --agent-id <agentId>
  *   npx tsx src/cli/index.ts tasks complete <taskId> --step "..." [--summary "..."]
- *   npx tsx src/cli/index.ts tasks relay <taskId> --agent-id <agentId> --step "..."
+ *   npx tsx src/cli/index.ts tasks next <taskId> --agent-id <agentId> --step "..." [--description "..."]
  *   npx tsx src/cli/index.ts tasks cancel <taskId> --publisher <publisher>
  *   npx tsx src/cli/index.ts tasks close <taskId> --publisher <publisher>
  *   npx tsx src/cli/index.ts tasks relinquish <taskId> --executor-id <executorId> [--reason "..."]
@@ -17,16 +17,23 @@
  *   npx tsx src/cli/index.ts heartbeat --agent-id <agentId>
  */
 
-// pool/index.js 导出全部读操作和写操作
-import { setWorkspaceRoot, getAllTasks, getPendingTasks, getRunningTasks, getCompletedTasks, getFailedTasks, getCancelledTasks, getClosedTasks, getTask, getAgentActiveTask } from '../pool/index.js';
-import { publishTask, claimTask, updateTask, relinquishTask, relayTask, cancelTask, completeTask, closeTask } from '../pool/index.js';
+import {
+  setWorkspaceRoot,
+  getAllTasks,
+  getPendingTasks,
+  getRunningTasks,
+  getCompletedTasks,
+  getFailedTasks,
+  getCancelledTasks,
+  getClosedTasks,
+  getTask,
+  getAgentActiveTask,
+} from '../pool/index.js';
+import { publishTask, claimTask, updateTask, relinquishTask, nextTask, cancelTask, completeTask, closeTask } from '../pool/index.js';
 import { TaskStatus } from '../schema/task.js';
 
-// 默认工作空间（可通过 WORKSPACE_ROOT 环境变量覆盖）
 const WORKSPACE = process.env.WORKSPACE_ROOT || '/mnt/d/code/m-team';
 setWorkspaceRoot(WORKSPACE);
-
-// ─── 工具函数 ────────────────────────────────────────────────
 
 function fatal(msg: string): never {
   console.error('[mteam] ERROR:', msg);
@@ -45,8 +52,6 @@ function parseStatus(s: string | undefined): string | undefined {
   return s;
 }
 
-// ─── Commands ────────────────────────────────────────────────
-
 async function cmdTasks(argv: string[]) {
   const sub = argv[0];
   const args = argv.slice(1);
@@ -58,7 +63,6 @@ async function cmdTasks(argv: string[]) {
       const taskType = extract(args, '--task-type');
       const publisher = extract(args, '--publisher', '-p');
       const priority = extract(args, '--priority');
-      const tags = extract(args, '--tags');
 
       if (!goal) fatal('--goal 必须提供');
       if (!description) fatal('--description 必须提供');
@@ -80,14 +84,14 @@ async function cmdTasks(argv: string[]) {
       let tasks;
 
       switch (status) {
-        case 'pending':    tasks = getPendingTasks(); break;
-        case 'running':     tasks = getRunningTasks(); break;
-        case 'completed':   tasks = getCompletedTasks(); break;
-        case 'failed':      tasks = getFailedTasks(); break;
-        case 'cancelled':   tasks = getCancelledTasks(); break;
-        case 'closed':      tasks = getClosedTasks(); break;
-        case 'all':         tasks = getAllTasks(); break;
-        default:            fatal(`未知状态: ${status}`);
+        case 'pending': tasks = getPendingTasks(); break;
+        case 'running': tasks = getRunningTasks(); break;
+        case 'completed': tasks = getCompletedTasks(); break;
+        case 'failed': tasks = getFailedTasks(); break;
+        case 'cancelled': tasks = getCancelledTasks(); break;
+        case 'closed': tasks = getClosedTasks(); break;
+        case 'all': tasks = getAllTasks(); break;
+        default: fatal(`未知状态: ${status}`);
       }
 
       ok({ status, count: tasks.length, tasks });
@@ -114,7 +118,7 @@ async function cmdTasks(argv: string[]) {
         console.error(`[mteam] claim 失败: ${result.reason}`);
         process.exit(1);
       }
-      ok({ success: true, ...result });
+      ok(result);
       break;
     }
 
@@ -140,20 +144,21 @@ async function cmdTasks(argv: string[]) {
       break;
     }
 
-    case 'relay': {
+    case 'next': {
       const taskId = args[0];
       const agentId = extract(args, '--agent-id');
       const step = extract(args, '--step', '-s');
       const summary = extract(args, '--summary');
+      const description = extract(args, '--description', '-d');
 
       if (!taskId) fatal('缺少 taskId');
       if (!agentId) fatal('--agent-id 必须提供');
       if (!step) fatal('--step 必须提供');
 
       const contextOutput = summary ? { summary } : undefined;
-      const result = relayTask(taskId, agentId, { step, output: contextOutput ?? {} }, undefined);
+      const result = nextTask(taskId, agentId, { step, output: contextOutput ?? {} }, description);
       if (!result.success) {
-        console.error(`[mteam] relay 失败: ${result.reason}`);
+        console.error(`[mteam] next 失败: ${result.reason}`);
         process.exit(1);
       }
       ok({ success: true, task: result.task });
@@ -229,7 +234,7 @@ async function cmdTasks(argv: string[]) {
     }
 
     default:
-      fatal(`未知 tasks 子命令: ${sub}，可用: create, list, get, claim, complete, relay, cancel, close, relinquish, update`);
+      fatal(`未知 tasks 子命令: ${sub}，可用: create, list, get, claim, complete, next, cancel, close, relinquish, update`);
   }
 }
 
@@ -240,7 +245,6 @@ async function cmdExecutors(argv: string[]) {
   switch (sub) {
     case 'list': {
       const allTasks = getAllTasks();
-      // 按 executor 分组
       const executorMap = new Map<string, { running: number; completed: number; failed: number }>();
 
       for (const task of allTasks) {
@@ -280,7 +284,6 @@ async function cmdHeartbeat(argv: string[]) {
   const agentId = extract(argv, '--agent-id', '-a');
   if (!agentId) fatal('--agent-id 必须提供');
 
-  // 找到该 agent 的 running 任务，更新心跳
   const activeTask = getAgentActiveTask(agentId);
   if (!activeTask) {
     ok({ agentId, heartbeat: false, reason: 'NO_ACTIVE_TASK' });
@@ -291,8 +294,6 @@ async function cmdHeartbeat(argv: string[]) {
   ok({ agentId, heartbeat: true, taskId: activeTask.taskId, updatedAt: task?.updatedAt });
 }
 
-// ─── 参数解析辅助 ─────────────────────────────────────────────
-
 function extract(args: string[], ...flags: string[]): string | undefined {
   for (const flag of flags) {
     const idx = args.indexOf(flag);
@@ -302,8 +303,6 @@ function extract(args: string[], ...flags: string[]): string | undefined {
   }
   return undefined;
 }
-
-// ─── 主入口 ──────────────────────────────────────────────────
 
 async function main() {
   const sub = process.argv[2];
@@ -318,7 +317,7 @@ async function main() {
   mteam heartbeat --agent-id <agentId>
 
 子命令:
-  tasks       任务管理 (create|list|get|claim|complete|relay|cancel|close|relinquish|update)
+  tasks       任务管理 (create|list|get|claim|complete|next|cancel|close|relinquish|update)
   executors   Executor 管理 (list|active)
   heartbeat   心跳保活
 `);
@@ -327,7 +326,7 @@ async function main() {
 
   try {
     switch (sub) {
-      case 'tasks':    await cmdTasks(rest); break;
+      case 'tasks': await cmdTasks(rest); break;
       case 'executors': await cmdExecutors(rest); break;
       case 'heartbeat': await cmdHeartbeat(rest); break;
       default:

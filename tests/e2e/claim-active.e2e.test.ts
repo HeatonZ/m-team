@@ -29,7 +29,6 @@ describe('claim/active e2e', () => {
       const storedTask = harness.readTask(taskId);
       expect(storedTask?.status).toBe('running');
       expect(storedTask?.executor).toBe('maker');
-      expect(storedTask?.lifecycle.phase).toBe('executing');
 
       const activeForMaker = await harness.exec('mteam_get_agent_active', { agentId: 'maker' }) as ToolResult<{ activeTask?: Record<string, unknown> | null }>;
       expect(extractDetails(activeForMaker)?.activeTask).toMatchObject({ taskId, executor: 'maker' });

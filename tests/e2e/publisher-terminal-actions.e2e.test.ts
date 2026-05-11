@@ -38,7 +38,8 @@ describe('publisher terminal actions e2e', () => {
         task.status = 'completed';
         task.completedAt = Date.now();
         task.updatedAt = task.completedAt;
-        task.lifecycle.phase = 'finalizing';
+        task.executor = null;
+        task.lastExecutor = 'maker';
       });
       const closeResult = await harness.exec('mteam_close_task', {
         taskId: closeTaskId,

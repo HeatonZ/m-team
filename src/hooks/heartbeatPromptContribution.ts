@@ -6,11 +6,11 @@
  * Publisher 心跳时注入验收逻辑。
  */
 
+import type { OpenClawPluginApi } from 'openclaw/plugin-sdk/core';
 import type {
-  OpenClawPluginApi,
   PluginHeartbeatPromptContributionEvent,
   PluginHeartbeatPromptContributionResult,
-} from 'openclaw/plugin-sdk/core';
+} from '../types/openclaw-hooks.js';
 import { getAgentActiveTask } from '../pool/index.js';
 
 interface RegisterOptions {

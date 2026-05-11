@@ -1,15 +1,15 @@
 import { getTask } from '../pool/index.js';
 import type {
   OpenClawPluginApi,
-  PluginHookAfterToolCallEvent,
-  PluginHookToolContext,
 } from 'openclaw/plugin-sdk/core';
+import type { PluginHookAfterToolCallEvent, OpenClawPluginToolContext } from '../types/openclaw-hooks.js';
 import { writeTaskLog } from '../pool/db.js';
 
 // toolName → action mapping
 const TOOL_ACTION_MAP: Record<string, string> = {
   mteam_publish_task: 'publish',
   mteam_claim_task: 'claim',
+  mteam_next_task: 'next',
   mteam_reject_task: 'reject',
   mteam_cancel_task: 'cancel',
   mteam_relinquish_task: 'relinquish',
@@ -21,7 +21,7 @@ export function registerAfterToolCallHook(api: OpenClawPluginApi): void {
     'after_tool_call',
     (
       event: PluginHookAfterToolCallEvent,
-      ctx: PluginHookToolContext,
+      ctx: OpenClawPluginToolContext,
     ): void => {
       const { toolName, params, result, error } = event;
       const { agentId, sessionKey } = ctx;
@@ -47,7 +47,7 @@ export function registerAfterToolCallHook(api: OpenClawPluginApi): void {
         writeTaskLog({
           taskId: publishedTaskId,
           action,
-          sessionKey: sessionKey ?? null,
+          sessionKey: sessionKey ?? undefined,
           agentId: agentId ?? undefined,
           params: {
             description: params.description as string | undefined,
@@ -64,7 +64,7 @@ export function registerAfterToolCallHook(api: OpenClawPluginApi): void {
       writeTaskLog({
         taskId: taskId ?? 'unknown',
         action,
-        sessionKey: sessionKey ?? null,
+        sessionKey: sessionKey ?? undefined,
         agentId: (params.agentId as string) ?? agentId ?? undefined,
         params: params as Record<string, unknown> | undefined,
         result: result as Record<string, unknown> | undefined,

@@ -14,16 +14,12 @@ import {
   insertTask,
 } from './db';
 import {
-  LifecycleDecision,
-  TaskPhase,
   TaskStatus,
   TaskPriority,
   type Task,
   type TaskPatch,
-  type TaskLifecycle,
   type ContextStepEntry,
   type ContextStepOutput,
-  createDefaultLifecycle,
   createTask,
   normalizeTask,
 } from '../schema/task';
@@ -56,62 +52,6 @@ function init(): void {
   fs.mkdirSync(getTasksDir(), { recursive: true });
   fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
   openDb(DB_PATH);
-}
-
-function fingerprintText(text: string | undefined | null): string {
-  return String(text ?? '')
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, ' ')
-    .replace(/[，。,.!！?？;；:：]/g, '');
-}
-
-function fingerprintOutput(output: ContextStepOutput | undefined): string {
-  if (!output) return '';
-  const picked = {
-    summary: output.summary ?? '',
-    files: output.files ?? [],
-    dataRefs: output.dataRefs ?? [],
-    unresolvedIssues: output.unresolvedIssues ?? [],
-    metrics: output.metrics ?? {}
-  };
-  return JSON.stringify(picked);
-}
-
-function cloneLifecycle(task: Task): TaskLifecycle {
-  return JSON.parse(JSON.stringify(task.lifecycle ?? createDefaultLifecycle())) as TaskLifecycle;
-}
-
-function patchLifecycleWithProgress(
-  task: Task,
-  phase: TaskPhase,
-  decision: keyof typeof LifecycleDecision,
-  nextDescription: string | undefined,
-  contextOutput?: ContextStepOutput,
-  counters?: { handoffDelta?: number; reworkDelta?: number }
-): TaskLifecycle {
-  const prev = cloneLifecycle(task);
-  const nextDescFp = fingerprintText(nextDescription ?? task.description);
-  const nextContextFp = fingerprintOutput(contextOutput);
-  const lastDescFp = prev.loopGuard.lastDescriptionFingerprint ?? '';
-  const lastContextFp = prev.loopGuard.lastContextFingerprint ?? '';
-  const hasProgress = Boolean(nextContextFp) && nextContextFp !== lastContextFp;
-
-  return {
-    phase,
-    handoffCount: prev.handoffCount + (counters?.handoffDelta ?? 0),
-    reworkCount: prev.reworkCount + (counters?.reworkDelta ?? 0),
-    lastDecision: LifecycleDecision[decision],
-    lastDecisionAt: Date.now(),
-    loopGuard: {
-      samePhaseCount: prev.phase === phase ? prev.loopGuard.samePhaseCount + 1 : 1,
-      sameDescriptionCount: lastDescFp === nextDescFp ? prev.loopGuard.sameDescriptionCount + 1 : 1,
-      noProgressCount: hasProgress ? 0 : prev.loopGuard.noProgressCount + 1,
-      lastDescriptionFingerprint: nextDescFp,
-      lastContextFingerprint: nextContextFp || lastContextFp,
-      lastProgressAt: hasProgress ? Date.now() : prev.loopGuard.lastProgressAt,
-    }
-  };
 }
 
 function appendContext(task: Task, executorId: string | null, contextEntry: ContextStepInput | null): ContextStepEntry[] {
@@ -192,14 +132,12 @@ export function claimTask(taskId: string, agentId: string): ClaimResult {
     ).get(agentId, TaskStatus.RUNNING);
     if (existingActive) return { success: false, taskId, reason: 'ALREADY_HAS_ACTIVE_TASK' };
 
-    const lifecycle = patchLifecycleWithProgress(task, TaskPhase.EXECUTING, 'RETAIN', task.description, undefined);
     const updated = db.prepare(
-      'UPDATE tasks SET status = ?, executor = ?, last_executor = ?, lifecycle = ?, updated_at = ? WHERE task_id = ? AND status = ?'
+      'UPDATE tasks SET status = ?, executor = ?, last_executor = ?, updated_at = ? WHERE task_id = ? AND status = ?'
     ).run(
       TaskStatus.RUNNING,
       agentId,
       task.executor !== null ? task.executor : task.lastExecutor,
-      JSON.stringify(lifecycle),
       Date.now(),
       taskId,
       TaskStatus.PENDING
@@ -236,20 +174,12 @@ export function updateTask(
   if (!task) return null;
 
   const context = appendContext(task, executorId, contextEntry);
-  const lifecycle = patchLifecycleWithProgress(
-    task,
-    task.lifecycle.phase,
-    'RETAIN',
-    description ?? task.description,
-    contextEntry?.output,
-  );
 
   return setTaskState(taskId, {
     ...(status ? { status: status as Task['status'] } : {}),
     ...(description ? { description } : {}),
     ...(updatedAt ? { updatedAt } : { updatedAt: Date.now() }),
     context: JSON.stringify(context),
-    lifecycle: JSON.stringify(lifecycle),
   });
 }
 
@@ -259,11 +189,17 @@ export interface CancelResult {
   reason?: string;
 }
 
-export function cancelTask(taskId: string): CancelResult {
+export function cancelTask(taskId: string, _publisher?: string, reason?: string): CancelResult {
   init();
   const task = getTaskRow(taskId);
   if (!task) return { success: false, reason: 'TASK_NOT_FOUND' };
-  if ([TaskStatus.CLOSED, TaskStatus.CANCELLED].includes(task.status)) return { success: false, reason: 'TASK_ALREADY_TERMINAL' };
+  if (task.status === TaskStatus.CLOSED || task.status === TaskStatus.CANCELLED) {
+    return { success: false, reason: 'TASK_ALREADY_TERMINAL' };
+  }
+
+  const context = reason
+    ? appendContext(task, task.executor, { step: '任务取消', output: { summary: reason } })
+    : task.context;
 
   return {
     success: true,
@@ -271,11 +207,7 @@ export function cancelTask(taskId: string): CancelResult {
       status: TaskStatus.CANCELLED,
       executor: null,
       updatedAt: Date.now(),
-      lifecycle: JSON.stringify({
-        ...task.lifecycle,
-        lastDecision: LifecycleDecision.FAIL,
-        lastDecisionAt: Date.now(),
-      })
+      context: JSON.stringify(context),
     })
   };
 }
@@ -286,16 +218,16 @@ export interface RelinquishResult {
   reason?: string;
 }
 
-export function relinquishTask(taskId: string, reason?: string): RelinquishResult {
+export function relinquishTask(taskId: string, executorId?: string, reason?: string): RelinquishResult {
   init();
   const task = getTaskRow(taskId);
   if (!task) return { success: false, reason: 'TASK_NOT_FOUND' };
   if (task.status !== TaskStatus.RUNNING) return { success: false, reason: `TASK_NOT_RUNNING_${task.status}` };
+  if (executorId && task.executor && executorId !== task.executor) return { success: false, reason: 'NOT_CURRENT_EXECUTOR' };
 
   const context = reason
     ? appendContext(task, task.executor, { step: '主动放弃当前任务', output: { summary: reason, unresolvedIssues: [reason] } })
     : task.context;
-  const lifecycle = patchLifecycleWithProgress(task, TaskPhase.REWORKING, 'RELAY', task.description, undefined, { reworkDelta: 1 });
 
   return {
     success: true,
@@ -305,24 +237,22 @@ export function relinquishTask(taskId: string, reason?: string): RelinquishResul
       lastExecutor: task.executor,
       updatedAt: Date.now(),
       context: JSON.stringify(context),
-      lifecycle: JSON.stringify(lifecycle),
     })
   };
 }
 
-export interface RelayResult {
+export interface NextResult {
   success: boolean;
   task?: Task;
   reason?: string;
 }
 
-export function relayTask(
+export function nextTask(
   taskId: string,
   executorId: string,
   contextEntry: ContextStepInput | null,
   description?: string,
-  mode: 'handoff' | 'reworking' = 'handoff'
-): RelayResult {
+): NextResult {
   init();
   const task = getTaskRow(taskId);
   if (!task) return { success: false, reason: 'TASK_NOT_FOUND' };
@@ -332,14 +262,6 @@ export function relayTask(
 
   const nextDescription = description?.trim() || task.description;
   const context = appendContext(task, executorId, contextEntry);
-  const lifecycle = patchLifecycleWithProgress(
-    task,
-    mode === 'reworking' ? TaskPhase.REWORKING : TaskPhase.HANDOFF,
-    'RELAY',
-    nextDescription,
-    contextEntry?.output,
-    mode === 'reworking' ? { reworkDelta: 1 } : { handoffDelta: 1 }
-  );
 
   return {
     success: true,
@@ -350,43 +272,6 @@ export function relayTask(
       description: nextDescription,
       updatedAt: Date.now(),
       context: JSON.stringify(context),
-      lifecycle: JSON.stringify(lifecycle),
-    })
-  };
-}
-
-export interface RetainResult {
-  success: boolean;
-  task: Task | null;
-  reason?: string;
-}
-
-export function retainTaskOwnership(
-  taskId: string,
-  executorId: string,
-  contextEntry: ContextStepInput | null,
-  description: string | undefined,
-  phase: TaskPhase = TaskPhase.EXECUTING,
-): RetainResult {
-  init();
-  const task = getTaskRow(taskId);
-  if (!task) return { success: false, task: null, reason: 'TASK_NOT_FOUND' };
-  if (task.status === TaskStatus.CANCELLED) return { success: false, task: null, reason: 'TASK_CANCELLED' };
-  if (task.status !== TaskStatus.RUNNING) return { success: false, task: null, reason: `TASK_NOT_RUNNING_${task.status}` };
-  if (task.executor !== executorId) return { success: false, task: null, reason: 'NOT_CURRENT_EXECUTOR' };
-
-  const context = appendContext(task, executorId, contextEntry);
-  const lifecycle = patchLifecycleWithProgress(task, phase, 'RETAIN', description ?? task.description, contextEntry?.output);
-
-  return {
-    success: true,
-    task: setTaskState(taskId, {
-      status: TaskStatus.RUNNING,
-      executor: executorId,
-      description: description ?? task.description,
-      updatedAt: Date.now(),
-      context: JSON.stringify(context),
-      lifecycle: JSON.stringify(lifecycle),
     })
   };
 }
@@ -414,7 +299,6 @@ export function completeTask(
       error: fallbackEntry.error,
     }
   } : null));
-  const lifecycle = patchLifecycleWithProgress(task, TaskPhase.DONE, 'COMPLETE', task.description, contextEntry?.output);
 
   return {
     success: true,
@@ -424,7 +308,6 @@ export function completeTask(
       executor: null,
       updatedAt: Date.now(),
       context: JSON.stringify(context),
-      lifecycle: JSON.stringify(lifecycle),
     })
   };
 }
@@ -444,7 +327,9 @@ export function failTask(
   init();
   const task = getTaskRow(taskId);
   if (!task) return { success: false, reason: 'TASK_NOT_FOUND' };
-  if (![TaskStatus.RUNNING, TaskStatus.PENDING].includes(task.status)) return { success: false, reason: `TASK_NOT_MUTABLE_${task.status}` };
+  if (task.status !== TaskStatus.RUNNING && task.status !== TaskStatus.PENDING) {
+    return { success: false, reason: `TASK_NOT_MUTABLE_${task.status}` };
+  }
 
   const context = appendContext(task, task.executor, contextEntry ?? {
     step: '任务失败',
@@ -454,7 +339,6 @@ export function failTask(
       unresolvedIssues: [reason]
     }
   });
-  const lifecycle = patchLifecycleWithProgress(task, task.lifecycle.phase, 'FAIL', task.description, contextEntry?.output);
 
   return {
     success: true,
@@ -464,7 +348,6 @@ export function failTask(
       executor: null,
       updatedAt: Date.now(),
       context: JSON.stringify(context),
-      lifecycle: JSON.stringify(lifecycle),
     })
   };
 }
@@ -487,10 +370,6 @@ export function closeTask(taskId: string, publisher?: string): CloseResult {
     task: setTaskState(taskId, {
       status: TaskStatus.CLOSED,
       updatedAt: Date.now(),
-      lifecycle: JSON.stringify({
-        ...task.lifecycle,
-        phase: TaskPhase.DONE,
-      })
     })
   };
 }

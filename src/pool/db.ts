@@ -45,7 +45,6 @@ function initSchema(db: Database.Database): void {
       description    TEXT NOT NULL,
       goal           TEXT NOT NULL,
       context        TEXT NOT NULL DEFAULT '[]',
-      lifecycle      TEXT,
       flow           TEXT,
       priority       TEXT NOT NULL DEFAULT 'normal',
       publisher      TEXT NOT NULL DEFAULT 'user',
@@ -77,16 +76,12 @@ function initSchema(db: Database.Database): void {
   const columns = db.prepare('PRAGMA table_info(tasks)').all() as Array<{ name: string }>;
   const hasTaskType = columns.some(col => col.name === 'task_type');
   const hasFlow = columns.some(col => col.name === 'flow');
-  const hasLifecycle = columns.some(col => col.name === 'lifecycle');
   const hasUpdatedAt = columns.some(col => col.name === 'updated_at');
   if (!hasTaskType) {
     db.exec("ALTER TABLE tasks ADD COLUMN task_type TEXT NOT NULL DEFAULT 'general';");
   }
   if (!hasFlow) {
     db.exec('ALTER TABLE tasks ADD COLUMN flow TEXT');
-  }
-  if (!hasLifecycle) {
-    db.exec('ALTER TABLE tasks ADD COLUMN lifecycle TEXT');
   }
   if (!hasUpdatedAt) {
     db.exec("ALTER TABLE tasks ADD COLUMN updated_at INTEGER NOT NULL DEFAULT 0;");
@@ -135,10 +130,10 @@ export function insertTask(task: Task): void {
   const row = serializeTask(task);
   db.prepare(`
     INSERT INTO tasks
-      (task_id, task_type, description, goal, context, lifecycle, flow, priority, publisher,
+      (task_id, task_type, description, goal, context, flow, priority, publisher,
        status, executor, last_executor, created_at, completed_at, updated_at)
     VALUES
-      (@task_id, @task_type, @description, @goal, @context, @lifecycle, @flow, @priority, @publisher,
+      (@task_id, @task_type, @description, @goal, @context, @flow, @priority, @publisher,
        @status, @executor, @last_executor, @created_at, @completed_at, @updated_at)
   `).run(row);
 }

@@ -2,9 +2,6 @@
  * 工具参数 Schema — 单一来源
  */
 
-// ─── 通用部件 ───────────────────────────────────────────────────────────────
-
-/** contextOutput — 步骤输出（complete/relay/update 共用） */
 export const ContextOutputSchema = {
   type: 'object' as const,
   description: '步骤输出',
@@ -14,10 +11,6 @@ export const ContextOutputSchema = {
   },
 } as const;
 
-/**
- * 步骤输出 — 与 schema/task.ts 的 ContextStepOutput 保持一致
- * 工具层直接引用此 Interface，不自己定义
- */
 export interface ContextStepOutputInterface {
   summary?: string;
   files?: string[];
@@ -25,13 +18,11 @@ export interface ContextStepOutputInterface {
   [key: string]: unknown;
 }
 
-// ─── 各工具参数 Schema + Interface ─────────────────────────────────────────
-
 export const PublishTaskParams = {
   type: 'object' as const,
   properties: {
     goal: { type: 'string', description: '任务目标（仅用于 agent_end 终态判断、复盘和 publisher 验收；executor 认领时不作为判断依据）' },
-    description: { type: 'string', description: '当前这一步做什么（每次只写一步，relay 时由上一个 executor 填写下一步）' },
+    description: { type: 'string', description: '当前这一步做什么（每次只写一步，进入 next 时由上一棒生成下一步）' },
     taskType: {
       type: 'string',
       description: '任务类型。general=通用动作；coding/research/ops/data/design/content=专业任务，供 heartbeat 先按类型粗筛',
@@ -103,14 +94,14 @@ export const RejectTaskParams = {
   required: ['taskId', 'reason'] as const,
 } as const;
 
-export const RelayTaskParams = {
+export const NextTaskParams = {
   type: 'object' as const,
   properties: {
     taskId: { type: 'string', description: '任务ID' },
     agentId: { type: 'string', description: '执行者 agentId' },
     contextStep: { type: 'string', description: '当前步骤描述' },
     contextOutput: ContextOutputSchema,
-    description: { type: 'string', description: 'relay 后任务的 description（下一棒看到的内容）' },
+    description: { type: 'string', description: 'next 后任务的 description（下一棒看到的内容）' },
   },
   required: ['taskId', 'agentId', 'contextStep', 'description'] as const,
 } as const;
@@ -182,7 +173,7 @@ export interface RejectTaskParamsInterface {
   reason: string;
 }
 
-export interface RelayTaskParamsInterface {
+export interface NextTaskParamsInterface {
   taskId: string;
   agentId: string;
   contextStep: string;

@@ -300,10 +300,10 @@ LLM-first 架构下，这里应该尽量成为唯一任务理解入口。
 把复杂任务理解集中到这里。
 
 ### 第二步：收缩 schema / task model
-把不再需要的重 phase 语义降级或移除。
+保持最小 `status` 模型，不再把链路细语义持久化成状态机字段。
 
 ### 第三步：清理 fallback 规则
-把旧的 transcript 启发式、phase 特判、兜底逻辑砍掉。
+把旧的 transcript 启发式、细粒度阶段特判、兜底逻辑砍掉。
 
 ### 第四步：补测试
 把 LLM-first 裁决边界固化。
@@ -321,7 +321,7 @@ LLM-first 架构下，这里应该尽量成为唯一任务理解入口。
 2. 在 pool 层偷偷决定 relay / retain
 3. 用 transcript 正则启发式替代整体 goal 判断
 4. 用 patch 式 fallback 不断覆盖主裁决逻辑
-5. 让 phase 规则比 LLM 裁决更强势
+5. 重新引入会和 `agent_end` 抢主导权的细粒度状态机
 
 ---
 

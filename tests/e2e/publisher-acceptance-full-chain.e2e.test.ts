@@ -42,7 +42,6 @@ describe('publisher acceptance full chain e2e', () => {
       expect(extractDetails(closeResult)?.success).toBe(true);
       const closedTask = harness.readTask(taskId);
       expect(closedTask?.status).toBe('closed');
-      expect(closedTask?.lifecycle.phase).toBe('done');
     } finally {
       await harness.cleanup();
     }

@@ -87,4 +87,36 @@ describe('agent_end conservative fallback e2e', () => {
       await harness.cleanup();
     }
   });
+
+  test('returns next conservatively when llm parse fails but transcript already reports a clear next problem to solve', async () => {
+    const harness = await createPluginHarness({ dashboardEnabled: false });
+    try {
+      (harness.api as unknown as { runtime: { agentEndJudge: Function } }).runtime.agentEndJudge = async () => 'not-json';
+
+      const publishResult = await harness.exec('mteam_publish_task', {
+        goal: '生成可验收结果',
+        description: '补齐最终校验文件',
+        publisher: 'manager',
+      }) as ToolResult<{ taskId: string }>;
+      const taskId = extractDetails(publishResult)!.taskId;
+      await harness.exec('mteam_claim_task', { taskId, agentId: 'maker' }, { agentId: 'maker' });
+
+      await harness.runAgentEnd(
+        {
+          success: true,
+          messages: [{ role: 'assistant', content: '还需补齐校验文件并重试一次生成流程。' }],
+        } as never,
+        { agentId: 'maker', sessionKey: `agent:maker:m-team:${taskId}` },
+      );
+
+      const task = harness.readTask(taskId);
+      expect(task?.status).toBe('pending');
+      expect(task?.description).toContain('本轮报告的问题推进下一步修复动作');
+      const nextLog = harness.readLogs(taskId, 'next').at(-1);
+      expect(nextLog?.result?.via).toBe('conservative_fallback');
+      expect(nextLog?.result?.reason).toBe('LLM_UNAVAILABLE_BUT_PROBLEM_REPORTED');
+    } finally {
+      await harness.cleanup();
+    }
+  });
 });

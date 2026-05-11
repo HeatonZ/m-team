@@ -35,11 +35,11 @@ describe('agent_end llm judge e2e', () => {
     }
   });
 
-  test('uses llm decision relay with nextDescription', async () => {
+  test('uses llm decision next with nextDescription', async () => {
     const harness = await createPluginHarness({ dashboardEnabled: false });
     try {
       (harness.api as unknown as { runtime: { agentEndJudge: Function } }).runtime.agentEndJudge = async () => ({
-        decision: 'relay',
+        decision: 'next',
         reason: '还需下一棒继续',
         nextDescription: '继续补齐剩余 3 个候选商品',
         confidence: 'high',
@@ -61,19 +61,20 @@ describe('agent_end llm judge e2e', () => {
       const task = harness.readTask(taskId);
       expect(task?.status).toBe('pending');
       expect(task?.description).toBe('继续补齐剩余 3 个候选商品');
-      const relayLog = harness.readLogs(taskId, 'relay').at(-1);
-      expect(relayLog?.result?.via).toBe('llm');
+      const nextLog = harness.readLogs(taskId, 'next').at(-1);
+      expect(nextLog?.result?.via).toBe('llm');
     } finally {
       await harness.cleanup();
     }
   });
 
-  test('uses llm decision retain and keeps task running', async () => {
+  test('uses llm decision next and returns task to pending with the next description', async () => {
     const harness = await createPluginHarness({ dashboardEnabled: false });
     try {
       (harness.api as unknown as { runtime: { agentEndJudge: Function } }).runtime.agentEndJudge = async () => ({
-        decision: 'retain',
-        reason: '继续补齐当前步骤的结构化结果',
+        decision: 'next',
+        reason: '把本轮发现的问题转成下一步处理动作',
+        nextDescription: '补齐当前步骤缺失的结构化结果后重新提交',
         summary: '已完成初步整理，但证据不足',
         confidence: 'medium',
       });
@@ -92,10 +93,10 @@ describe('agent_end llm judge e2e', () => {
       } as never, { agentId: 'maker', sessionKey: `agent:maker:m-team:${taskId}` });
 
       const task = harness.readTask(taskId);
-      expect(task?.status).toBe('running');
-      expect(task?.description).toContain('继续补齐当前步骤');
-      const retainLog = harness.readLogs(taskId, 'retain').at(-1);
-      expect(retainLog?.result?.via).toBe('llm');
+      expect(task?.status).toBe('pending');
+      expect(task?.description).toBe('补齐当前步骤缺失的结构化结果后重新提交');
+      const nextLog = harness.readLogs(taskId, 'next').at(-1);
+      expect(nextLog?.result?.via).toBe('llm');
     } finally {
       await harness.cleanup();
     }
@@ -120,12 +121,47 @@ describe('agent_end llm judge e2e', () => {
       } as never, { agentId: 'maker', sessionKey: `agent:maker:m-team:${taskId}` });
 
       const task = harness.readTask(taskId);
-      expect(task?.status).toBe('running');
-      expect(task?.description).toContain('继续补齐当前步骤');
-      const retainLog = harness.readLogs(taskId, 'retain').at(-1);
-      expect(retainLog?.result?.via).toBe('conservative_fallback');
+      expect(task?.status).toBe('pending');
+      expect(task?.description).toContain('继续处理当前任务');
+      const nextLog = harness.readLogs(taskId, 'next').at(-1);
+      expect(nextLog?.result?.via).toBe('conservative_fallback');
       const warns = harness.readRuntimeLogs().filter(log => log.level === 'warn').map(log => log.message).join('\n');
       expect(warns).toContain('agent_end llm judge fallback');
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  test('uses next when judge turns reported problems into the next step', async () => {
+    const harness = await createPluginHarness({ dashboardEnabled: false });
+    try {
+      (harness.api as unknown as { runtime: { agentEndJudge: Function } }).runtime.agentEndJudge = async () => ({
+        decision: 'next',
+        reason: '继续补齐本轮报告缺失的校验文件，并重新提交可验证结果',
+        nextDescription: '继续补齐本轮报告缺失的校验文件，并重新提交可验证结果',
+        summary: '已完成初步产出，但还需补一份校验文件',
+        confidence: 'high',
+      });
+
+      const publishResult = await harness.exec('mteam_publish_task', {
+        goal: '形成最终选品结论',
+        description: '整理候选并补齐校验文件',
+        publisher: 'manager',
+      }) as ToolResult<{ taskId: string }>;
+      const taskId = extractDetails(publishResult)!.taskId;
+      await harness.exec('mteam_claim_task', { taskId, agentId: 'maker' }, { agentId: 'maker' });
+
+      await harness.runAgentEnd({
+        success: true,
+        messages: [{ role: 'assistant', content: '结果摘要：已整理候选列表，但还需补齐一份校验文件后才能提交。' }],
+      } as never, { agentId: 'maker', sessionKey: `agent:maker:m-team:${taskId}` });
+
+      const task = harness.readTask(taskId);
+      expect(task?.status).toBe('pending');
+      expect(task?.executor).toBeNull();
+      expect(task?.description).toContain('继续补齐本轮报告缺失的校验文件');
+      const nextLog = harness.readLogs(taskId, 'next').at(-1);
+      expect(nextLog?.result?.via).toBe('llm');
     } finally {
       await harness.cleanup();
     }

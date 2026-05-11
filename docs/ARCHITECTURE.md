@@ -4,10 +4,10 @@
 
 M-Team 是一个面向 OpenClaw 的**多 Agent 任务池插件**。
 
-它的目标不是把流程做成更重的状态机，也不是把所有语义都压成单一 `status`，而是把复杂协作拆成两层：
+它的目标不是把流程做成更重的状态机，也不是让 executor 自己口头宣布整条任务完成，而是把复杂协作拆成两层：
 
 1. **LLM 负责任务理解与流向判断**
-2. **系统负责状态、phase、权限、审计和持久化约束**
+2. **系统负责状态、权限、审计和持久化约束**
 
 也就是说，M-Team 的主设计原则不是：
 - 让规则越来越聪明
@@ -16,7 +16,7 @@ M-Team 是一个面向 OpenClaw 的**多 Agent 任务池插件**。
 而是：
 - 让 `agent_end` 成为唯一任务级主裁决器
 - 让代码层承担必要的状态合法性与权限边界
-- 让 `status + lifecycle.phase` 共同表达“主状态 + 链路语义”
+- 让 `status` 表达最小真实运行态
 
 ---
 
@@ -25,7 +25,7 @@ M-Team 是一个面向 OpenClaw 的**多 Agent 任务池插件**。
 在没有任务池和状态约束时，多 Agent 协作常见问题是：
 
 - 任务目标和当前动作混在一起，Executor 容易越界
-- 一个 session 结束后，系统不知道任务是该继续、该交接、还是该完成
+- 一个 session 结束后，系统不知道任务是该继续、该生成下一步、还是该完成
 - 中间结果不可验证，最后只能靠“我完成了”的口头成功口径
 - Heartbeat、执行链、验收职责混在一起，造成状态污染
 - 规则越修越多，最后 `agent_end` 变成一堆补丁型 if/else
@@ -33,7 +33,7 @@ M-Team 是一个面向 OpenClaw 的**多 Agent 任务池插件**。
 
 M-Team 的目标不是把所有情况写死，而是：
 
-> **让 LLM 负责理解“这一步意味着什么”，让系统负责维护“这次状态变更是否合法、链路语义是否可追溯”。**
+> **让 LLM 负责理解“这一步意味着什么”，让系统负责维护“这次状态变更是否合法、权限是否正确、链路是否可追溯”。**
 
 ---
 
@@ -69,14 +69,13 @@ Executor 不应：
 真正需要判断的是：
 - 当前一步是不是完成了
 - 整体 `goal` 是否满足
-- 是否该 `relay`
-- 是否该 `retain`
+- 是否该 `next`
 - 是否该 `complete`
 - 是否该 `fail`
 
 这类判断集中由 `agent_end` LLM 统一完成。
 
-### 3.4 系统保留必要的状态与 phase 约束
+### 3.4 系统只保留必要的状态与权限约束
 系统层不负责理解任务内容，但负责维护这些事实：
 - 这个任务能不能 claim
 - 当前有没有 executor 持有
@@ -84,14 +83,13 @@ Executor 不应：
 - 谁能 close / reject / cancel
 - Publisher heartbeat 何时先做 timeout，再做 acceptance
 - 这次状态变更是否合法
-- 当前链路语义处于 `ready / executing / handoff / reworking / finalizing / done` 的哪一段
 
 ### 3.5 复杂性优先交给 LLM，但不能放弃系统保险丝
 像这些问题：
 - 这一步到底算不算完成
 - 整体 goal 是否满足
 - 下一棒应该怎么写
-- 当前是该换人还是该继续由当前人补一下
+- 当前暴露出的问题该如何转成下一步
 
 更适合由 `agent_end` LLM 处理。
 
@@ -113,7 +111,6 @@ Task 是任务池里的协作单元，至少包含：
 - `goal`
 - `context`
 - `status`
-- `lifecycle`
 - `publisher`
 - `executor`
 - `lastExecutor`
@@ -155,29 +152,10 @@ Task 是任务池里的协作单元，至少包含：
 - `failed`
 - `cancelled`
 
-### 4.6 `lifecycle.phase`
-`lifecycle.phase` 是链路细分语义，不替代 `status`，而是补充说明当前运行段落。
-
-当前有效 phase：
-- `ready`
-- `executing`
-- `handoff`
-- `reworking`
-- `finalizing`
-- `done`
-
-分工是：
-- `status` 回答“系统约束上现在处于什么主状态”
-- `phase` 回答“这条链的当前细分语义是什么”
-
-例如：
-- `pending + ready`：新发布待认领
-- `pending + handoff`：上一棒完成后待下一棒认领
-- `pending + reworking`：Publisher 驳回后待返工
-- `running + executing`：当前执行中
-- `running + finalizing`：同一执行者补收口
-- `completed + done`：executor 侧已完成，待 Publisher 验收
-- `closed + done`：Publisher 已验收关闭
+它回答的是：
+- 当前有没有人持有任务
+- 当前是否允许继续执行
+- 当前是否已进入待验收或终态
 
 ---
 
@@ -213,77 +191,51 @@ Executor session 只负责：
 它在 executor session 结束后，统一回答：
 - 当前棒是否完成
 - 整体 `goal` 是否满足
-- 是否要 `relay / retain / complete / fail`
-- 若 `relay`，下一棒 `nextDescription` 应该是什么
+- 是否要 `next / complete / fail`
+- 若 `next`，下一棒 `nextDescription` 应该是什么
 
 ---
 
-## 6. 状态与 phase 的双层模型
+## 6. 最小状态模型
 
-M-Team 当前真实设计不是单层 status-only，也不是 phase 取代 status，而是双层模型。
+M-Team 当前采用的是**最小状态模型**：
 
-### 6.1 主状态 `status`
-用于系统约束：
-- 是否可认领
-- 是否有人持有
-- 是否进入待验收
-- 是否已终态
+- `pending`：任务在池中，可被认领
+- `running`：任务被某个 executor 持有并执行中
+- `completed`：executor 提交整体完成，等待 Publisher 验收
+- `closed`：Publisher 验收通过，业务闭环结束
+- `failed`：任务被判定阻塞或失败
+- `cancelled`：任务被 Publisher 主动取消
 
-### 6.2 细分语义 `phase`
-用于表达链路段落：
-- 新建待接手
-- 正在执行
-- 已交接待下一棒
-- 驳回返工
-- 收口补齐
-- 完成收口
+这里不再持久化单独的细粒度链路阶段字段。
 
-### 6.3 为什么不能只留其中一层
-只留 `status` 的问题：
-- 无法区分 `pending` 是新任务、handoff 还是 reworking
-- 无法区分 `running` 是执行中还是 finalizing
-- 文档、看板、测试和审计会丢掉关键业务语义
-
-只留 `phase` 的问题：
-- 权限与状态约束判断不稳定
-- `close / reject / cancel / claim` 等工具难以统一保护
-
-所以当前正确口径是：
-
-> **`status` 负责约束，`phase` 负责解释；二者共同组成真实运行态。**
+更细的链路语义由这些信息共同解释：
+- 当前 `status`
+- 当前 `description`
+- `context`
+- `lastExecutor`
+- 最近一次任务日志 / 裁决记录
 
 ---
 
 ## 7. 最小裁决集合
 
-M-Team 只保留四类任务级裁决：
-- `relay`
-- `retain`
+M-Team 只保留三类任务级裁决：
+- `next`
 - `complete`
 - `fail`
 
-### 7.1 `relay`
+### 7.1 `next`
 含义：
-- 当前一棒已完成
+- 当前一棒已完成，或已明确暴露出下一步要解决的问题
 - 整体 `goal` 还未满足
 - 下一棒已明确
 - 任务交回池子等待下一位认领
 
 典型结果：
 - `status = pending`
-- `phase = handoff`
 
-### 7.2 `retain`
-含义：
-- 当前有进展
-- 但还不适合 handoff / complete
-- 当前 executor 继续持有任务完成下一小段补充动作
-
-典型结果：
-- `status = running`
-- `phase = executing` 或 `finalizing`
-
-### 7.3 `complete`
+### 7.2 `complete`
 含义：
 - 整体 `goal` 已满足
 - executor 已提交终态结果
@@ -291,9 +243,8 @@ M-Team 只保留四类任务级裁决：
 
 典型结果：
 - `status = completed`
-- `phase = done`
 
-### 7.4 `fail`
+### 7.3 `fail`
 含义：
 - 当前阻塞
 - 无法继续推进
@@ -301,7 +252,6 @@ M-Team 只保留四类任务级裁决：
 
 典型结果：
 - `status = failed`
-- `phase` 通常保持最近有效语义或进入失败后的终止态表达
 
 ---
 
@@ -311,14 +261,13 @@ M-Team 只保留四类任务级裁决：
 
 ```text
 publish
-→ pending + ready
+→ pending
 → heartbeat claim
-→ running + executing
+→ running
 → agent_end adjudication
-→ relay / retain / complete / fail
-→ 若 relay，则 pending + handoff 或 reworking
-→ 若 retain，则 running + executing/finalizing
-→ 若 complete，则 completed + done
+→ next / complete / fail
+→ 若 next，则 pending
+→ 若 complete，则 completed
 → publisher close / reject
 ```
 
@@ -337,8 +286,8 @@ publisher heartbeat
 ### LLM 负责
 - 当前一棒是否完成
 - 整体 `goal` 是否满足
-- 是否应 `relay / retain / complete / fail`
-- relay 时 `nextDescription` 怎么写
+- 是否应 `next / complete / fail`
+- next 时 `nextDescription` 怎么写
 
 ### 系统负责
 - claim 是否合法
@@ -347,7 +296,7 @@ publisher heartbeat
 - 谁能 close / reject / cancel
 - timeout reclaim 口径是否一致
 - reject 后 description 如何回写
-- 状态与 phase 是否可合法落盘
+- 状态是否可合法落盘
 
 这两层必须分开。
 
@@ -368,8 +317,6 @@ publisher heartbeat
 
 ## 11. 最终结论
 
-M-Team 当前最准确的架构口径不是“继续强化重规则状态机”，也不是“彻底去 phase 化”。
+M-Team 当前最准确的架构口径是：
 
-而是：
-
-> **把任务理解集中到 `agent_end` LLM，同时保留 `status + lifecycle.phase` 双层状态模型，让系统负责权限、合法迁移、超时回收、Publisher 验收与审计。**
+> **把任务理解集中到 `agent_end` LLM，同时保留最小 `status` 状态模型，让系统负责权限、合法迁移、超时回收、Publisher 验收与审计。**

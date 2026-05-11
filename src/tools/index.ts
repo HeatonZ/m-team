@@ -11,6 +11,7 @@ import { sanitizeTask, sanitizeTaskList } from './helpers.js';
 
 import { register as registerPublish, } from './publish.js';
 import { register as registerClaim, } from './claim.js';
+import { register as registerNext, } from './next.js';
 import { register as registerRelinquish, } from './relinquish.js';
 import { register as registerReject, } from './reject.js';
 import { register as registerCancel, } from './cancel.js';
@@ -31,6 +32,7 @@ export function registerTools(api: OpenClawPluginApi, config: MTeamPluginConfig)
 
     registerPublish(api, config);
     registerClaim(api, config);
+    registerNext(api, config);
     registerReject(api, config);
     registerRelinquish(api, config);
     registerCancel(api, config);

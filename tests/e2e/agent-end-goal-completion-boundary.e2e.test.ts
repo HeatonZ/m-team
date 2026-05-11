@@ -30,7 +30,6 @@ describe('agent_end task-goal completion boundary', () => {
 
       const task = harness.readTask(taskId);
       expect(task?.status).toBe('running');
-      expect(task?.lifecycle.lastDecision).toBe('retain');
       expect(task?.context.at(-1)?.output?.files).toContain('/mnt/d/code/hermes/step1.json');
     } finally {
       await harness.cleanup();

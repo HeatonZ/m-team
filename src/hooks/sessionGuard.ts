@@ -8,10 +8,12 @@
 
 import type {
   OpenClawPluginApi,
+} from 'openclaw/plugin-sdk/core';
+import type {
+  OpenClawPluginToolContext,
   PluginHookBeforeToolCallEvent,
   PluginHookBeforeToolCallResult,
-  PluginHookToolContext,
-} from 'openclaw/plugin-sdk/core';
+} from '../types/openclaw-hooks.js';
 
 interface RegisterOptions {
   publishers: string[];
@@ -27,7 +29,7 @@ export function registerSessionGuardHook(
     'before_tool_call',
     (
       event: PluginHookBeforeToolCallEvent,
-      ctx: PluginHookToolContext,
+      ctx: OpenClawPluginToolContext,
     ): PluginHookBeforeToolCallResult => {
       const { toolName, params } = event;
       const { sessionKey, agentId } = ctx;
@@ -54,17 +56,17 @@ export function registerSessionGuardHook(
       }
 
       // executor task session 禁止主动 relinquish 当前任务。
-      // 正常交接应由 agent_end hook 在 executor 结束后统一判断 relay/complete；
-      // executor 提前 relinquish 会把任务改成 pending，导致 agent_end relay 失败（TASK_NOT_RUNNING_pending）。
+      // 正常推进应由 agent_end hook 在 executor 结束后统一判断 next/complete；
+      // executor 提前 relinquish 会把任务改成 pending，导致 agent_end 后续收口失败（TASK_NOT_RUNNING_pending）。
       if (toolName === 'mteam_relinquish_task' && isExecutorTaskSession) {
         return {
           block: true,
-          blockReason: `executor session（${sessionKey}）禁止主动调用 mteam_relinquish_task。请完成当前步骤后直接结束 session，由 agent_end hook 自动 relay/complete。`,
+          blockReason: `executor session（${sessionKey}）禁止主动调用 mteam_relinquish_task。请完成当前步骤后直接结束 session，由 agent_end hook 自动 next/complete。`,
         };
       }
 
       // publish：只有配置中的 publishers 才能发布任务
-      if (toolName === 'mteam_publish_task' && !publishers.has(agentId)) {
+      if (toolName === 'mteam_publish_task' && (!agentId || !publishers.has(agentId))) {
         return {
           block: true,
           blockReason: `mteam_publish_task 只能由 publishers 配置中的 agent 调用，你（${agentId}）不在 publishers 列表中`,

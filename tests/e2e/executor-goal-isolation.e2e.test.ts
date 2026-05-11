@@ -31,12 +31,13 @@ describe('executor goal isolation and completion discipline', () => {
     }
   });
 
-  test('agent_end should not complete when llm asks to retain after only restating current step', async () => {
+  test('agent_end should not complete when llm asks for a next step after only restating current step', async () => {
     const harness = await createPluginHarness({ dashboardEnabled: false });
     try {
       (harness.api as unknown as { runtime: { agentEndJudge: Function } }).runtime.agentEndJudge = async () => ({
-        decision: 'retain',
+        decision: 'next',
         reason: '继续补齐当前步骤的结构化结果',
+        nextDescription: '继续补齐当前步骤的结构化结果',
         summary: '仅完成当前一步，不足以证明整体 goal',
       });
 
@@ -59,7 +60,7 @@ describe('executor goal isolation and completion discipline', () => {
       );
 
       const task = harness.readTask(taskId);
-      expect(task?.status).toBe('running');
+      expect(task?.status).toBe('pending');
       expect(task?.description).toContain('继续补齐当前步骤');
       expect(task?.context.at(-1)?.output?.summary).toContain('仅完成当前一步');
     } finally {

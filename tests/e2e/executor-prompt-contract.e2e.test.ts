@@ -25,6 +25,8 @@ describe('executor prompt contract e2e', () => {
 
       const runMessage = harness.readSubagentRuns().at(-1)?.message ?? '';
       expect(runMessage).toContain('最后一条消息必须结构化汇报 3 件事');
+      expect(runMessage).toContain('问题报告清楚');
+      expect(runMessage).toContain('由它决定下一步如何解决');
       expect(runMessage).toContain('结果摘要');
       expect(runMessage).toContain('未解决问题');
       expect(runMessage).toContain('无未解决问题');

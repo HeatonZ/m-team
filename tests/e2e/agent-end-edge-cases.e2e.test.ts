@@ -61,9 +61,17 @@ describe('agent_end edge cases e2e', () => {
     }
   });
 
-  test('trips loop guard after repeated finalizing retains without progress', async () => {
+  test('keeps task running on repeated retains without progress when llm does not fail it', async () => {
     const harness = await createPluginHarness({ dashboardEnabled: false });
     try {
+      (harness.api as unknown as { runtime: { agentEndJudge: Function } }).runtime.agentEndJudge = async () => ({
+        decision: 'next',
+        reason: '继续补齐最终输出文件',
+        nextDescription: '继续补齐最终输出文件',
+        summary: '已核对候选列表，待补最终输出文件。',
+        confidence: 'medium',
+      });
+
       const publishResult = await harness.exec('mteam_publish_task', {
         goal: '验证循环熔断',
         description: '先整理最终结果并核对缺口',
@@ -81,8 +89,10 @@ describe('agent_end edge cases e2e', () => {
       );
 
       const finalizingTask = harness.readTask(taskId);
-      expect(finalizingTask?.status).toBe('running');
-      expect(finalizingTask?.lifecycle.phase).toBe('finalizing');
+      expect(finalizingTask?.status).toBe('pending');
+      expect(finalizingTask?.description).toBe('继续补齐最终输出文件');
+
+      await harness.exec('mteam_claim_task', { taskId, agentId: 'maker' }, { agentId: 'maker' });
 
       await harness.runAgentEnd(
         {
@@ -93,14 +103,14 @@ describe('agent_end edge cases e2e', () => {
       );
 
       const failedTask = harness.readTask(taskId);
-      expect(failedTask?.status).toBe('running');
-      expect(failedTask?.lifecycle.phase).toBe('finalizing');
-      expect(failedTask?.lifecycle.loopGuard.samePhaseCount).toBeGreaterThanOrEqual(2);
-      expect(failedTask?.lifecycle.loopGuard.noProgressCount).toBe(1);
+      expect(failedTask?.status).toBe('pending');
+      expect(failedTask?.description).toBe('继续补齐最终输出文件');
       expect(failedTask?.context.at(-1)?.output?.summary).toContain('最终整理');
 
       const failLogs = harness.readLogs(taskId, 'fail');
       expect(failLogs).toHaveLength(0);
+      const nextLogs = harness.readLogs(taskId, 'next');
+      expect(nextLogs.length).toBeGreaterThanOrEqual(2);
     } finally {
       await harness.cleanup();
     }

@@ -4,6 +4,7 @@ import { createPluginHarness } from '../helpers/create-plugin-harness.ts';
 const EXPECTED_TOOL_NAMES = [
   'mteam_publish_task',
   'mteam_claim_task',
+  'mteam_next_task',
   'mteam_reject_task',
   'mteam_relinquish_task',
   'mteam_cancel_task',

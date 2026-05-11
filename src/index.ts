@@ -29,7 +29,7 @@ import {
   getAllTasks,
   cancelTask,
   relinquishTask,
-  relayTask,
+  nextTask,
   completeTask,
   failTask
 } from './pool/index.js';
@@ -48,7 +48,6 @@ import { startDashboard, registerDashboardCleanup, stopDashboard } from './dashb
 import { definePluginEntry, emptyPluginConfigSchema } from 'openclaw/plugin-sdk/plugin-entry';
 import type {
   OpenClawPluginApi,
-  OpenClawPluginConfigSchema,
 } from 'openclaw/plugin-sdk/core';
 
 interface PluginConfig {
@@ -119,7 +118,7 @@ export {
   getAllTasks,
   cancelTask,
   relinquishTask,
-  relayTask,
+  nextTask,
   completeTask,
   failTask,
   TaskStatus,

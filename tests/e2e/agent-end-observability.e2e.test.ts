@@ -2,12 +2,12 @@ import { describe, expect, test } from 'vitest';
 import { createPluginHarness } from '../helpers/create-plugin-harness.ts';
 import { extractDetails, type ToolResult } from '../helpers/extract-tool-result.ts';
 
-describe('agent_end phase2 observability e2e', () => {
-  test('llm relay log should include raw decision and normalized evidence', async () => {
+describe('agent_end observability e2e', () => {
+  test('llm next log should include raw decision and normalized evidence', async () => {
     const harness = await createPluginHarness({ dashboardEnabled: false });
     try {
       (harness.api as unknown as { runtime: { agentEndJudge: Function } }).runtime.agentEndJudge = async () => ({
-        decision: 'relay',
+        decision: 'next',
         reason: '还需要下一棒补齐剩余候选',
         nextDescription: '继续补齐剩余 3 个候选商品',
         confidence: 'high',
@@ -26,11 +26,11 @@ describe('agent_end phase2 observability e2e', () => {
         messages: [{ role: 'assistant', content: '结果摘要：已整理 2 个候选，记录在 /mnt/d/code/hermes/candidates.md。' }],
       } as never, { agentId: 'maker', sessionKey: `agent:maker:m-team:${taskId}` });
 
-      const relayLog = harness.readLogs(taskId, 'relay').at(-1);
-      expect(relayLog?.result?.via).toBe('llm');
-      expect(relayLog?.result?.llm_raw).toContain('relay');
-      expect(relayLog?.result?.reason).toBe('还需要下一棒补齐剩余候选');
-      expect(relayLog?.result?.evidence).toEqual({
+      const nextLog = harness.readLogs(taskId, 'next').at(-1);
+      expect(nextLog?.result?.via).toBe('llm');
+      expect(nextLog?.result?.llm_raw).toContain('next');
+      expect(nextLog?.result?.reason).toBe('还需要下一棒补齐剩余候选');
+      expect(nextLog?.result?.evidence).toEqual({
         summary: '结果摘要：已整理 2 个候选，记录在 /mnt/d/code/hermes/candidates.md。',
         files: ['/mnt/d/code/hermes/candidates.md'],
         unresolvedIssues: [],
@@ -69,7 +69,7 @@ describe('agent_end phase2 observability e2e', () => {
     }
   });
 
-  test('fallback should retain when transcript is short but contains file evidence', async () => {
+  test('fallback should return next when transcript is short but contains file evidence', async () => {
     const harness = await createPluginHarness({ dashboardEnabled: false });
     try {
       (harness.api as unknown as { runtime: { agentEndJudge: Function } }).runtime.agentEndJudge = async () => 'not-json';
@@ -88,10 +88,10 @@ describe('agent_end phase2 observability e2e', () => {
       } as never, { agentId: 'maker', sessionKey: `agent:maker:m-team:${taskId}` });
 
       const task = harness.readTask(taskId);
-      expect(task?.status).toBe('running');
-      const retainLog = harness.readLogs(taskId, 'retain').at(-1);
-      expect(retainLog?.result?.via).toBe('conservative_fallback');
-      expect(retainLog?.result?.evidence).toEqual({
+      expect(task?.status).toBe('pending');
+      const nextLog = harness.readLogs(taskId, 'next').at(-1);
+      expect(nextLog?.result?.via).toBe('conservative_fallback');
+      expect(nextLog?.result?.evidence).toEqual({
         summary: '/mnt/d/code/hermes/archive.md',
         files: ['/mnt/d/code/hermes/archive.md'],
         unresolvedIssues: [],

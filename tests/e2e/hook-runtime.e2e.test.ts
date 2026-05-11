@@ -6,7 +6,7 @@ interface PublishDetails {
   taskId: string;
 }
 
-describe('hook lifecycle e2e', () => {
+describe('hook runtime e2e', () => {
   test('heartbeat injects claim prompt only for idle executor and publisher acceptance prompt for publisher', async () => {
     const harness = await createPluginHarness({ dashboardEnabled: false });
     try {
@@ -95,7 +95,7 @@ describe('hook lifecycle e2e', () => {
     }
   });
 
-  test('agent_end relays next description and completes when final result is present', async () => {
+  test('agent_end returns the task to the pool with next description and later completes when final result is present', async () => {
     const harness = await createPluginHarness({ dashboardEnabled: false });
     try {
       const publishResult = await harness.exec('mteam_publish_task', {
@@ -108,7 +108,7 @@ describe('hook lifecycle e2e', () => {
 
       await harness.exec('mteam_claim_task', { taskId, agentId: 'maker' }, { agentId: 'maker' });
       (harness.api as unknown as { runtime: { agentEndJudge: Function } }).runtime.agentEndJudge = async () => ({
-        decision: 'relay',
+        decision: 'next',
         reason: '还需继续补齐剩余候选',
         nextDescription: '继续搜索宠物玩具，筛选 costPrice ≤ 5 RMB、规格数 ≤ 8，找够剩余 3 个',
         summary: '已完成首轮筛选，保留 2 个候选',
@@ -125,11 +125,10 @@ describe('hook lifecycle e2e', () => {
         { agentId: 'maker', sessionKey: `agent:maker:m-team:${taskId}` },
       );
 
-      const relayedTask = harness.readTask(taskId);
-      expect(relayedTask?.status).toBe('pending');
-      expect(relayedTask?.description).toBe('继续搜索宠物玩具，筛选 costPrice ≤ 5 RMB、规格数 ≤ 8，找够剩余 3 个');
-      expect(relayedTask?.lifecycle.phase).toBe('handoff');
-      expect(relayedTask?.context.at(-1)?.output?.summary).toContain('已完成首轮筛选');
+      const nextTask = harness.readTask(taskId);
+      expect(nextTask?.status).toBe('pending');
+      expect(nextTask?.description).toBe('继续搜索宠物玩具，筛选 costPrice ≤ 5 RMB、规格数 ≤ 8，找够剩余 3 个');
+      expect(nextTask?.context.at(-1)?.output?.summary).toContain('已完成首轮筛选');
 
       await harness.exec('mteam_claim_task', { taskId, agentId: 'fixer' }, { agentId: 'fixer' });
       (harness.api as unknown as { runtime: { agentEndJudge: Function } }).runtime.agentEndJudge = async () => ({
