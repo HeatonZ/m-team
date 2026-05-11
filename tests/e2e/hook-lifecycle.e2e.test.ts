@@ -107,6 +107,13 @@ describe('hook lifecycle e2e', () => {
       expect(taskId).not.toBeUndefined();
 
       await harness.exec('mteam_claim_task', { taskId, agentId: 'maker' }, { agentId: 'maker' });
+      (harness.api as unknown as { runtime: { agentEndJudge: Function } }).runtime.agentEndJudge = async () => ({
+        decision: 'relay',
+        reason: '还需继续补齐剩余候选',
+        nextDescription: '继续搜索宠物玩具，筛选 costPrice ≤ 5 RMB、规格数 ≤ 8，找够剩余 3 个',
+        summary: '已完成首轮筛选，保留 2 个候选',
+        confidence: 'high',
+      });
 
       await harness.runAgentEnd(
         {
@@ -122,9 +129,15 @@ describe('hook lifecycle e2e', () => {
       expect(relayedTask?.status).toBe('pending');
       expect(relayedTask?.description).toBe('继续搜索宠物玩具，筛选 costPrice ≤ 5 RMB、规格数 ≤ 8，找够剩余 3 个');
       expect(relayedTask?.lifecycle.phase).toBe('handoff');
-      expect(relayedTask?.context.at(-1)?.output?.summary).toContain('结果摘要');
+      expect(relayedTask?.context.at(-1)?.output?.summary).toContain('已完成首轮筛选');
 
       await harness.exec('mteam_claim_task', { taskId, agentId: 'fixer' }, { agentId: 'fixer' });
+      (harness.api as unknown as { runtime: { agentEndJudge: Function } }).runtime.agentEndJudge = async () => ({
+        decision: 'complete',
+        reason: '最终结果已形成',
+        summary: '已输出最终结果文件',
+        confidence: 'high',
+      });
       await harness.runAgentEnd(
         {
           success: true,
@@ -153,6 +166,12 @@ describe('hook lifecycle e2e', () => {
       }) as ToolResult<PublishDetails>;
       const taskId = extractDetails(publishResult)!.taskId;
       await harness.exec('mteam_claim_task', { taskId, agentId: 'maker' }, { agentId: 'maker' });
+      (harness.api as unknown as { runtime: { agentEndJudge: Function } }).runtime.agentEndJudge = async () => ({
+        decision: 'complete',
+        reason: '最终结果已形成',
+        summary: '已输出最终结果文件',
+        confidence: 'high',
+      });
 
       await expect(harness.runAgentEnd(
         {

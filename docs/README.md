@@ -1,47 +1,57 @@
 # M-Team Docs
 
-M-Team 是一个面向 OpenClaw 的**链式多 Agent 任务池插件**。
+M-Team 是一个面向 OpenClaw 的**多 Agent 任务池插件**。
 
-它解决的不是“让多个 Agent 同时说话”，而是把多 Agent 协作拆成**一棒一棒可追踪、可交接、可验收的任务链**：
+当前 docs 的统一口径不是“纯极简 status-only”，而是：
 
-- Publisher 发布任务
-- Heartbeat session 只负责认领
-- Executor session 只负责完成当前一棒
-- `agent_end` 在 executor 结束后统一裁决：`relay / retain / complete / fail`
-- Publisher 最终验收并关闭任务
+- `status` 表达系统主状态约束
+- `lifecycle.phase` 表达链路细分语义
+- Executor 只负责完成当前一棒
+- `agent_end` LLM 是唯一任务级主裁决器
+- Publisher 负责超时回收与最终验收闭环
+
+也就是说，M-Team 当前真实设计是：
+
+> **LLM 负责理解任务流向；系统负责状态、phase、权限和审计的一致落盘。**
 
 ---
 
 ## 先读哪几篇
 
 ### 1. [ARCHITECTURE.md](./ARCHITECTURE.md)
-先看这篇。它定义 M-Team 的**唯一架构主口径**：
+先看这篇。它定义 M-Team 的主架构口径：
 - M-Team 要解决什么问题
-- 核心对象语义是什么
+- 为什么采用 LLM-first 裁决
+- `status` 与 `lifecycle.phase` 如何分工
 - 各角色边界是什么
-- 生命周期主路径是什么
-- 为什么 `handoff` 才是链式任务的默认主路径
+- 哪些判断交给 `agent_end`，哪些必须由系统兜住
 
 ### 2. [TASK.md](./TASK.md)
-如果你要理解**任务对象和状态机**，看这篇：
+如果你要理解任务对象和状态模型，看这篇：
 - Task schema
-- description / goal / context / lifecycle 的定义
-- status / phase 的含义
-- 状态转移规则
+- `description / goal / context / status / lifecycle` 的定义
+- `status` 与 `phase` 的分层关系
+- 裁决动作如何改变任务状态
 
 ### 3. [SESSION.md](./SESSION.md)
-如果你要理解**运行时流程**，看这篇：
+如果你要理解运行时流程，看这篇：
 - heartbeat session 做什么
 - executor session 做什么
-- `agent_end` 怎么收口
-- Publisher 怎么验收和回收超时任务
+- `agent_end` 怎么裁决
+- Publisher 怎么超时回收、验收、驳回、关闭
 
 ### 4. [IMPLEMENTATION.md](./IMPLEMENTATION.md)
 如果你要改代码，读这篇：
 - 源码目录结构
 - 各模块职责边界
 - hook / pool / db / notifications 的分工
-- 测试重点应该压在哪
+- 哪些复杂性应集中在 `agent_end`，哪些必须留在系统约束层
+
+### 5. [test-cases/README.md](./test-cases/README.md)
+如果你要补测试或核对文档覆盖，看这篇：
+- 当前自然语言用例索引
+- 哪些用例仍沿用旧 phase-heavy 口径
+- 哪些场景已被新的 e2e 覆盖
 
 ---
 
@@ -52,28 +62,62 @@ M-Team 是一个面向 OpenClaw 的**链式多 Agent 任务池插件**。
 - `description = 当前一棒唯一执行指令`
 - `goal = 终态验收标尺`
 - `context = 已完成步骤历史`
-- `agent_end = 唯一终态裁决器`
-- `handoff = 链式任务默认主路径`
-- `retain = 例外路径，不是常态`
-- `finalizing = 只在必要子结果已齐时进入，不是兜底态`
+- `status = 系统主状态`
+- `lifecycle.phase = 链路细分语义`
+- `agent_end = 唯一任务级主裁决器`
+- `relay / retain / complete / fail = 最小裁决集合`
+- `complete != close`，Publisher 必须做最终验收
+- 复杂语义判断优先交给 LLM；权限、状态合法性、超时回收、验收入口由系统强约束
 
-如果你看到某份文档和上面冲突，以 `ARCHITECTURE.md` 为准，并应立即修正文档漂移。
+如果某份文档和上面冲突，以 `ARCHITECTURE.md` 为准，并应立即修正文档漂移。
 
 ---
 
 ## 当前最重要的设计结论
 
-M-Team 必须把**链式任务**当成第一公民来设计：
+M-Team 当前不是“继续堆规则”，也不是“彻底砍掉 phase”。
 
-1. Executor 只做当前一棒，不负责脑补整条链
-2. 当前一棒完成后，系统默认应优先尝试 `relay / handoff`
-3. 不能因为 transcript 看起来像“在整理结果”，就过早进入 `finalizing`
-4. `finalizing` 只能发生在“必要子结果已经齐了，只差最后收口”的阶段
+而是三件事并行：
+
+1. **把任务理解集中到 `agent_end` LLM**
+2. **保留能表达真实链路的 `status + lifecycle.phase` 双层模型**
+3. **把系统限制在权限、状态迁移、超时回收、验收闭环和审计层**
+
+换句话说：
+- heartbeat 只负责认领，Publisher heartbeat 只负责超时扫描与验收
+- executor 只做当前一棒
+- session end 不直接等于 task complete
+- `agent_end` 统一决定该 `relay / retain / complete / fail`
+- Publisher 再决定 `close / reject / cancel`
+
+---
+
+## 本轮已对齐的文档事实
+
+本轮代码与测试已明确覆盖这些行为：
+
+- Publisher heartbeat 先做超时扫描，再做 completed 验收
+- 超时判断口径以 `updatedAt > 1 小时` 为准
+- 每次 heartbeat 最多处理 1 个超时任务；无超时任务时才验收 completed
+- `mteam_close_task` 只允许关闭 `completed` 任务
+- `mteam_reject_task` 会把任务打回 `pending`，并从驳回 reason 中解析新的 `nextDescription`
+- `agent_end` 的主裁决由 `agentEndJudge`/LLM 提供；测试中应显式 stub，而不是依赖隐式默认行为
+
+相关 e2e：
+- `tests/e2e/publisher-acceptance-full-chain.e2e.test.ts`
+- `tests/e2e/publisher-heartbeat-acceptance.e2e.test.ts`
+- `tests/e2e/publisher-terminal-actions.e2e.test.ts`
+- `tests/e2e/hook-lifecycle.e2e.test.ts`
+- `tests/e2e/agent-end-llm-judge.e2e.test.ts`
+- `tests/e2e/agent-end-phase2-observability.e2e.test.ts`
 
 ---
 
 ## 文档维护规则
 
 - 不要把临时 bug 写成长期规范
-- 补丁类设计说明应最终并回主文档
-- 一篇文档只回答一种问题，避免 README / 架构 / 流程 / 安装互相重复
+- 不要让 patch 规则反向支配主架构
+- 文档里的状态名、phase 名、工具名、验收顺序必须与代码行为严格一致
+- 一篇文档只回答一种问题，避免 README / 架构 / 流程 / 测试索引互相重复
+- 如果实现存在历史残留与目标口径并存，要明确区分“当前真实运行态”与“未来可能收缩方向”
+- 自然语言测试文档如果仍沿用旧口径，必须显式标注，不可伪装成当前已对齐事实

@@ -25,6 +25,12 @@ describe('publisher heartbeat acceptance e2e', () => {
       }) as ToolResult<{ taskId: string }>;
       const completedTaskId = extractDetails(completedResult)!.taskId;
       await harness.exec('mteam_claim_task', { taskId: completedTaskId, agentId: 'fixer' }, { agentId: 'fixer' });
+      (harness.api as unknown as { runtime: { agentEndJudge: Function } }).runtime.agentEndJudge = async () => ({
+        decision: 'complete',
+        reason: '最终结果已形成',
+        summary: '已输出待验收结果文件',
+        confidence: 'high',
+      });
       await harness.runAgentEnd(
         {
           success: true,

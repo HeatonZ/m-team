@@ -9,3 +9,4 @@ package-lock.json
 .continue/
 .hermes/
 skills/lark-*/
+.omx/

@@ -4,14 +4,12 @@ import {
   prepareSimpleCompletionModelForAgent,
   extractAssistantText,
 } from 'openclaw/plugin-sdk/agent-runtime';
-import type { Task, TaskPhase, ContextStepOutput } from '../schema/task.js';
+import type { Task, ContextStepOutput } from '../schema/task.js';
 
 export type AgentEndDecision = {
   decision: 'complete' | 'relay' | 'retain' | 'fail';
   reason: string;
   nextDescription?: string;
-  mode?: 'handoff' | 'reworking';
-  phase?: TaskPhase;
   summary?: string;
   unresolvedIssues?: string[];
   confidence?: 'low' | 'medium' | 'high';
@@ -41,21 +39,19 @@ function buildDecisionPrompt(params: {
     '允许输出的 decision：complete | relay | retain | fail',
     '规则：',
     '1. complete：只有当前步骤完成、整体 goal 满足、没有待处理问题、没有明确下一步时才允许。',
-    '2. relay：已有有效进展，但整体 goal 未完成，且下一步明确可交接。',
-    '3. retain：有进展但信息不足以安全 complete/relay，或当前 executor 应继续收口。',
+    '2. relay：已有有效进展，但整体 goal 未完成，且下一步明确可交接。relay 时必须提供 nextDescription，且必须是单步、可执行指令。',
+    '3. retain：有进展但信息不足以安全 complete/relay，或当前 executor 应继续补齐当前步骤。',
     '4. fail：当前阻塞或无有效进展，且无法形成可执行下一步。',
-    '5. 不要依赖 executor 显式写“下一步：...”。是否需要 relay、以及 nextDescription 写什么，都由你根据 goal、当前 description、context 和本轮产出自行判断。',
+    '5. 如果无法安全判断 complete/relay，优先输出 retain；只有在明确阻塞且无推进路径时才输出 fail。',
     '6. 如果 transcript 只有模糊完成口径，没有结构化结果/产物/证据，不得 complete。',
-    '7. nextDescription 只能是单步、可执行指令；若 decision 不是 relay，可留空。',
+    '7. nextDescription 只能在 decision=relay 时提供；其他决策留空。',
     '',
     '请严格只返回 JSON，不要输出 markdown、解释或代码块。',
     'JSON schema:',
     '{',
     '  "decision": "complete|relay|retain|fail",',
     '  "reason": "string",',
-    '  "nextDescription": "string (optional)",',
-    '  "mode": "handoff|reworking (optional)",',
-    '  "phase": "executing|finalizing (optional, only for retain)",',
+    '  "nextDescription": "string (optional, required when decision=relay)",',
     '  "summary": "string (optional)",',
     '  "unresolvedIssues": ["string", ...] (optional),',
     '  "confidence": "low|medium|high"',
@@ -63,7 +59,6 @@ function buildDecisionPrompt(params: {
     '',
     `goal: ${task.goal}`,
     `current_description: ${task.description}`,
-    `current_phase: ${task.lifecycle.phase}`,
     `current_output_summary: ${output.summary ?? ''}`,
     `current_output_files: ${(output.files ?? []).join(', ')}`,
     `current_unresolved_issues: ${(output.unresolvedIssues ?? []).join(' ; ')}`,
@@ -92,15 +87,17 @@ function parseDecision(raw: string): AgentEndDecision | null {
       if (!['complete', 'relay', 'retain', 'fail'].includes(String(decision)) || typeof reason !== 'string' || !reason.trim()) {
         continue;
       }
-      const mode = parsed.mode;
-      const phase = parsed.phase;
+      const nextDescription = typeof parsed.nextDescription === 'string' && parsed.nextDescription.trim()
+        ? parsed.nextDescription.trim()
+        : undefined;
+      if (decision === 'relay' && !nextDescription) {
+        continue;
+      }
       const confidence = parsed.confidence;
       return {
         decision: decision as AgentEndDecision['decision'],
         reason: reason.trim(),
-        nextDescription: typeof parsed.nextDescription === 'string' && parsed.nextDescription.trim() ? parsed.nextDescription.trim() : undefined,
-        mode: mode === 'handoff' || mode === 'reworking' ? mode : undefined,
-        phase: phase === 'executing' || phase === 'finalizing' ? phase as TaskPhase : undefined,
+        nextDescription,
         summary: typeof parsed.summary === 'string' && parsed.summary.trim() ? parsed.summary.trim() : undefined,
         unresolvedIssues: Array.isArray(parsed.unresolvedIssues)
           ? parsed.unresolvedIssues.map(item => String(item).trim()).filter(Boolean).slice(0, 10)
@@ -159,6 +156,9 @@ export async function judgeAgentEndWithLlm(params: {
         return parsed ? { ok: true, decision: parsed, raw: judged } : { ok: false, error: 'RUNTIME_AGENT_END_JUDGE_PARSE_FAILED', raw: judged };
       }
       if (judged && typeof judged === 'object' && typeof judged.decision === 'string' && typeof judged.reason === 'string') {
+        if (judged.decision === 'relay' && !(typeof judged.nextDescription === 'string' && judged.nextDescription.trim())) {
+          return { ok: false, error: 'RUNTIME_AGENT_END_JUDGE_RELAY_WITHOUT_NEXT_DESCRIPTION', raw: JSON.stringify(judged) };
+        }
         return { ok: true, decision: judged, raw: JSON.stringify(judged) };
       }
       return { ok: false, error: 'RUNTIME_AGENT_END_JUDGE_EMPTY' };

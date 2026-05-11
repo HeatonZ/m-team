@@ -31,9 +31,15 @@ describe('executor goal isolation and completion discipline', () => {
     }
   });
 
-  test('agent_end should retain instead of completing when only current step is restated without artifact', async () => {
+  test('agent_end should not complete when llm asks to retain after only restating current step', async () => {
     const harness = await createPluginHarness({ dashboardEnabled: false });
     try {
+      (harness.api as unknown as { runtime: { agentEndJudge: Function } }).runtime.agentEndJudge = async () => ({
+        decision: 'retain',
+        reason: '继续补齐当前步骤的结构化结果',
+        summary: '仅完成当前一步，不足以证明整体 goal',
+      });
+
       const publishResult = await harness.exec('mteam_publish_task', {
         goal: '完成 1+1、1×1、2+3 三个计算，输出三个结果',
         description: '计算 1+1',
@@ -54,8 +60,8 @@ describe('executor goal isolation and completion discipline', () => {
 
       const task = harness.readTask(taskId);
       expect(task?.status).toBe('running');
-      expect(task?.lifecycle.phase).toBe('executing');
-      expect(task?.context.at(-1)?.output?.summary).toContain('结果摘要');
+      expect(task?.description).toContain('继续补齐当前步骤');
+      expect(task?.context.at(-1)?.output?.summary).toContain('仅完成当前一步');
     } finally {
       await harness.cleanup();
     }

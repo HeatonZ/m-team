@@ -2,8 +2,8 @@ import { describe, expect, test } from 'vitest';
 import { createPluginHarness } from '../helpers/create-plugin-harness.ts';
 import { extractDetails, type ToolResult } from '../helpers/extract-tool-result.ts';
 
-describe('agent_end decision hardening e2e', () => {
-  test('does not complete from vague completion wording without structured outcome or artifact', async () => {
+describe('agent_end conservative fallback e2e', () => {
+  test('fails when messages are empty', async () => {
     const harness = await createPluginHarness({ dashboardEnabled: false });
     try {
       const publishResult = await harness.exec('mteam_publish_task', {
@@ -17,50 +17,20 @@ describe('agent_end decision hardening e2e', () => {
       await harness.runAgentEnd(
         {
           success: true,
-          messages: [{ role: 'assistant', content: '已完成，任务完成。' }],
+          messages: [],
         } as never,
         { agentId: 'maker', sessionKey: `agent:maker:m-team:${taskId}` },
       );
 
       const task = harness.readTask(taskId);
-      expect(task?.status).toBe('running');
-      expect(task?.lifecycle.lastDecision).toBe('retain');
+      expect(task?.status).toBe('failed');
+      expect(task?.context.at(-1)?.output?.error).toBe('AGENT_END_MESSAGES_EMPTY');
     } finally {
       await harness.cleanup();
     }
   });
 
-  test('retains when relay intent exists but next description is empty', async () => {
-    const harness = await createPluginHarness({ dashboardEnabled: false });
-    try {
-      const publishResult = await harness.exec('mteam_publish_task', {
-        goal: '完成一轮交接',
-        description: '先整理候选结果',
-        publisher: 'manager',
-      }) as ToolResult<{ taskId: string }>;
-      const taskId = extractDetails(publishResult)!.taskId;
-      await harness.exec('mteam_claim_task', { taskId, agentId: 'maker' }, { agentId: 'maker' });
-
-      await harness.runAgentEnd(
-        {
-          success: true,
-          messages: [{ role: 'assistant', content: '结果摘要：已整理完候选。下一步：   ' }],
-        } as never,
-        { agentId: 'maker', sessionKey: `agent:maker:m-team:${taskId}` },
-      );
-
-      const task = harness.readTask(taskId);
-      expect(task?.status).toBe('running');
-      expect(task?.lifecycle.lastDecision).toBe('retain');
-
-      const retainLogs = harness.readLogs(taskId, 'retain');
-      expect(retainLogs.at(-1)?.result?.decision).toBe('retain');
-    } finally {
-      await harness.cleanup();
-    }
-  });
-
-  test('fails when executor reports blocked state without handoff path or recoverable progress', async () => {
+  test('fails when executor session exits with error', async () => {
     const harness = await createPluginHarness({ dashboardEnabled: false });
     try {
       const publishResult = await harness.exec('mteam_publish_task', {
@@ -73,15 +43,46 @@ describe('agent_end decision hardening e2e', () => {
 
       await harness.runAgentEnd(
         {
-          success: true,
-          messages: [{ role: 'assistant', content: '问题：接口报错。缺失：调用权限。无法继续。' }],
+          success: false,
+          error: 'HTTP_500',
+          messages: [{ role: 'assistant', content: '调用失败' }],
         } as never,
         { agentId: 'maker', sessionKey: `agent:maker:m-team:${taskId}` },
       );
 
       const task = harness.readTask(taskId);
       expect(task?.status).toBe('failed');
-      expect(task?.context.at(-1)?.output?.error).toBe('BLOCKED_WITH_PROGRESS_BUT_NO_HANDOFF');
+      expect(task?.context.at(-1)?.output?.error).toBe('HTTP_500');
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  test('fails conservatively when llm parse fails and there is no recoverable progress', async () => {
+    const harness = await createPluginHarness({ dashboardEnabled: false });
+    try {
+      (harness.api as unknown as { runtime: { agentEndJudge: Function } }).runtime.agentEndJudge = async () => 'not-json';
+
+      const publishResult = await harness.exec('mteam_publish_task', {
+        goal: '完成接口验证',
+        description: '先调用接口并记录结果',
+        publisher: 'manager',
+      }) as ToolResult<{ taskId: string }>;
+      const taskId = extractDetails(publishResult)!.taskId;
+      await harness.exec('mteam_claim_task', { taskId, agentId: 'maker' }, { agentId: 'maker' });
+
+      await harness.runAgentEnd(
+        {
+          success: true,
+          messages: [{ role: 'assistant', content: '' }],
+        } as never,
+        { agentId: 'maker', sessionKey: `agent:maker:m-team:${taskId}` },
+      );
+
+      const task = harness.readTask(taskId);
+      expect(task?.status).toBe('failed');
+      const failLog = harness.readLogs(taskId, 'fail').at(-1);
+      expect(failLog?.result?.via).toBe('conservative_fallback');
     } finally {
       await harness.cleanup();
     }
