@@ -2,23 +2,20 @@ import { describe, expect, test } from 'vitest';
 import { createPluginHarness } from '../helpers/create-plugin-harness.ts';
 import { extractDetails, type ToolResult } from '../helpers/extract-tool-result.ts';
 
-describe('agent_end conservative fallback e2e', () => {
+describe('agent_end llm fail-fast e2e', () => {
   test('fails when messages are empty', async () => {
     const harness = await createPluginHarness({ dashboardEnabled: false });
     try {
       const publishResult = await harness.exec('mteam_publish_task', {
-        goal: '形成最终结论',
-        description: '先整理第 1 个候选商品',
+        goal: 'Produce a final report',
+        description: 'Draft the first section',
         publisher: 'manager',
       }) as ToolResult<{ taskId: string }>;
       const taskId = extractDetails(publishResult)!.taskId;
       await harness.exec('mteam_claim_task', { taskId, agentId: 'maker' }, { agentId: 'maker' });
 
       await harness.runAgentEnd(
-        {
-          success: true,
-          messages: [],
-        } as never,
+        { success: true, messages: [] } as never,
         { agentId: 'maker', sessionKey: `agent:maker:m-team:${taskId}` },
       );
 
@@ -34,8 +31,8 @@ describe('agent_end conservative fallback e2e', () => {
     const harness = await createPluginHarness({ dashboardEnabled: false });
     try {
       const publishResult = await harness.exec('mteam_publish_task', {
-        goal: '完成接口验证',
-        description: '先调用接口并记录结果',
+        goal: 'Verify the API response',
+        description: 'Record the API response and save the output',
         publisher: 'manager',
       }) as ToolResult<{ taskId: string }>;
       const taskId = extractDetails(publishResult)!.taskId;
@@ -45,7 +42,7 @@ describe('agent_end conservative fallback e2e', () => {
         {
           success: false,
           error: 'HTTP_500',
-          messages: [{ role: 'assistant', content: '调用失败' }],
+          messages: [{ role: 'assistant', content: 'Execution failed' }],
         } as never,
         { agentId: 'maker', sessionKey: `agent:maker:m-team:${taskId}` },
       );
@@ -58,14 +55,14 @@ describe('agent_end conservative fallback e2e', () => {
     }
   });
 
-  test('fails conservatively when llm parse fails and there is no recoverable progress', async () => {
+  test('fails fast when the llm decision cannot be parsed and there is no recovered decision', async () => {
     const harness = await createPluginHarness({ dashboardEnabled: false });
     try {
       (harness.api as unknown as { runtime: { agentEndJudge: Function } }).runtime.agentEndJudge = async () => 'not-json';
 
       const publishResult = await harness.exec('mteam_publish_task', {
-        goal: '完成接口验证',
-        description: '先调用接口并记录结果',
+        goal: 'Verify the API response',
+        description: 'Record the API response and save the output',
         publisher: 'manager',
       }) as ToolResult<{ taskId: string }>;
       const taskId = extractDetails(publishResult)!.taskId;
@@ -82,53 +79,24 @@ describe('agent_end conservative fallback e2e', () => {
       const task = harness.readTask(taskId);
       expect(task?.status).toBe('failed');
       const failLog = harness.readLogs(taskId, 'fail').at(-1);
-      expect(failLog?.result?.via).toBe('conservative_fallback');
+      expect(failLog?.result?.via).toBe('llm_fail_fast');
+      expect(failLog?.result?.reason).toBe('RUNTIME_AGENT_END_JUDGE_PARSE_FAILED');
+      expect(failLog?.result?.llm?.source).toBe('llm');
+      expect(failLog?.result?.llm?.status).toBe('error');
+      expect(failLog?.result?.fallback).toBeNull();
     } finally {
       await harness.cleanup();
     }
   });
 
-  test('returns next conservatively when llm parse fails but transcript already reports a clear next problem to solve', async () => {
-    const harness = await createPluginHarness({ dashboardEnabled: false });
-    try {
-      (harness.api as unknown as { runtime: { agentEndJudge: Function } }).runtime.agentEndJudge = async () => 'not-json';
-
-      const publishResult = await harness.exec('mteam_publish_task', {
-        goal: '产出可验证的最终结果文件',
-        description: '补齐最终校验文件',
-        publisher: 'manager',
-      }) as ToolResult<{ taskId: string }>;
-      const taskId = extractDetails(publishResult)!.taskId;
-      await harness.exec('mteam_claim_task', { taskId, agentId: 'maker' }, { agentId: 'maker' });
-
-      await harness.runAgentEnd(
-        {
-          success: true,
-          messages: [{ role: 'assistant', content: '还需补齐校验文件并重试一次生成流程。' }],
-        } as never,
-        { agentId: 'maker', sessionKey: `agent:maker:m-team:${taskId}` },
-      );
-
-      const task = harness.readTask(taskId);
-      expect(task?.status).toBe('pending');
-      expect(task?.description?.length ?? 0).toBeLessThan(80);
-      expect(task?.description).not.toContain('本轮报告的问题推进下一步修复动作');
-      const nextLog = harness.readLogs(taskId, 'next').at(-1);
-      expect(nextLog?.result?.via).toBe('conservative_fallback');
-      expect(['LLM_UNAVAILABLE_BUT_PROBLEM_REPORTED', 'LLM_UNAVAILABLE_WITH_PARTIAL_PROGRESS']).toContain(nextLog?.result?.reason);
-    } finally {
-      await harness.cleanup();
-    }
-  });
-
-  test('fails instead of looping when llm is unavailable and the same step is already done with no real unresolved issue', async () => {
+  test('fails fast when llm is unavailable and the same step is already done with no real unresolved issue', async () => {
     const harness = await createPluginHarness({ dashboardEnabled: false });
     try {
       (harness.api as unknown as { runtime: { agentEndJudge: Function } }).runtime.agentEndJudge = async () => null;
 
       const publishResult = await harness.exec('mteam_publish_task', {
-        goal: '完成三步计算并最终汇总',
-        description: '计算 1+1，结果写入 step1_result.md',
+        goal: 'Complete three calculation steps and summarize the final result',
+        description: 'Calculate 1+1 and write the result to step1_result.md',
         publisher: 'manager',
       }) as ToolResult<{ taskId: string }>;
       const taskId = extractDetails(publishResult)!.taskId;
@@ -137,7 +105,7 @@ describe('agent_end conservative fallback e2e', () => {
       await harness.runAgentEnd(
         {
           success: true,
-          messages: [{ role: 'assistant', content: '结果摘要：计算 1+1 = 2，已写入 step1_result.md。\n产出文件：step1_result.md\n未解决问题：无' }],
+          messages: [{ role: 'assistant', content: 'Summary: 1+1 = 2, written to step1_result.md.\nFiles: step1_result.md\nUnresolved issues: none' }],
         } as never,
         { agentId: 'maker', sessionKey: `agent:maker:m-team:${taskId}` },
       );
@@ -145,13 +113,14 @@ describe('agent_end conservative fallback e2e', () => {
       const task = harness.readTask(taskId);
       expect(task?.status).toBe('failed');
       const failLog = harness.readLogs(taskId, 'fail').at(-1);
-      expect(['repeat_guard', 'conservative_fallback']).toContain(failLog?.result?.via);
+      expect(failLog?.result?.via).toBe('llm_fail_fast');
+      expect(failLog?.result?.reason).toBe('RUNTIME_AGENT_END_JUDGE_EMPTY');
     } finally {
       await harness.cleanup();
     }
   });
 
-  test('rescues nextDescription from a partial llm payload instead of falling back to the current step', async () => {
+  test('rescues nextDescription from a partial llm payload instead of failing', async () => {
     const harness = await createPluginHarness({ dashboardEnabled: false });
     try {
       (harness.api as unknown as { runtime: { agentEndJudge: Function } }).runtime.agentEndJudge = async () =>

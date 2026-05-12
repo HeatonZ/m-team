@@ -102,7 +102,7 @@ describe('agent_end llm judge e2e', () => {
     }
   });
 
-  test('falls back conservatively when llm judge parse fails', async () => {
+  test('fails fast when llm judge parse fails', async () => {
     const harness = await createPluginHarness({ dashboardEnabled: false });
     try {
       (harness.api as unknown as { runtime: { agentEndJudge: Function } }).runtime.agentEndJudge = async () => 'not-json';
@@ -121,13 +121,12 @@ describe('agent_end llm judge e2e', () => {
       } as never, { agentId: 'maker', sessionKey: `agent:maker:m-team:${taskId}` });
 
       const task = harness.readTask(taskId);
-      expect(task?.status).toBe('pending');
-      expect(task?.description).not.toContain('继续处理当前任务');
-      expect(task?.description?.length ?? 0).toBeLessThan(80);
-      const nextLog = harness.readLogs(taskId, 'next').at(-1);
-      expect(nextLog?.result?.via).toBe('conservative_fallback');
+      expect(task?.status).toBe('failed');
+      const failLog = harness.readLogs(taskId, 'fail').at(-1);
+      expect(failLog?.result?.via).toBe('llm_fail_fast');
+      expect(failLog?.result?.llm?.status).toBe('error');
       const warns = harness.readRuntimeLogs().filter(log => log.level === 'warn').map(log => log.message).join('\n');
-      expect(warns).toContain('agent_end llm judge fallback');
+      expect(warns).toContain('agent_end llm judge failed');
     } finally {
       await harness.cleanup();
     }
@@ -160,9 +159,10 @@ describe('agent_end llm judge e2e', () => {
       const task = harness.readTask(taskId);
       expect(task?.status).toBe('pending');
       expect(task?.executor).toBeNull();
-      expect(task?.description).toContain('继续补齐本轮报告缺失的校验文件');
+      expect(task?.description).toBe('整理候选并补齐校验文件');
       const nextLog = harness.readLogs(taskId, 'next').at(-1);
       expect(nextLog?.result?.via).toBe('llm');
+      expect(nextLog?.result?.nextDescription).toBe('整理候选并补齐校验文件');
     } finally {
       await harness.cleanup();
     }
