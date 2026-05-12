@@ -3,6 +3,7 @@ import { createPluginHarness } from '../helpers/create-plugin-harness.ts';
 import { extractDetails, extractText, type ToolResult } from '../helpers/extract-tool-result.ts';
 import { registerAfterToolCallHook } from '../../src/hooks/afterToolCall.ts';
 import { publishTask } from '../../src/pool/index.js';
+import { updateTask } from '../../src/pool/index.js';
 
 interface PublishDetails {
   taskId: string;
@@ -54,6 +55,13 @@ describe('publisher terminal actions e2e', () => {
         publisher: 'manager',
       }) as ToolResult<PublishDetails>;
       const rejectTaskId = extractDetails(rejectPublish)!.taskId;
+      harness.mutateTask(rejectTaskId, (task) => {
+        task.status = 'completed';
+        task.completedAt = Date.now();
+        task.updatedAt = task.completedAt;
+        task.executor = null;
+        task.lastExecutor = 'maker';
+      });
       const rejectResult = await harness.exec('mteam_reject_task', {
         taskId: rejectTaskId,
         reason: '验收驳回：输出不完整。下一步：补齐缺失字段并重新提交',
@@ -63,6 +71,64 @@ describe('publisher terminal actions e2e', () => {
       expect(rejectedTask?.status).toBe('pending');
       expect(rejectedTask?.description).toBe('补齐缺失字段并重新提交');
       expect(rejectedTask?.context.at(-1)?.step).toContain('验收驳回');
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  test('does not allow reject to revive a failed task back to pending', async () => {
+    const harness = await createPluginHarness();
+    try {
+      const publishResult = await harness.exec('mteam_publish_task', {
+        goal: 'Verify failed tasks cannot be revived by reject',
+        description: 'Create a task that will fail before a mistaken reject attempt',
+        publisher: 'manager',
+      }) as ToolResult<PublishDetails>;
+      const taskId = extractDetails(publishResult)!.taskId;
+
+      await harness.exec('mteam_claim_task', { taskId, agentId: 'maker' }, { agentId: 'maker' });
+      harness.mutateTask(taskId, (task) => {
+        task.status = 'failed';
+        task.completedAt = Date.now();
+        task.updatedAt = task.completedAt;
+        task.executor = null;
+        task.lastExecutor = 'maker';
+      });
+
+      const rejectResult = await harness.exec('mteam_reject_task', {
+        taskId,
+        reason: '验收驳回：这条路径不应复活 failed 任务。下一步：不要执行这一步',
+      }, {
+        agentId: 'manager',
+        sessionKey: 'agent:manager:main',
+      }) as ToolResult<{ success?: boolean; reason?: string }>;
+
+      expect(extractDetails(rejectResult)?.success).toBe(false);
+      expect(extractText(rejectResult)).toContain('TASK_NOT_COMPLETED_failed');
+      expect(harness.readTask(taskId)?.status).toBe('failed');
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  test('generic updateTask refuses to move terminal tasks back to pending', async () => {
+    const harness = await createPluginHarness();
+    try {
+      const publishResult = await harness.exec('mteam_publish_task', {
+        goal: 'Verify terminal tasks are immutable to generic updates',
+        description: 'Create a task to test terminal-state protection',
+        publisher: 'manager',
+      }) as ToolResult<PublishDetails>;
+      const taskId = extractDetails(publishResult)!.taskId;
+
+      harness.mutateTask(taskId, (task) => {
+        task.status = 'failed';
+        task.completedAt = Date.now();
+        task.updatedAt = task.completedAt;
+      });
+
+      expect(() => updateTask(taskId, 'pending', null, null, null, null, null)).toThrow('TASK_TERMINAL_FAILED_IMMUTABLE');
+      expect(harness.readTask(taskId)?.status).toBe('failed');
     } finally {
       await harness.cleanup();
     }

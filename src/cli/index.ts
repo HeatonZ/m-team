@@ -227,7 +227,12 @@ async function cmdTasks(argv: string[]) {
       if (!status && !step && !description) fatal('至少需要 --status / --step / --description 之一');
 
       const contextEntry = step ? { step, output: {} } : null;
-      const task = updateTask(taskId, status ?? null, contextEntry, description ?? null, null, updatedAtRaw ? parseInt(updatedAtRaw, 10) : null, executorId ?? null);
+      let task = null;
+      try {
+        task = updateTask(taskId, status ?? null, contextEntry, description ?? null, null, updatedAtRaw ? parseInt(updatedAtRaw, 10) : null, executorId ?? null);
+      } catch (err) {
+        fatal(err instanceof Error ? err.message : String(err));
+      }
       if (!task) fatal(`任务不存在: ${taskId}`);
       ok({ task });
       break;

@@ -80,6 +80,12 @@ function setTaskState(
   return updated;
 }
 
+function isTerminalStatus(status: TaskStatus): boolean {
+  return status === TaskStatus.FAILED
+    || status === TaskStatus.CANCELLED
+    || status === TaskStatus.CLOSED;
+}
+
 // ============================================================
 // 写操作
 // ============================================================
@@ -176,6 +182,10 @@ export function updateTask(
   init();
   const task = getTaskRow(taskId);
   if (!task) return null;
+
+  if (status && isTerminalStatus(task.status) && status !== task.status) {
+    throw new Error(`TASK_TERMINAL_${task.status.toUpperCase()}_IMMUTABLE`);
+  }
 
   const context = appendContext(task, executorId, contextEntry);
 
@@ -287,6 +297,47 @@ export interface CompleteResult {
   success: boolean;
   task?: Task;
   reason?: string;
+}
+
+export interface RejectResult {
+  success: boolean;
+  task?: Task | null;
+  reason?: string;
+}
+
+export function rejectTask(
+  taskId: string,
+  publisher: string,
+  reason: string,
+  description?: string | null,
+  stepContract?: StepContract,
+): RejectResult {
+  init();
+  const task = getTaskRow(taskId);
+  if (!task) return { success: false, reason: 'TASK_NOT_FOUND' };
+  if (task.status !== TaskStatus.COMPLETED) {
+    return { success: false, reason: `TASK_NOT_COMPLETED_${task.status}` };
+  }
+  if (task.publisher !== publisher) {
+    return { success: false, reason: 'PUBLISHER_MISMATCH' };
+  }
+
+  const context = appendContext(task, null, {
+    step: reason,
+    output: {},
+  });
+
+  return {
+    success: true,
+    task: setTaskState(taskId, {
+      status: TaskStatus.PENDING,
+      executor: null,
+      description: description?.trim() || task.description,
+      ...(stepContract ? { stepContract: JSON.stringify(stepContract) } : {}),
+      updatedAt: Date.now(),
+      context: JSON.stringify(context),
+    })
+  };
 }
 
 export function completeTask(
