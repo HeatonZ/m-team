@@ -94,9 +94,15 @@ function normalizeIssueLine(issue: string | undefined): string {
 function isNonIssueLine(issue: string | undefined): boolean {
   const normalized = normalizeIssueLine(issue);
   if (!normalized) return true;
+  if (/^[.:：;；,，。!?！？()\[\]{}'"“”‘’\s-]+$/.test(normalized)) return true;
+  if (/^[:：\s-]*(无|none|n\/a)$/i.test(normalized)) return true;
+  if (/^\*+\s*[:：]?\s*(无|none)$/i.test(normalized)) return true;
   if (/^(无|none|n\/a)$/i.test(normalized)) return true;
   if (/^无(未解决问题|阻塞问题)?[。；，,\s]*$/u.test(normalized)) return true;
   if (/^no (blocking |unresolved )?issues?$/i.test(normalized)) return true;
+  if (/^(unresolved issues?|issues?)[:：]?\s*(none|无)$/i.test(normalized)) return true;
+  if (/(等待|wait(?:ing)? for).*(agent_end|publisher|manager)/i.test(normalized)) return true;
+  if (/(当前步骤执行完毕|step completed|execution finished)/i.test(normalized) && /(等待|wait(?:ing)?)/i.test(normalized)) return true;
   if (/^当前步骤.*(已达成|已实现|已完成)/u.test(normalized)) return true;
   if (/^文件.*(已存在|内容正确|正确无误)/u.test(normalized)) return true;
   if (/(等待|请)\s*(publisher|manager).*(验收|关闭)/iu.test(normalized)) return true;
@@ -139,10 +145,14 @@ function stripGoalLevelLines(text: string | undefined): string | undefined {
 
 function sanitizeStoredOutput(output: ContextStepOutput): ContextStepOutput {
   const summary = stripGoalLevelLines(output.summary);
-  const unresolvedIssues = (output.unresolvedIssues ?? [])
-    .map(issue => stripGoalLevelLines(issue))
-    .filter((issue): issue is string => Boolean(issue))
-    .filter(issue => !isNonIssueLine(issue));
+  const unresolvedIssues = Array.from(new Set(
+    (output.unresolvedIssues ?? [])
+      .map(issue => stripGoalLevelLines(issue))
+      .filter((issue): issue is string => Boolean(issue))
+      .filter(issue => !isNonIssueLine(issue))
+      .map(issue => normalizeIssueLine(issue))
+      .filter(Boolean)
+  )).slice(0, 10);
   const error = output.error && unresolvedIssues.some(issue => normalizeIssueLine(issue) === normalizeIssueLine(output.error)) ? output.error : undefined;
   return {
     ...output,

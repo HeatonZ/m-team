@@ -38,7 +38,7 @@ export function registerSessionGuardHook(
       // 心跳 session 禁止调用 complete / fail（这两种由 agent_end hook 统一处理）
       // 额外禁止 sessions_spawn / sessions_send：heartbeat 只负责认领，不允许派生执行链或转发未经校验的子结果。
       if (
-        (toolName === 'mteam_complete_task' || toolName === 'mteam_fail_task' || toolName === 'sessions_spawn' || toolName === 'sessions_send')
+        (toolName === 'mteam_complete_task' || toolName === 'mteam_fail_task' || toolName === 'mteam_next_task' || toolName === 'sessions_spawn' || toolName === 'sessions_send')
         && sessionKey?.endsWith(':heartbeat')
       ) {
         return {
@@ -62,6 +62,13 @@ export function registerSessionGuardHook(
         return {
           block: true,
           blockReason: `executor session（${sessionKey}）禁止主动调用 mteam_relinquish_task。请完成当前步骤后直接结束 session，由 agent_end hook 自动 next/complete。`,
+        };
+      }
+
+      if (toolName === 'mteam_next_task' && isExecutorTaskSession) {
+        return {
+          block: true,
+          blockReason: `executor session（${sessionKey}）禁止主动调用 mteam_next_task。请完成当前步骤后直接结束 session，由 agent_end hook 统一判断下一步。`,
         };
       }
 

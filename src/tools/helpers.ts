@@ -47,13 +47,28 @@ function compactText(text: string | undefined, max = 120): string | undefined {
   return normalized.length > max ? `${normalized.slice(0, max)}?` : normalized;
 }
 
+
+function isDisplayIssue(issue: string | undefined): boolean {
+  const normalized = String(issue ?? '')
+    .replace(/```[\s\S]*?```/g, ' ')
+    .replace(/[*`#>|-]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!normalized) return false;
+  if (/^[:：\s-]*(无|none|n\/a)$/i.test(normalized)) return false;
+  if (/^(unresolved issues?|issues?)[:：]?\s*(none|无)$/i.test(normalized)) return false;
+  if (/(等待|wait(?:ing)? for).*(agent_end|publisher|manager)/i.test(normalized)) return false;
+  if (/(当前步骤执行完毕|step completed|execution finished)/i.test(normalized) && /(等待|wait(?:ing)?)/i.test(normalized)) return false;
+  return true;
+}
+
 function recentContextLines(task: Task): string[] {
   const steps = task.context.filter(e => e.type === 'step');
   if (steps.length === 0) return [];
   return steps.slice(-3).map((entry, idx, arr) => {
     const n = steps.length - arr.length + idx + 1;
     const summary = compactText(entry.output?.summary, 100);
-    const issueCount = (entry.output?.unresolvedIssues ?? []).filter(issue => !/^(\*+)?\s*?/i.test(issue)).length;
+    const issueCount = (entry.output?.unresolvedIssues ?? []).filter(isDisplayIssue).length;
     const fileCount = entry.output?.files?.length ?? 0;
     const parts = [`Step ${n}`, `[${entry.executor}]`, compactText(entry.step, 60) ?? ''];
     if (summary) parts.push(`summary: ${summary}`);
@@ -73,7 +88,7 @@ export function buildExecutorTaskView(task: Task): ExecutorTaskView {
       ...(compactText(entry.output?.summary, 140) ? { summary: compactText(entry.output?.summary, 140) } : {}),
       ...(entry.output?.files?.length ? { files: entry.output.files.slice(0, 5) } : {}),
       ...(entry.output?.unresolvedIssues?.length
-        ? { unresolvedIssueCount: entry.output.unresolvedIssues.filter(issue => !/^(\*+)?\s*?/i.test(issue)).length }
+        ? { unresolvedIssueCount: entry.output.unresolvedIssues.filter(isDisplayIssue).length }
         : {}),
       completedAt: entry.completedAt,
     }));

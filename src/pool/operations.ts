@@ -313,6 +313,7 @@ export function completeTask(
       status: TaskStatus.COMPLETED,
       completedAt: Date.now(),
       executor: null,
+      lastExecutor: task.executor ?? task.lastExecutor,
       updatedAt: Date.now(),
       context: JSON.stringify(context),
     })
@@ -353,6 +354,7 @@ export function failTask(
       status: TaskStatus.FAILED,
       completedAt: Date.now(),
       executor: null,
+      lastExecutor: task.executor ?? task.lastExecutor,
       updatedAt: Date.now(),
       context: JSON.stringify(context),
     })

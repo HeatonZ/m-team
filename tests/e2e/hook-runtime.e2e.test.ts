@@ -72,6 +72,18 @@ describe('hook runtime e2e', () => {
       ) as ToolResult<{ blocked?: boolean }>;
       expect(extractDetails(relinquishBlocked)?.blocked).toBe(true);
 
+      const nextBlocked = await harness.exec(
+        'mteam_next_task',
+        {
+          taskId,
+          agentId: 'maker',
+          contextStep: '执行当前步骤',
+          description: '不应由 executor 主动推进下一步',
+        },
+        { agentId: 'maker', sessionKey: `agent:maker:m-team:${taskId}:test-session` },
+      ) as ToolResult<{ blocked?: boolean }>;
+      expect(extractDetails(nextBlocked)?.blocked).toBe(true);
+
       const closeBlocked = await harness.exec(
         'mteam_close_task',
         { taskId, publisher: 'manager' },
