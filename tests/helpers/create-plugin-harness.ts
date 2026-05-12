@@ -14,7 +14,7 @@ import type {
 import type { SubagentRunInput } from 'openclaw/plugin-sdk';
 import plugin from '../../src/index.ts';
 import { setWorkspaceRoot, getTask, getTaskLogs, getAllTasks } from '../../src/pool/index.js';
-import { getDb } from '../../src/pool/db.ts';
+import { closeDb, getDb } from '../../src/pool/db.ts';
 import { createTempWorkspace, type TempWorkspace } from './temp-workspace.ts';
 import { createTestPluginConfig, type TestPluginConfig } from './plugin-config.ts';
 
@@ -216,6 +216,7 @@ export async function createPluginHarness(overrides: Partial<TestPluginConfig> =
       }
     },
     cleanup: async () => {
+      closeDb();
       await workspace.cleanup();
     },
     mutateTask: (taskId, mutator) => {

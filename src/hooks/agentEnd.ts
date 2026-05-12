@@ -175,7 +175,7 @@ function hasOnlyBlockerSignal(text: string, output: ContextStepOutput): boolean 
 
 function hasProblemReportSignal(text: string, output: ContextStepOutput): boolean {
   const combined = [text, ...(output.unresolvedIssues ?? [])].join('\n');
-  return /补齐|修复|重试|核对|检查|校验|重新生成|重新运行|补充|完善|排查|缺少|待补|问题|阻塞/u.test(combined);
+  return /补齐|修复|重试|核对|检查|校验|重新生成|重新运行|补充|完善|排查|缺少|待补|阻塞/u.test(combined);
 }
 
 function hasNoRealIssues(output: ContextStepOutput): boolean {
