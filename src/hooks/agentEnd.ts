@@ -79,7 +79,15 @@ function inferOutput(text: string): ContextStepOutput {
   const files = [...normalizedText.matchAll(/(?:\/mnt\/[^\s,，；;。]+|[\w./-]+\.(?:json|md|csv|txt|png|jpg|webp))/g)].map(m => m[0]);
   const unresolvedIssues = [...normalizedText.matchAll(/(?:问题|缺失|未完成|待处理|需补齐|需要修正|阻塞|无法继续|报错|异常)[:：]?\s*([^\n]+)/g)]
     .map(m => m[1].trim())
-    .filter(issue => !/^(\*+)?\s*无未解决问题/i.test(issue));
+    .filter(issue => {
+      if (!issue) return false;
+      if (/^(\*+)?\s*无未解决问题/i.test(issue)) return false;
+      if (/^\*+$/.test(issue)) return false;
+      if (/^[-–—\s*.]+$/.test(issue)) return false;
+      if (/等待\s*(publisher|manager).*关闭/i.test(issue)) return false;
+      if (/等待\s*agent_end\s*裁决/i.test(issue)) return false;
+      return true;
+    });
 
   const cleanFiles = Array.from(new Set(files)).slice(0, 20);
   const cleanIssues = Array.from(new Set(unresolvedIssues)).slice(0, 10);
@@ -160,6 +168,24 @@ function sanitizeStepInstruction(raw: string): string {
 
 function buildConservativeNextDescription(task: Task): string {
   return sanitizeStepInstruction(task.description) || task.description;
+}
+
+function collectKnownFiles(task: Task, output: ContextStepOutput): string[] {
+  const files = new Set<string>(output.files ?? []);
+  for (const entry of task.context) {
+    for (const file of entry.output?.files ?? []) files.add(file);
+  }
+  return [...files];
+}
+
+function shouldAutoCompleteForAcceptance(task: Task, text: string, output: ContextStepOutput): boolean {
+  if (hasExplicitBlocker(text, output)) return false;
+  const combined = `${task.description}\n${text}\n${output.summary ?? ''}\n${(output.unresolvedIssues ?? []).join('\n')}`;
+  const asksPublisherClose = /publisher|manager|验收|关闭|close_task|mteam_close_task/i.test(combined);
+  const doneSignal = /goal已达成|任务已完成|最终结果|汇总结果|等待\s*publisher|验收关闭/i.test(combined);
+  const knownFiles = collectKnownFiles(task, output);
+  const hasFinalArtifact = knownFiles.some(file => /final|result/i.test(file));
+  return asksPublisherClose && doneSignal && hasFinalArtifact;
 }
 
 type ProblemKind =
@@ -349,6 +375,37 @@ export function registerAgentEndHook(api: OpenClawPluginApi): void {
 
     if (llmDecision && !llmDecision.ok) {
       api.logger?.warn?.(`[m-team] agent_end llm judge fallback: ${llmDecision.error}${llmDecision.raw ? ` raw=${llmDecision.raw}` : ''}`);
+    }
+
+    if (shouldAutoCompleteForAcceptance(task, text, normalizedOutput)) {
+      const result = completeTask(taskId, {
+        step,
+        output: {
+          ...normalizedOutput,
+          summary: normalizedOutput.summary ?? text,
+          unresolvedIssues: [],
+          error: undefined,
+        }
+      });
+      writeTaskLog({
+        taskId,
+        action: 'complete',
+        sessionKey: sessionKey ?? undefined,
+        agentId: agentId ?? undefined,
+        result: {
+          success: result.success,
+          decision: 'complete',
+          via: 'publisher_acceptance_heuristic',
+          evidence: {
+            summary: normalizedOutput.summary ?? '',
+            files: normalizedOutput.files ?? [],
+            unresolvedIssues: normalizedOutput.unresolvedIssues ?? [],
+            error: normalizedOutput.error ?? null,
+          }
+        }
+      });
+      if (result.task) await sendNotifications(formatTaskNotifications(result.task, getNotifications()), api.logger ?? null).catch(() => null);
+      return;
     }
 
     const fallback = decideConservativeFallback(task, text, output);

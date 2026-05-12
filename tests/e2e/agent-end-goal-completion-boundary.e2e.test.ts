@@ -29,7 +29,7 @@ describe('agent_end task-goal completion boundary', () => {
       );
 
       const task = harness.readTask(taskId);
-      expect(task?.status).toBe('running');
+      expect(task?.status).toBe('pending');
       expect(task?.context.at(-1)?.output?.files).toContain('/mnt/d/code/hermes/step1.json');
     } finally {
       await harness.cleanup();
@@ -60,6 +60,48 @@ describe('agent_end task-goal completion boundary', () => {
       const task = harness.readTask(taskId);
       expect(task?.status).toBe('completed');
       expect(task?.context.at(-1)?.output?.files).toContain('/mnt/d/code/hermes/result.json');
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  test('auto-completes when work is done and the current step is only waiting for publisher acceptance', async () => {
+    const harness = await createPluginHarness({ dashboardEnabled: false });
+    try {
+      const publishResult = await harness.exec('mteam_publish_task', {
+        goal: '三个 agent 协作完成计算并输出最终结果 8',
+        description: '请 publisher 验收并关闭任务',
+        publisher: 'manager',
+      }) as ToolResult<PublishDetails>;
+      const taskId = extractDetails(publishResult)!.taskId;
+
+      await harness.exec('mteam_claim_task', { taskId, agentId: 'maker' }, { agentId: 'maker' });
+      harness.mutateTask(taskId, (task) => {
+        task.context.push({
+          type: 'step',
+          executor: 'scholar',
+          step: '生成最终结果',
+          output: {
+            summary: '所有计算步骤已完成，final_result.md 汇总结果=8',
+            files: ['final_result.md', 'step1_result.md', 'step2_result.md', 'step3_result.md'],
+            unresolvedIssues: [],
+          },
+          completedAt: Date.now(),
+        });
+      });
+
+      await harness.runAgentEnd(
+        {
+          success: true,
+          messages: [
+            { role: 'assistant', content: '所有计算步骤已完成，final_result.md 汇总结果=8。等待 publisher 验收关闭。' },
+          ],
+        } as never,
+        { agentId: 'maker', sessionKey: `agent:maker:m-team:${taskId}` },
+      );
+
+      const task = harness.readTask(taskId);
+      expect(task?.status).toBe('completed');
     } finally {
       await harness.cleanup();
     }
