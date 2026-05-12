@@ -275,16 +275,38 @@ export async function judgeAgentEndWithLlm(params: {
     ],
   };
 
-  const assistantMessage = await completeWithPreparedSimpleCompletionModel({
-    model: prepared.model,
-    auth: prepared.auth,
-    context,
-    cfg: params.cfg,
-    options: {
-      maxTokens: 500,
-      ...(typeof params.timeoutMs === 'number' && params.timeoutMs > 0 ? { timeoutMs: params.timeoutMs } : {}),
-    },
-  });
+  const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  const timeoutMs = typeof params.timeoutMs === 'number' && params.timeoutMs > 0 ? params.timeoutMs : undefined;
+  const timeoutHandle = timeoutMs && controller
+    ? setTimeout(() => controller.abort(new Error(`LLM_DECISION_TIMEOUT:${timeoutMs}`)), timeoutMs)
+    : null;
+
+  let assistantMessage;
+  try {
+    assistantMessage = await completeWithPreparedSimpleCompletionModel({
+      model: prepared.model,
+      auth: prepared.auth,
+      context,
+      cfg: params.cfg,
+      options: {
+        maxTokens: 500,
+        ...(controller ? { signal: controller.signal } : {}),
+      },
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (
+      (controller?.signal.aborted && timeoutMs)
+      || /LLM_DECISION_TIMEOUT/i.test(message)
+      || /aborted/i.test(message)
+      || /aborterror/i.test(message)
+    ) {
+      return { ok: false, error: 'LLM_DECISION_TIMEOUT' };
+    }
+    return { ok: false, error: message };
+  } finally {
+    if (timeoutHandle) clearTimeout(timeoutHandle);
+  }
 
   const raw = extractAssistantText(assistantMessage)?.trim() ?? '';
   const decision = parseDecision(raw);
