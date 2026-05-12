@@ -21,6 +21,8 @@ import {
 } from '../notifications.js';
 import { TaskStatus, type ContextStepOutput, type StepContract, type Task } from '../schema/task.js';
 
+const DEFAULT_AGENT_END_JUDGE_TIMEOUT_MS = 90_000;
+
 type RuntimeWithTaskStorage = PluginRuntime & {
   storage?: {
     get?: <T>(key: string) => Promise<T | null>;
@@ -312,6 +314,7 @@ export function registerAgentEndHook(api: OpenClawPluginApi): void {
         transcript: text,
         output: normalizedOutput,
         modelRef: process.env.MTEAM_AGENT_END_MODEL,
+        timeoutMs: Number(process.env.MTEAM_AGENT_END_TIMEOUT_MS || DEFAULT_AGENT_END_JUDGE_TIMEOUT_MS),
       });
     } catch (err) {
       api.logger?.warn?.(`[m-team] agent_end llm judge threw: ${err instanceof Error ? err.message : String(err)}`);

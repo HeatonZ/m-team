@@ -221,6 +221,7 @@ export async function judgeAgentEndWithLlm(params: {
   transcript: string;
   output: ContextStepOutput;
   modelRef?: string;
+  timeoutMs?: number;
 }): Promise<{ ok: true; decision: AgentEndDecision; raw: string; } | { ok: false; error: string; raw?: string; }> {
   const runtimeJudge = params.runtime?.agentEndJudge;
 
@@ -279,7 +280,10 @@ export async function judgeAgentEndWithLlm(params: {
     auth: prepared.auth,
     context,
     cfg: params.cfg,
-    options: { maxTokens: 500 },
+    options: {
+      maxTokens: 500,
+      ...(typeof params.timeoutMs === 'number' && params.timeoutMs > 0 ? { timeoutMs: params.timeoutMs } : {}),
+    },
   });
 
   const raw = extractAssistantText(assistantMessage)?.trim() ?? '';

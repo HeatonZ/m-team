@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { createPluginHarness } from '../helpers/create-plugin-harness.ts';
-import { extractDetails, type ToolResult } from '../helpers/extract-tool-result.ts';
+import { extractDetails, extractText, type ToolResult } from '../helpers/extract-tool-result.ts';
 
 describe('publisher heartbeat acceptance e2e', () => {
   test('publisher heartbeat prefers timeout relinquish before acceptance', async () => {
@@ -46,13 +46,39 @@ describe('publisher heartbeat acceptance e2e', () => {
 
       const relinquishResult = await harness.exec(
         'mteam_relinquish_task',
-        { taskId: runningTaskId, reason: '超时放回任务池' },
+        { taskId: runningTaskId, executorId: 'maker', reason: '超时放回任务池' },
         { agentId: 'manager', sessionKey: 'agent:manager:discord:heartbeat' },
       ) as ToolResult<{ success?: boolean }>;
       expect(extractDetails(relinquishResult)?.success).toBe(true);
 
       expect(harness.readTask(runningTaskId)?.status).toBe('pending');
       expect(harness.readTask(completedTaskId)?.status).toBe('completed');
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  test('publisher heartbeat cannot relinquish a running task before it is actually stale', async () => {
+    const harness = await createPluginHarness({ dashboardEnabled: false });
+    try {
+      const publishResult = await harness.exec('mteam_publish_task', {
+        goal: 'Verify publisher heartbeat does not reclaim fresh running work',
+        description: 'Create a fresh running task that is not stale yet',
+        publisher: 'manager',
+      }) as ToolResult<{ taskId: string }>;
+      const taskId = extractDetails(publishResult)!.taskId;
+      await harness.exec('mteam_claim_task', { taskId, agentId: 'maker' }, { agentId: 'maker' });
+
+      const relinquishResult = await harness.exec(
+        'mteam_relinquish_task',
+        { taskId, executorId: 'maker', reason: '超时放回任务池' },
+        { agentId: 'manager', sessionKey: 'agent:manager:discord:heartbeat' },
+      ) as ToolResult<{ success?: boolean; reason?: string }>;
+
+      expect(extractDetails(relinquishResult)?.success).toBe(false);
+      expect(extractText(relinquishResult)).toContain('TASK_NOT_STALE_ENOUGH_FOR_RELINQUISH');
+      expect(harness.readTask(taskId)?.status).toBe('running');
+      expect(harness.readTask(taskId)?.executor).toBe('maker');
     } finally {
       await harness.cleanup();
     }

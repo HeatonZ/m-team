@@ -9,6 +9,7 @@ export interface TestPluginConfig {
   dashboardPort?: number;
   agentEndJudgeAgentId?: string;
   agentEndJudgeModel?: string;
+  agentEndJudgeTimeoutMs?: number;
 }
 
 export function createTestPluginConfig(workspaceRoot: string, overrides: Partial<TestPluginConfig> = {}): TestPluginConfig {

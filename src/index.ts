@@ -59,6 +59,7 @@ interface PluginConfig {
   dashboardPort?: number;
   agentEndJudgeAgentId?: string;
   agentEndJudgeModel?: string;
+  agentEndJudgeTimeoutMs?: number;
 }
 
 const plugin = definePluginEntry({
