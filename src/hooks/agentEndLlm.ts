@@ -2,6 +2,7 @@ import type { OpenClawConfig, PluginRuntime } from 'openclaw/plugin-sdk/core';
 import {
   completeWithPreparedSimpleCompletionModel,
   prepareSimpleCompletionModelForAgent,
+  extractAssistantVisibleText,
   extractAssistantText,
 } from 'openclaw/plugin-sdk/agent-runtime';
 import type { Context as PiContext } from '@mariozechner/pi-ai';
@@ -21,6 +22,35 @@ export type AgentEndDecision = {
   unresolvedIssues?: string[];
   confidence?: 'low' | 'medium' | 'high';
 };
+
+type AssistantMessageLike = {
+  stopReason?: string;
+  errorMessage?: string;
+  usage?: { output?: number };
+  content?: unknown;
+};
+
+function extractTextBlocks(content: unknown): string {
+  if (!Array.isArray(content)) return '';
+  return content
+    .map((block) => {
+      if (!block || typeof block !== 'object') return '';
+      const record = block as Record<string, unknown>;
+      if (record.type !== 'text') return '';
+      return typeof record.text === 'string' ? record.text : '';
+    })
+    .filter(Boolean)
+    .join('\n')
+    .trim();
+}
+
+function extractDecisionRaw(message: AssistantMessageLike): string {
+  const visibleText = extractAssistantVisibleText(message as never)?.trim() ?? '';
+  if (visibleText) return visibleText;
+  const plainText = extractAssistantText(message as never)?.trim() ?? '';
+  if (plainText) return plainText;
+  return extractTextBlocks(message.content);
+}
 
 function buildDecisionPrompt(params: {
   task: Task;
@@ -308,7 +338,34 @@ export async function judgeAgentEndWithLlm(params: {
     if (timeoutHandle) clearTimeout(timeoutHandle);
   }
 
-  const raw = extractAssistantText(assistantMessage)?.trim() ?? '';
+  const raw = extractDecisionRaw(assistantMessage as AssistantMessageLike);
+  const stopReason = typeof (assistantMessage as AssistantMessageLike).stopReason === 'string'
+    ? (assistantMessage as AssistantMessageLike).stopReason
+    : undefined;
+  const providerError = typeof (assistantMessage as AssistantMessageLike).errorMessage === 'string'
+    ? (assistantMessage as AssistantMessageLike).errorMessage.trim()
+    : '';
+  const outputTokens = Number((assistantMessage as AssistantMessageLike).usage?.output ?? 0);
+  const stopReasonIsErrorLike = stopReason === 'error' || stopReason === 'aborted';
+  const stopReasonIsLength = stopReason === 'length';
+
+  if (stopReasonIsErrorLike) {
+    if (/aborted|aborterror|request was aborted|timeout/i.test(providerError)) {
+      return { ok: false, error: 'LLM_DECISION_TIMEOUT', raw };
+    }
+    return { ok: false, error: providerError || 'LLM_DECISION_PROVIDER_ERROR', raw };
+  }
+
+  if (!raw) {
+    if (stopReasonIsLength && outputTokens === 0) {
+      return { ok: false, error: 'LLM_DECISION_EMPTY_OUTPUT_LENGTH_LIMIT', raw: '' };
+    }
+    if (stopReasonIsLength) {
+      return { ok: false, error: 'LLM_DECISION_TRUNCATED_EMPTY', raw: '' };
+    }
+    return { ok: false, error: 'LLM_DECISION_EMPTY_OUTPUT', raw: '' };
+  }
+
   const decision = parseDecision(raw);
   if (!decision) {
     return { ok: false, error: 'LLM_DECISION_PARSE_FAILED', raw };
