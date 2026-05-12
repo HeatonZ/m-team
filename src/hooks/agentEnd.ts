@@ -27,6 +27,14 @@ type RuntimeWithTaskStorage = PluginRuntime & {
   };
 };
 
+type AgentEndJudgeResult = Awaited<ReturnType<typeof judgeAgentEndWithLlm>>;
+
+type ConservativeFallbackDecision = {
+  decision: 'next' | 'fail';
+  reason: string;
+  description?: string;
+};
+
 function getRuntimeConfig(runtime: PluginRuntime | RuntimeWithTaskStorage | undefined): OpenClawConfig | undefined {
   try {
     return runtime?.config?.current?.() as OpenClawConfig | undefined;
@@ -263,6 +271,43 @@ function shouldAutoCompleteForAcceptance(task: Task, text: string, output: Conte
   return asksPublisherClose && doneSignal && hasFinalArtifact;
 }
 
+
+function buildLlmLogData(llmDecision: AgentEndJudgeResult | null): Record<string, unknown> | null {
+  if (!llmDecision) return null;
+  if (!llmDecision.ok) {
+    return {
+      source: 'llm',
+      status: 'error',
+      error: llmDecision.error,
+      raw: llmDecision.raw ?? null,
+    };
+  }
+  return {
+    source: 'llm',
+    status: 'ok',
+    raw: llmDecision.raw ?? null,
+    parsed: {
+      decision: llmDecision.decision.decision,
+      reason: llmDecision.decision.reason,
+      confidence: llmDecision.decision.confidence,
+      nextDescription: llmDecision.decision.nextDescription ?? null,
+      nextStepContract: llmDecision.decision.nextStepContract ?? null,
+      summary: llmDecision.decision.summary ?? null,
+      unresolvedIssues: llmDecision.decision.unresolvedIssues ?? [],
+    },
+  };
+}
+
+function buildFallbackLogData(fallback: ConservativeFallbackDecision | null): Record<string, unknown> | null {
+  if (!fallback) return null;
+  return {
+    source: 'fallback',
+    decision: fallback.decision,
+    reason: fallback.reason,
+    nextDescription: fallback.description ?? null,
+  };
+}
+
 type ProblemKind =
   | 'missing_artifact'
   | 'missing_evidence'
@@ -312,11 +357,7 @@ function buildNextDescriptionFromProblem(task: Task, problem: { kind: ProblemKin
   }
 }
 
-function decideConservativeFallback(task: Task, text: string, output: ContextStepOutput): {
-  decision: 'next' | 'fail';
-  reason: string;
-  description?: string;
-} {
+function decideConservativeFallback(task: Task, text: string, output: ContextStepOutput): ConservativeFallbackDecision {
   if (!text.trim() && !hasStructuredProgress(output, text)) {
     return { decision: 'fail', reason: 'LLM_UNAVAILABLE_AND_NO_PROGRESS' };
   }
@@ -404,7 +445,7 @@ export function registerAgentEndHook(api: OpenClawPluginApi): void {
     const storedOutput = sanitizeStoredOutput(normalizedOutput);
     const step = task.description;
 
-    let llmDecision: Awaited<ReturnType<typeof judgeAgentEndWithLlm>> | null = null;
+    let llmDecision: AgentEndJudgeResult | null = null;
     try {
       llmDecision = await judgeAgentEndWithLlm({
         runtime: api.runtime as PluginRuntime,
@@ -424,7 +465,7 @@ export function registerAgentEndHook(api: OpenClawPluginApi): void {
 
       if (judged.decision === 'complete') {
         const result = completeTask(taskId, { step, output: sanitizeStoredOutput({ ...storedOutput, summary: stripGoalLevelLines(judged.summary) ?? storedOutput.summary, unresolvedIssues: (judged.unresolvedIssues ?? storedOutput.unresolvedIssues) }) });
-        writeTaskLog({ taskId, action: 'complete', sessionKey: sessionKey ?? undefined, agentId: agentId ?? undefined, result: { success: result.success, decision: 'complete', via: 'llm', confidence: judged.confidence, reason: judged.reason, llm_raw: llmDecision.raw, evidence: { summary: normalizedOutput.summary ?? '', files: normalizedOutput.files ?? [], unresolvedIssues: normalizedOutput.unresolvedIssues ?? [], error: normalizedOutput.error ?? null } } });
+        writeTaskLog({ taskId, action: 'complete', sessionKey: sessionKey ?? undefined, agentId: agentId ?? undefined, result: { success: result.success, decision: 'complete', via: 'llm', confidence: judged.confidence, reason: judged.reason, llm: buildLlmLogData(llmDecision), fallback: null, evidence: { summary: normalizedOutput.summary ?? '', files: normalizedOutput.files ?? [], unresolvedIssues: normalizedOutput.unresolvedIssues ?? [], error: normalizedOutput.error ?? null } } });
         if (result.task) await sendNotifications(formatTaskNotifications(result.task, getNotifications()), api.logger ?? null).catch(() => null);
         return;
       }
@@ -438,7 +479,7 @@ export function registerAgentEndHook(api: OpenClawPluginApi): void {
         if (!explicitNext && isSameCurrentStepDescription(task, nextDescription) && hasNoRealIssues(storedOutput) && !hasProblemReportSignal(text, storedOutput)) {
           const failReason = 'LLM_NEXT_REPEATS_CURRENT_STEP_WITHOUT_NEW_WORK';
           const result = failTask(taskId, failReason, { step: task.description, output: sanitizeStoredOutput({ ...storedOutput, summary: stripGoalLevelLines(judged.summary ?? storedOutput.summary ?? text), error: failReason, unresolvedIssues: [failReason] }) }, { outcome: 'blocked', error: failReason });
-          writeTaskLog({ taskId, action: 'fail', sessionKey: sessionKey ?? undefined, agentId: agentId ?? undefined, result: { success: result.success, decision: 'fail', via: 'llm_repeat_guard', confidence: judged.confidence, reason: judged.reason, llm_raw: llmDecision.raw, evidence: { summary: normalizedOutput.summary ?? '', files: normalizedOutput.files ?? [], unresolvedIssues: normalizedOutput.unresolvedIssues ?? [], error: normalizedOutput.error ?? null } }, error: failReason });
+          writeTaskLog({ taskId, action: 'fail', sessionKey: sessionKey ?? undefined, agentId: agentId ?? undefined, result: { success: result.success, decision: 'fail', via: 'llm_repeat_guard', confidence: judged.confidence, reason: judged.reason, llm: buildLlmLogData(llmDecision), fallback: null, evidence: { summary: normalizedOutput.summary ?? '', files: normalizedOutput.files ?? [], unresolvedIssues: normalizedOutput.unresolvedIssues ?? [], error: normalizedOutput.error ?? null } }, error: failReason });
           if (result.task) await sendNotifications(formatFailNotifications(result.task, getNotifications()), api.logger ?? null).catch(() => null);
           return;
         }
@@ -447,7 +488,7 @@ export function registerAgentEndHook(api: OpenClawPluginApi): void {
           ? judged.nextStepContract
           : buildNextStepContract(nextDescription, task.stepContract);
         const result = nextTask(taskId, agentId ?? task.executor ?? 'unknown', { step, output: sanitizeStoredOutput({ ...storedOutput, summary: stripGoalLevelLines(judged.summary) ?? storedOutput.summary, unresolvedIssues: judged.unresolvedIssues ?? storedOutput.unresolvedIssues }) }, nextDescription, nextStepContract);
-        writeTaskLog({ taskId, action: 'next', sessionKey: sessionKey ?? undefined, agentId: agentId ?? undefined, result: { success: result.success, decision: 'next', via: 'llm', nextDescription, nextStepContract, confidence: judged.confidence, reason: judged.reason, llm_raw: llmDecision.raw, evidence: { summary: normalizedOutput.summary ?? '', files: normalizedOutput.files ?? [], unresolvedIssues: normalizedOutput.unresolvedIssues ?? [], error: normalizedOutput.error ?? null } } });
+        writeTaskLog({ taskId, action: 'next', sessionKey: sessionKey ?? undefined, agentId: agentId ?? undefined, result: { success: result.success, decision: 'next', via: 'llm', nextDescription, nextStepContract, confidence: judged.confidence, reason: judged.reason, llm: buildLlmLogData(llmDecision), fallback: null, evidence: { summary: normalizedOutput.summary ?? '', files: normalizedOutput.files ?? [], unresolvedIssues: normalizedOutput.unresolvedIssues ?? [], error: normalizedOutput.error ?? null } } });
         if (result.task) await sendNotifications(formatNextNotifications(result.task, getNotifications()), api.logger ?? null).catch(() => null);
         return;
       }
@@ -455,7 +496,7 @@ export function registerAgentEndHook(api: OpenClawPluginApi): void {
       if (judged.decision === 'fail') {
         const failReason = judged.reason || 'LLM_DECIDED_FAIL';
         const result = failTask(taskId, failReason, { step: task.description, output: sanitizeStoredOutput({ ...storedOutput, summary: stripGoalLevelLines((judged.summary ?? text) || failReason), error: failReason, unresolvedIssues: judged.unresolvedIssues?.length ? judged.unresolvedIssues : (storedOutput.unresolvedIssues?.length ? storedOutput.unresolvedIssues : [failReason]) }) }, { outcome: 'blocked', error: failReason });
-        writeTaskLog({ taskId, action: 'fail', sessionKey: sessionKey ?? undefined, agentId: agentId ?? undefined, result: { success: result.success, decision: 'fail', via: 'llm', confidence: judged.confidence, reason: judged.reason, llm_raw: llmDecision.raw, evidence: { summary: normalizedOutput.summary ?? '', files: normalizedOutput.files ?? [], unresolvedIssues: normalizedOutput.unresolvedIssues ?? [], error: normalizedOutput.error ?? null } }, error: failReason });
+        writeTaskLog({ taskId, action: 'fail', sessionKey: sessionKey ?? undefined, agentId: agentId ?? undefined, result: { success: result.success, decision: 'fail', via: 'llm', confidence: judged.confidence, reason: judged.reason, llm: buildLlmLogData(llmDecision), fallback: null, evidence: { summary: normalizedOutput.summary ?? '', files: normalizedOutput.files ?? [], unresolvedIssues: normalizedOutput.unresolvedIssues ?? [], error: normalizedOutput.error ?? null } }, error: failReason });
         if (result.task) await sendNotifications(formatFailNotifications(result.task, getNotifications()), api.logger ?? null).catch(() => null);
         return;
       }
@@ -484,6 +525,8 @@ export function registerAgentEndHook(api: OpenClawPluginApi): void {
           success: result.success,
           decision: 'complete',
           via: 'publisher_acceptance_heuristic',
+          llm: buildLlmLogData(llmDecision),
+          fallback: null,
           evidence: {
             summary: normalizedOutput.summary ?? '',
             files: normalizedOutput.files ?? [],
@@ -502,20 +545,20 @@ export function registerAgentEndHook(api: OpenClawPluginApi): void {
       if (isSameCurrentStepDescription(task, nextDescription) && hasNoRealIssues(storedOutput) && !hasProblemReportSignal(text, storedOutput)) {
         const failReason = 'FALLBACK_NEXT_REPEATS_CURRENT_STEP_WITHOUT_NEW_WORK';
         const result = failTask(taskId, failReason, { step: task.description, output: sanitizeStoredOutput({ ...storedOutput, summary: stripGoalLevelLines(storedOutput.summary ?? text), error: failReason, unresolvedIssues: [failReason] }) }, { outcome: 'blocked', error: failReason });
-        writeTaskLog({ taskId, action: 'fail', sessionKey: sessionKey ?? undefined, agentId: agentId ?? undefined, result: { success: result.success, decision: 'fail', via: 'repeat_guard', reason: fallback.reason, llm_raw: llmDecision?.raw ?? null, evidence: { summary: normalizedOutput.summary ?? '', files: normalizedOutput.files ?? [], unresolvedIssues: normalizedOutput.unresolvedIssues ?? [], error: normalizedOutput.error ?? null } }, error: failReason });
+        writeTaskLog({ taskId, action: 'fail', sessionKey: sessionKey ?? undefined, agentId: agentId ?? undefined, result: { success: result.success, decision: 'fail', via: 'repeat_guard', reason: fallback.reason, llm: buildLlmLogData(llmDecision), fallback: buildFallbackLogData(fallback), evidence: { summary: normalizedOutput.summary ?? '', files: normalizedOutput.files ?? [], unresolvedIssues: normalizedOutput.unresolvedIssues ?? [], error: normalizedOutput.error ?? null } }, error: failReason });
         if (result.task) await sendNotifications(formatFailNotifications(result.task, getNotifications()), api.logger ?? null).catch(() => null);
         return;
       }
 
       const nextStepContract = buildNextStepContract(nextDescription, task.stepContract);
       const result = nextTask(taskId, agentId ?? task.executor ?? 'unknown', { step, output: storedOutput }, nextDescription, nextStepContract);
-      writeTaskLog({ taskId, action: 'next', sessionKey: sessionKey ?? undefined, agentId: agentId ?? undefined, result: { success: result.success, decision: 'next', via: 'conservative_fallback', reason: fallback.reason, nextDescription, nextStepContract, llm_raw: llmDecision?.raw ?? null, evidence: { summary: normalizedOutput.summary ?? '', files: normalizedOutput.files ?? [], unresolvedIssues: normalizedOutput.unresolvedIssues ?? [], error: normalizedOutput.error ?? null } } });
+      writeTaskLog({ taskId, action: 'next', sessionKey: sessionKey ?? undefined, agentId: agentId ?? undefined, result: { success: result.success, decision: 'next', via: 'conservative_fallback', reason: fallback.reason, nextDescription, nextStepContract, llm: buildLlmLogData(llmDecision), fallback: buildFallbackLogData(fallback), evidence: { summary: normalizedOutput.summary ?? '', files: normalizedOutput.files ?? [], unresolvedIssues: normalizedOutput.unresolvedIssues ?? [], error: normalizedOutput.error ?? null } } });
       if (result.task) await sendNotifications(formatNextNotifications(result.task, getNotifications()), api.logger ?? null).catch(() => null);
       return;
     }
 
     const result = failTask(taskId, fallback.reason, { step: task.description, output: sanitizeStoredOutput({ ...storedOutput, summary: stripGoalLevelLines(text || fallback.reason), error: fallback.reason, unresolvedIssues: storedOutput.unresolvedIssues?.length ? storedOutput.unresolvedIssues : [fallback.reason] }) }, { outcome: 'blocked', error: fallback.reason });
-    writeTaskLog({ taskId, action: 'fail', sessionKey: sessionKey ?? undefined, agentId: agentId ?? undefined, result: { success: result.success, decision: 'fail', via: 'conservative_fallback', reason: fallback.reason, llm_raw: llmDecision?.raw ?? null, evidence: { summary: normalizedOutput.summary ?? '', files: normalizedOutput.files ?? [], unresolvedIssues: normalizedOutput.unresolvedIssues ?? [], error: normalizedOutput.error ?? null } }, error: fallback.reason });
+    writeTaskLog({ taskId, action: 'fail', sessionKey: sessionKey ?? undefined, agentId: agentId ?? undefined, result: { success: result.success, decision: 'fail', via: 'conservative_fallback', reason: fallback.reason, llm: buildLlmLogData(llmDecision), fallback: buildFallbackLogData(fallback), evidence: { summary: normalizedOutput.summary ?? '', files: normalizedOutput.files ?? [], unresolvedIssues: normalizedOutput.unresolvedIssues ?? [], error: normalizedOutput.error ?? null } }, error: fallback.reason });
     if (result.task) await sendNotifications(formatFailNotifications(result.task, getNotifications()), api.logger ?? null).catch(() => null);
   });
 }

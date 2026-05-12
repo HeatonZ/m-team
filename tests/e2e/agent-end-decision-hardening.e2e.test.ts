@@ -150,4 +150,41 @@ describe('agent_end conservative fallback e2e', () => {
       await harness.cleanup();
     }
   });
+
+  test('rescues nextDescription from a partial llm payload instead of falling back to the current step', async () => {
+    const harness = await createPluginHarness({ dashboardEnabled: false });
+    try {
+      (harness.api as unknown as { runtime: { agentEndJudge: Function } }).runtime.agentEndJudge = async () =>
+        '{"decision":"next","reason":"当前步骤已完成，需要进入下一步","nextDescription":"计算 1×1=1，将结果写入 step2_result.md","nextStepContract":{"expectedOutcome":"得到 1×1=1 的计算结果","doneWhen":["step2_result.md 已生成并包含 1×1=1"]}';
+
+      const publishResult = await harness.exec('mteam_publish_task', {
+        goal: '完成三步计算并最终汇总',
+        description: '计算 1+1，结果写入 step1_result.md',
+        publisher: 'manager',
+      }) as ToolResult<{ taskId: string }>;
+      const taskId = extractDetails(publishResult)!.taskId;
+      await harness.exec('mteam_claim_task', { taskId, agentId: 'maker' }, { agentId: 'maker' });
+
+      await harness.runAgentEnd(
+        {
+          success: true,
+          messages: [{ role: 'assistant', content: '结果摘要：1+1=2，已写入 step1_result.md。下一步：计算 1×1=1，将结果写入 step2_result.md' }],
+        } as never,
+        { agentId: 'maker', sessionKey: `agent:maker:m-team:${taskId}` },
+      );
+
+      const task = harness.readTask(taskId);
+      expect(task?.status).toBe('pending');
+      expect(task?.description).toContain('计算 1×1=1');
+
+      const nextLog = harness.readLogs(taskId, 'next').at(-1);
+      expect(nextLog?.result?.via).toBe('llm');
+      expect(nextLog?.result?.llm?.source).toBe('llm');
+      expect(nextLog?.result?.llm?.status).toBe('ok');
+      expect(nextLog?.result?.llm?.parsed?.nextDescription).toContain('计算 1×1=1');
+      expect(nextLog?.result?.fallback).toBeNull();
+    } finally {
+      await harness.cleanup();
+    }
+  });
 });

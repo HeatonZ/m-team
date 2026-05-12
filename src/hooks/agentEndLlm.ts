@@ -87,6 +87,78 @@ function buildDecisionPrompt(params: {
   ].join('\n');
 }
 
+function extractQuotedField(raw: string, field: string): string | undefined {
+  const patterns = [
+    new RegExp(`"${field}"\\s*:\\s*"((?:\\\\.|[^"\\\\])*)"`, 'i'),
+    new RegExp(`${field}\\s*[:=]\\s*"((?:\\\\.|[^"\\\\])*)"`, 'i'),
+  ];
+  for (const pattern of patterns) {
+    const match = raw.match(pattern);
+    if (match?.[1]) {
+      try {
+        return JSON.parse(`"${match[1]}"`).trim();
+      } catch {
+        return match[1].replace(/\\"/g, '"').trim();
+      }
+    }
+  }
+  return undefined;
+}
+
+function extractArrayField(raw: string, field: string): string[] | undefined {
+  const match = raw.match(new RegExp(`"${field}"\\s*:\\s*\\[([\\s\\S]*?)\\]`, 'i'));
+  if (!match?.[1]) return undefined;
+  const values = [...match[1].matchAll(/"((?:\\.|[^"\\])*)"/g)]
+    .map((item) => {
+      try {
+        return JSON.parse(`"${item[1]}"`).trim();
+      } catch {
+        return item[1].replace(/\\"/g, '"').trim();
+      }
+    })
+    .filter(Boolean)
+    .slice(0, 10);
+  return values.length ? values : undefined;
+}
+
+function parseDecisionLoose(raw: string): AgentEndDecision | null {
+  const decisionMatch = raw.match(/"decision"\s*:\s*"(complete|next|fail)"/i)
+    ?? raw.match(/\bdecision\b\s*[:=]\s*(complete|next|fail)/i);
+  const decision = decisionMatch?.[1]?.toLowerCase() as AgentEndDecision['decision'] | undefined;
+  if (!decision) return null;
+
+  const reason = extractQuotedField(raw, 'reason') ?? 'LLM returned a partial decision payload';
+  const nextDescription = decision === 'next'
+    ? extractQuotedField(raw, 'nextDescription')
+    : undefined;
+  if (decision === 'next' && !nextDescription) return null;
+
+  const confidence = extractQuotedField(raw, 'confidence');
+  const summary = extractQuotedField(raw, 'summary');
+  const unresolvedIssues = extractArrayField(raw, 'unresolvedIssues');
+  const expectedOutcome = extractQuotedField(raw, 'expectedOutcome');
+  const doneWhen = extractArrayField(raw, 'doneWhen');
+  const constraints = extractArrayField(raw, 'constraints');
+  const inputHints = extractArrayField(raw, 'inputHints');
+
+  return {
+    decision,
+    reason,
+    nextDescription,
+    nextStepContract: decision === 'next' && (expectedOutcome || doneWhen?.length || constraints?.length || inputHints?.length)
+      ? {
+        ...(expectedOutcome ? { expectedOutcome } : {}),
+        doneWhen: doneWhen?.length ? doneWhen : [`Complete the current step: ${nextDescription ?? ''}`].filter(Boolean),
+        ...(constraints?.length ? { constraints } : {}),
+        ...(inputHints?.length ? { inputHints } : {}),
+      }
+      : undefined,
+    summary,
+    unresolvedIssues,
+    confidence: confidence === 'low' || confidence === 'medium' || confidence === 'high' ? confidence : undefined,
+  };
+}
+
 function parseDecision(raw: string): AgentEndDecision | null {
   const trimmed = raw.trim();
   const candidates = [trimmed];
@@ -127,7 +199,7 @@ function parseDecision(raw: string): AgentEndDecision | null {
       continue;
     }
   }
-  return null;
+  return parseDecisionLoose(trimmed);
 }
 
 export type AgentEndJudgeRuntime = PluginRuntime & {
