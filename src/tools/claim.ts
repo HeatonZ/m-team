@@ -70,9 +70,11 @@ export function register(
    - 结果摘要：当前步骤完成了什么
    - 产出文件 / 数据引用：留下了什么可验证产物
    - 未解决问题：当前还卡在哪、是否阻塞；如果无问题，也要明确写“无未解决问题”
-8. 不要写“下一步建议”或替下一棒下指令；下一步由 agent_end 统一裁决
-9. 不要只写“任务完成”或“已完成”；必须同时写出产物和问题状态
-10. 做完后直接结束 session，m-team 会在 agent_end hook 收口并判断 complete / next / fail
+8. 你的汇报必须只描述“当前这一步”的事实，不要把 goal 是否达成、整任务是否完成、是否该关闭、是否等待 publisher 验收等整任务层信息写进结果摘要或问题字段
+9. 如果你认为任务整体已经完成，也只需要报告“当前步骤结果 + 当前无阻塞问题”，不要替系统下整任务结论
+10. 不要写“下一步建议”或替下一棒下指令；下一步由 agent_end 统一裁决
+11. 不要只写“任务完成”或“已完成”；必须同时写出产物和问题状态
+12. 做完后直接结束 session，m-team 会在 agent_end hook 收口并判断 complete / next / fail
 
 【禁止事项】
 - 禁止主动调用 mteam_relinquish_task / mteam_update_task / mteam_close_task

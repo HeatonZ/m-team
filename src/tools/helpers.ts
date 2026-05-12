@@ -34,6 +34,33 @@ export function formatTaskLine(task: Omit<Task, 'goal'>, index: number): string 
   return `${index}. [${priority}] [${taskType}] ${task.taskId} — ${task.description}${stepCount > 0 ? ` (已${stepCount}步)` : ''}`;
 }
 
+function compactText(text: string | undefined, max = 120): string | undefined {
+  if (!text) return undefined;
+  const normalized = text
+    .replace(/```[\s\S]*?```/g, ' [代码块已省略] ')
+    .replace(/\*\*/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!normalized) return undefined;
+  return normalized.length > max ? `${normalized.slice(0, max)}…` : normalized;
+}
+
+function recentContextLines(task: Task): string[] {
+  const steps = task.context.filter(e => e.type === 'step');
+  if (steps.length === 0) return [];
+  return steps.slice(-3).map((entry, idx, arr) => {
+    const n = steps.length - arr.length + idx + 1;
+    const summary = compactText(entry.output?.summary, 100);
+    const issueCount = (entry.output?.unresolvedIssues ?? []).filter(issue => !/^(\*+)?\s*无/i.test(issue)).length;
+    const fileCount = entry.output?.files?.length ?? 0;
+    const parts = [`步骤${n}`, `[${entry.executor}]`, compactText(entry.step, 60) ?? ''];
+    if (summary) parts.push(`摘要: ${summary}`);
+    if (fileCount > 0) parts.push(`文件${fileCount}`);
+    if (issueCount > 0) parts.push(`问题${issueCount}`);
+    return parts.filter(Boolean).join(' · ');
+  });
+}
+
 // ============================================================
 // text 内容格式化（OpenClaw agent 只看 content[].text，不看 details）
 // ============================================================
@@ -63,19 +90,10 @@ export function formatTaskAsText(task: Task, options?: { includeGoal?: boolean }
   lines.push(`已执行步骤: ${stepCount}`);
   lines.push(`创建时间: ${new Date(task.createdAt).toISOString()}`);
 
-  // 完整执行历史（含每步结果）
-  if (task.context.length > 0) {
-    const steps = task.context.filter(e => e.type === 'step');
-    if (steps.length > 0) {
-      lines.push(`\n【执行历史】共 ${steps.length} 步`);
-      steps.forEach((entry, idx) => {
-        const step = entry as { type: 'step'; executor: string; step: string; output?: { summary?: string; files?: string[]; error?: string } };
-        lines.push(`\n步骤${idx + 1} [${step.executor}]: ${step.step}`);
-        if (step.output?.summary) lines.push(`  结果: ${step.output.summary}`);
-        if (step.output?.error) lines.push(`  错误: ${step.output.error}`);
-        if (step.output?.files?.length) lines.push(`  文件: ${step.output.files.join(', ')}`);
-      });
-    }
+  const recent = recentContextLines(task);
+  if (recent.length > 0) {
+    lines.push(`\n【最近历史】`);
+    lines.push(...recent);
   }
 
   return lines.join('\n');
