@@ -20,7 +20,7 @@ describe('agent_end edge cases e2e', () => {
           error: 'TOOL_TIMEOUT',
           messages: [{ role: 'assistant', content: '执行中断' }],
         } as never,
-        { agentId: 'maker', sessionKey: `agent:maker:m-team:${taskId}` },
+        { agentId: 'maker', sessionKey: `agent:maker:m-team:${taskId}:test-session` },
       );
 
       const failedTask = harness.readTask(taskId);
@@ -50,7 +50,7 @@ describe('agent_end edge cases e2e', () => {
           success: true,
           messages: [{ role: 'assistant', content: 'NO_REPLY' }],
         } as never,
-        { agentId: 'maker', sessionKey: `agent:maker:m-team:${taskId}` },
+        { agentId: 'maker', sessionKey: `agent:maker:m-team:${taskId}:test-session` },
       );
 
       const failedTask = harness.readTask(taskId);
@@ -85,7 +85,7 @@ describe('agent_end edge cases e2e', () => {
           success: true,
           messages: [{ role: 'assistant', content: '最终整理：已核对候选列表，待补最终输出文件。' }],
         } as never,
-        { agentId: 'maker', sessionKey: `agent:maker:m-team:${taskId}` },
+        { agentId: 'maker', sessionKey: `agent:maker:m-team:${taskId}:test-session` },
       );
 
       const finalizingTask = harness.readTask(taskId);
@@ -99,7 +99,7 @@ describe('agent_end edge cases e2e', () => {
           success: true,
           messages: [{ role: 'assistant', content: '最终整理：已核对候选列表，待补最终输出文件。' }],
         } as never,
-        { agentId: 'maker', sessionKey: `agent:maker:m-team:${taskId}` },
+        { agentId: 'maker', sessionKey: `agent:maker:m-team:${taskId}:test-session` },
       );
 
       const failedTask = harness.readTask(taskId);

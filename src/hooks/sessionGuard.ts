@@ -33,7 +33,7 @@ export function registerSessionGuardHook(
     ): PluginHookBeforeToolCallResult => {
       const { toolName, params } = event;
       const { sessionKey, agentId } = ctx;
-      const isExecutorTaskSession = Boolean(sessionKey?.startsWith(`agent:${agentId}:m-team:task_`));
+  const isExecutorTaskSession = Boolean(sessionKey?.startsWith(`agent:${agentId}:m-team:task_`));
 
       // 心跳 session 禁止调用 complete / fail（这两种由 agent_end hook 统一处理）
       // 额外禁止 sessions_spawn / sessions_send：heartbeat 只负责认领，不允许派生执行链或转发未经校验的子结果。

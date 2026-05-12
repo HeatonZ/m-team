@@ -135,8 +135,9 @@ function buildToolContext(name: string, params: Record<string, unknown>, options
   if (options.toolContext) return options.toolContext;
 
   const agentId = options.agentId ?? (typeof params.agentId === 'string' ? params.agentId : undefined) ?? 'manager';
+  const nonce = 'test-session';
   const sessionKey = options.sessionKey
-    ?? (typeof params.taskId === 'string' && agentId ? `agent:${agentId}:m-team:${String(params.taskId)}` : `agent:${agentId}:manual`);
+    ?? (typeof params.taskId === 'string' && agentId ? `agent:${agentId}:m-team:${String(params.taskId)}:${nonce}` : `agent:${agentId}:manual`);
   return {
     agentId,
     sessionKey,

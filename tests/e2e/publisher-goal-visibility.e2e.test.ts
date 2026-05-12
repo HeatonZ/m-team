@@ -25,7 +25,7 @@ describe('publisher goal visibility boundary', () => {
             { role: 'assistant', content: '最终结果：已输出 /mnt/d/code/hermes/result.md，三个算式已全部完成。' },
           ],
         } as never,
-        { agentId: 'maker', sessionKey: `agent:maker:m-team:${taskId}` },
+        { agentId: 'maker', sessionKey: `agent:maker:m-team:${taskId}:test-session` },
       );
 
       const closeResult = await harness.exec('mteam_close_task', { taskId, publisher: 'manager' }, { agentId: 'manager' });
@@ -48,7 +48,7 @@ describe('publisher goal visibility boundary', () => {
             { role: 'assistant', content: '结果摘要：第 1 个候选已复核。' },
           ],
         } as never,
-        { agentId: 'maker', sessionKey: `agent:maker:m-team:${taskId2}` },
+        { agentId: 'maker', sessionKey: `agent:maker:m-team:${taskId2}:test-session` },
       );
 
       const rejectResult = await harness.exec(

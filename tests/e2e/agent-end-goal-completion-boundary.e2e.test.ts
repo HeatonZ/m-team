@@ -25,7 +25,7 @@ describe('agent_end task-goal completion boundary', () => {
             { role: 'assistant', content: '结果摘要：已完成计算 1+1。产出文件：/mnt/d/code/hermes/step1.json。数据引用：step1.json 中记录 1+1=2。' },
           ],
         } as never,
-        { agentId: 'maker', sessionKey: `agent:maker:m-team:${taskId}` },
+        { agentId: 'maker', sessionKey: `agent:maker:m-team:${taskId}:test-session` },
       );
 
       const task = harness.readTask(taskId);
@@ -54,7 +54,7 @@ describe('agent_end task-goal completion boundary', () => {
             { role: 'assistant', content: '最终结果：已完成 1+1、1×1、2+3 三个计算并汇总输出。产出文件：/mnt/d/code/hermes/result.json。数据引用：result.json 包含三个结果 2、1、5。任务完成。' },
           ],
         } as never,
-        { agentId: 'maker', sessionKey: `agent:maker:m-team:${taskId}` },
+        { agentId: 'maker', sessionKey: `agent:maker:m-team:${taskId}:test-session` },
       );
 
       const task = harness.readTask(taskId);
@@ -97,7 +97,7 @@ describe('agent_end task-goal completion boundary', () => {
             { role: 'assistant', content: '所有计算步骤已完成，final_result.md 汇总结果=8。等待 publisher 验收关闭。' },
           ],
         } as never,
-        { agentId: 'maker', sessionKey: `agent:maker:m-team:${taskId}` },
+        { agentId: 'maker', sessionKey: `agent:maker:m-team:${taskId}:test-session` },
       );
 
       const task = harness.readTask(taskId);

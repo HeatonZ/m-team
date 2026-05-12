@@ -13,7 +13,7 @@ describe('agent_end fallback lookup', () => {
       }, { agentId: 'manager' }) as ToolResult<{ taskId: string }>;
       const taskId = extractDetails(publishResult)!.taskId;
 
-      await harness.exec('mteam_claim_task', { taskId, agentId: 'maker' }, { agentId: 'maker', sessionKey: `agent:maker:m-team:${taskId}` });
+      await harness.exec('mteam_claim_task', { taskId, agentId: 'maker' }, { agentId: 'maker', sessionKey: `agent:maker:m-team:${taskId}:test-session` });
 
       // 模拟真实运行态没有 runtime.storage
       (harness.api as unknown as { runtime?: { storage?: unknown } }).runtime = {
@@ -28,7 +28,7 @@ describe('agent_end fallback lookup', () => {
         ],
       } as never, {
         agentId: 'maker',
-        sessionKey: `agent:maker:m-team:${taskId}`,
+        sessionKey: `agent:maker:m-team:${taskId}:test-session`,
       });
 
       const task = harness.readTask(taskId);

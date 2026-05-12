@@ -23,7 +23,7 @@ describe('claim/active e2e', () => {
       }) as ToolResult<{ task?: Record<string, unknown>; sessionKey?: string; runId?: string }>;
       const claimDetails = extractDetails(claimResult);
       expect(claimDetails?.task).not.toHaveProperty('goal');
-      expect(claimDetails?.sessionKey).toBe(`agent:maker:m-team:${taskId}`);
+      expect(claimDetails?.sessionKey).toMatch(new RegExp(`^agent:maker:m-team:${taskId}:[^:]+$`));
       expect(claimDetails?.runId).toBe('test-run-id');
 
       const storedTask = harness.readTask(taskId);

@@ -24,7 +24,7 @@ describe('agent_end llm judge e2e', () => {
       await harness.runAgentEnd({
         success: true,
         messages: [{ role: 'assistant', content: '结果摘要：已整理完成。' }],
-      } as never, { agentId: 'maker', sessionKey: `agent:maker:m-team:${taskId}` });
+      } as never, { agentId: 'maker', sessionKey: `agent:maker:m-team:${taskId}:test-session` });
 
       const task = harness.readTask(taskId);
       expect(task?.status).toBe('completed');
@@ -56,7 +56,7 @@ describe('agent_end llm judge e2e', () => {
       await harness.runAgentEnd({
         success: true,
         messages: [{ role: 'assistant', content: '结果摘要：已保留 2 个候选。' }],
-      } as never, { agentId: 'maker', sessionKey: `agent:maker:m-team:${taskId}` });
+      } as never, { agentId: 'maker', sessionKey: `agent:maker:m-team:${taskId}:test-session` });
 
       const task = harness.readTask(taskId);
       expect(task?.status).toBe('pending');
@@ -90,7 +90,7 @@ describe('agent_end llm judge e2e', () => {
       await harness.runAgentEnd({
         success: true,
         messages: [{ role: 'assistant', content: '结果摘要：已完成初步整理。' }],
-      } as never, { agentId: 'maker', sessionKey: `agent:maker:m-team:${taskId}` });
+      } as never, { agentId: 'maker', sessionKey: `agent:maker:m-team:${taskId}:test-session` });
 
       const task = harness.readTask(taskId);
       expect(task?.status).toBe('pending');
@@ -118,7 +118,7 @@ describe('agent_end llm judge e2e', () => {
       await harness.runAgentEnd({
         success: true,
         messages: [{ role: 'assistant', content: '结果摘要：已保留 2 个候选，记录在 /mnt/d/code/hermes/result.md。' }],
-      } as never, { agentId: 'maker', sessionKey: `agent:maker:m-team:${taskId}` });
+      } as never, { agentId: 'maker', sessionKey: `agent:maker:m-team:${taskId}:test-session` });
 
       const task = harness.readTask(taskId);
       expect(task?.status).toBe('failed');
@@ -154,7 +154,7 @@ describe('agent_end llm judge e2e', () => {
       await harness.runAgentEnd({
         success: true,
         messages: [{ role: 'assistant', content: '结果摘要：已整理候选列表，但还需补齐一份校验文件后才能提交。' }],
-      } as never, { agentId: 'maker', sessionKey: `agent:maker:m-team:${taskId}` });
+      } as never, { agentId: 'maker', sessionKey: `agent:maker:m-team:${taskId}:test-session` });
 
       const task = harness.readTask(taskId);
       expect(task?.status).toBe('pending');
@@ -189,7 +189,7 @@ describe('agent_end llm judge e2e', () => {
       await harness.runAgentEnd({
         success: true,
         messages: [{ role: 'assistant', content: '结果摘要：计算 1+1 = 2，已写入 step1_result.md。\n产出文件：step1_result.md\n未解决问题：无' }],
-      } as never, { agentId: 'maker', sessionKey: `agent:maker:m-team:${taskId}` });
+      } as never, { agentId: 'maker', sessionKey: `agent:maker:m-team:${taskId}:test-session` });
 
       const task = harness.readTask(taskId);
       expect(task?.status).toBe('failed');

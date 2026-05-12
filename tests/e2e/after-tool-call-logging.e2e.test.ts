@@ -17,7 +17,7 @@ describe('after_tool_call logging e2e', () => {
       const claimResult = await harness.exec('mteam_claim_task', {
         taskId,
         agentId: 'maker',
-      }, { agentId: 'maker', sessionKey: `agent:maker:m-team:${taskId}` }) as ToolResult<{ task?: { taskId?: string } }>;
+      }, { agentId: 'maker', sessionKey: `agent:maker:m-team:${taskId}:test-session` }) as ToolResult<{ task?: { taskId?: string } }>;
       expect(extractDetails(claimResult)?.task?.taskId).toBe(taskId);
 
       await harness.exec('mteam_cancel_task', {
@@ -46,7 +46,7 @@ describe('after_tool_call logging e2e', () => {
       expect(claimLog?.result).toMatchObject({
         details: {
           taskId,
-          sessionKey: `agent:maker:m-team:${taskId}`,
+          sessionKey: `agent:maker:m-team:${taskId}:test-session`,
           runId: 'test-run-id',
         },
       });

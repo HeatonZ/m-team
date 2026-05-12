@@ -22,7 +22,7 @@ describe('executor goal isolation and completion discipline', () => {
       expect(claimText).not.toContain('目标:');
       expect(claimText).not.toContain('完成 1+1、1×1、2+3 三个计算');
 
-      const getTaskResult = await harness.exec('mteam_get_task', { taskId }, { agentId: 'maker', sessionKey: `agent:maker:m-team:${taskId}` });
+      const getTaskResult = await harness.exec('mteam_get_task', { taskId }, { agentId: 'maker', sessionKey: `agent:maker:m-team:${taskId}:test-session` });
       const taskText = extractText(getTaskResult);
       expect(taskText).not.toContain('目标:');
       expect(taskText).not.toContain('完成 1+1、1×1、2+3 三个计算');
@@ -56,7 +56,7 @@ describe('executor goal isolation and completion discipline', () => {
             { role: 'assistant', content: '结果摘要：已完成计算 1+1，结果为 2。任务完成。' },
           ],
         } as never,
-        { agentId: 'maker', sessionKey: `agent:maker:m-team:${taskId}` },
+        { agentId: 'maker', sessionKey: `agent:maker:m-team:${taskId}:test-session` },
       );
 
       const task = harness.readTask(taskId);

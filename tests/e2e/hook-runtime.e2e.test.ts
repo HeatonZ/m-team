@@ -78,7 +78,7 @@ describe('hook runtime e2e', () => {
       const relinquishBlocked = await harness.exec(
         'mteam_relinquish_task',
         { taskId, reason: '不允许 executor 主动 relinquish' },
-        { agentId: 'maker', sessionKey: `agent:maker:m-team:${taskId}` },
+        { agentId: 'maker', sessionKey: `agent:maker:m-team:${taskId}:test-session` },
       ) as ToolResult<{ blocked?: boolean }>;
       expect(extractDetails(relinquishBlocked)?.blocked).toBe(true);
       expect(extractText(relinquishBlocked)).toContain('禁止主动调用 mteam_relinquish_task');
@@ -86,7 +86,7 @@ describe('hook runtime e2e', () => {
       const closeBlocked = await harness.exec(
         'mteam_close_task',
         { taskId, publisher: 'manager' },
-        { agentId: 'maker', sessionKey: `agent:maker:m-team:${taskId}` },
+        { agentId: 'maker', sessionKey: `agent:maker:m-team:${taskId}:test-session` },
       ) as ToolResult<{ blocked?: boolean }>;
       expect(extractDetails(closeBlocked)?.blocked).toBe(true);
       expect(extractText(closeBlocked)).toContain('无权操作');
@@ -122,7 +122,7 @@ describe('hook runtime e2e', () => {
             { role: 'assistant', content: '结果摘要：已完成首轮筛选，保留 2 个候选。建议：继续搜索宠物玩具，筛选 costPrice ≤ 5 RMB、规格数 ≤ 8，找够剩余 3 个' },
           ],
         } as never,
-        { agentId: 'maker', sessionKey: `agent:maker:m-team:${taskId}` },
+        { agentId: 'maker', sessionKey: `agent:maker:m-team:${taskId}:test-session` },
       );
 
       const nextTask = harness.readTask(taskId);
@@ -144,7 +144,7 @@ describe('hook runtime e2e', () => {
             { role: 'assistant', content: '最终结果：已输出 /mnt/d/code/hermes/result.md，形成最终选品结论，任务完成。' },
           ],
         } as never,
-        { agentId: 'fixer', sessionKey: `agent:fixer:m-team:${taskId}` },
+        { agentId: 'fixer', sessionKey: `agent:fixer:m-team:${taskId}:test-session` },
       );
 
       const completedTask = harness.readTask(taskId);
@@ -179,7 +179,7 @@ describe('hook runtime e2e', () => {
             { role: 'assistant', content: '最终结果：已输出 /mnt/d/code/hermes/result.md，形成最终选品结论，任务完成。' },
           ],
         } as never,
-        { agentId: 'maker', sessionKey: `agent:maker:m-team:${taskId}` },
+        { agentId: 'maker', sessionKey: `agent:maker:m-team:${taskId}:test-session` },
       )).resolves.toBeUndefined();
 
       const completedTask = harness.readTask(taskId);

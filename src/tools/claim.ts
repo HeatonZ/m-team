@@ -41,7 +41,8 @@ export function register(api: OpenClawPluginApi, config: MTeamPluginConfig): voi
         }
       }
 
-      const sessionKey = `agent:${agentId}:m-team:${taskId}`;
+      const nonce = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+      const sessionKey = `agent:${agentId}:m-team:${taskId}:${nonce}`;
       const taskWorkdir = `${config.workspaceRoot ?? '/mnt/d/code/m-team'}/tasks/${taskId}`;
 
       const systemPrompt = `

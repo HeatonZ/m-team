@@ -24,7 +24,7 @@ describe('agent_end observability e2e', () => {
       await harness.runAgentEnd({
         success: true,
         messages: [{ role: 'assistant', content: '结果摘要：已整理 2 个候选商品，记录在 /mnt/d/code/hermes/candidates.md。' }],
-      } as never, { agentId: 'maker', sessionKey: `agent:maker:m-team:${taskId}` });
+      } as never, { agentId: 'maker', sessionKey: `agent:maker:m-team:${taskId}:test-session` });
 
       const nextLog = harness.readLogs(taskId, 'next').at(-1);
       expect(nextLog?.result?.via).toBe('llm');
@@ -59,7 +59,7 @@ describe('agent_end observability e2e', () => {
       await harness.runAgentEnd({
         success: true,
         messages: [{ role: 'assistant', content: '阻塞：接口返回格式异常。' }],
-      } as never, { agentId: 'maker', sessionKey: `agent:maker:m-team:${taskId}` });
+      } as never, { agentId: 'maker', sessionKey: `agent:maker:m-team:${taskId}:test-session` });
 
       const task = harness.readTask(taskId);
       expect(task?.status).toBe('failed');

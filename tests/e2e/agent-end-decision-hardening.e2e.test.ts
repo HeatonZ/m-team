@@ -16,7 +16,7 @@ describe('agent_end llm fail-fast e2e', () => {
 
       await harness.runAgentEnd(
         { success: true, messages: [] } as never,
-        { agentId: 'maker', sessionKey: `agent:maker:m-team:${taskId}` },
+        { agentId: 'maker', sessionKey: `agent:maker:m-team:${taskId}:test-session` },
       );
 
       const task = harness.readTask(taskId);
@@ -44,7 +44,7 @@ describe('agent_end llm fail-fast e2e', () => {
           error: 'HTTP_500',
           messages: [{ role: 'assistant', content: 'Execution failed' }],
         } as never,
-        { agentId: 'maker', sessionKey: `agent:maker:m-team:${taskId}` },
+        { agentId: 'maker', sessionKey: `agent:maker:m-team:${taskId}:test-session` },
       );
 
       const task = harness.readTask(taskId);
@@ -73,7 +73,7 @@ describe('agent_end llm fail-fast e2e', () => {
           success: true,
           messages: [{ role: 'assistant', content: '' }],
         } as never,
-        { agentId: 'maker', sessionKey: `agent:maker:m-team:${taskId}` },
+        { agentId: 'maker', sessionKey: `agent:maker:m-team:${taskId}:test-session` },
       );
 
       const task = harness.readTask(taskId);
@@ -107,7 +107,7 @@ describe('agent_end llm fail-fast e2e', () => {
           success: true,
           messages: [{ role: 'assistant', content: 'Summary: 1+1 = 2, written to step1_result.md.\nFiles: step1_result.md\nUnresolved issues: none' }],
         } as never,
-        { agentId: 'maker', sessionKey: `agent:maker:m-team:${taskId}` },
+        { agentId: 'maker', sessionKey: `agent:maker:m-team:${taskId}:test-session` },
       );
 
       const task = harness.readTask(taskId);
@@ -139,7 +139,7 @@ describe('agent_end llm fail-fast e2e', () => {
           success: true,
           messages: [{ role: 'assistant', content: '结果摘要：1+1=2，已写入 step1_result.md。下一步：计算 1×1=1，将结果写入 step2_result.md' }],
         } as never,
-        { agentId: 'maker', sessionKey: `agent:maker:m-team:${taskId}` },
+        { agentId: 'maker', sessionKey: `agent:maker:m-team:${taskId}:test-session` },
       );
 
       const task = harness.readTask(taskId);

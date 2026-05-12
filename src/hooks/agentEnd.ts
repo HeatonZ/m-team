@@ -48,7 +48,8 @@ function parseTaskId(sessionKey: string): string | null {
 
 function isExecutorSessionForTask(sessionKey: string | undefined, agentId: string | undefined, taskId: string): boolean {
   if (!sessionKey || !agentId) return false;
-  return sessionKey === `agent:${agentId}:m-team:${taskId}`;
+  const prefix = `agent:${agentId}:m-team:${taskId}:`;
+  return sessionKey.startsWith(prefix);
 }
 
 function extractText(content: unknown): string {

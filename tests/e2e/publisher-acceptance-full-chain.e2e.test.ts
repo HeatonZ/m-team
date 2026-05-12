@@ -26,7 +26,7 @@ describe('publisher acceptance full chain e2e', () => {
           success: true,
           messages: [{ role: 'assistant', content: '最终结果：已输出 /mnt/d/code/hermes/final-result.md。' }],
         } as never,
-        { agentId: 'maker', sessionKey: `agent:maker:m-team:${taskId}` },
+        { agentId: 'maker', sessionKey: `agent:maker:m-team:${taskId}:test-session` },
       );
 
       expect(harness.readTask(taskId)?.status).toBe('completed');
@@ -70,7 +70,7 @@ describe('publisher acceptance full chain e2e', () => {
           success: true,
           messages: [{ role: 'assistant', content: '最终结果：已输出 /mnt/d/code/hermes/candidate-report.md。' }],
         } as never,
-        { agentId: 'maker', sessionKey: `agent:maker:m-team:${taskId}` },
+        { agentId: 'maker', sessionKey: `agent:maker:m-team:${taskId}:test-session` },
       );
 
       expect(harness.readTask(taskId)?.status).toBe('completed');
