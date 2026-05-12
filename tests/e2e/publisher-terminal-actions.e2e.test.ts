@@ -13,8 +13,8 @@ describe('publisher terminal actions e2e', () => {
     const harness = await createPluginHarness();
     try {
       const cancelPublish = await harness.exec('mteam_publish_task', {
-        goal: '准备取消测试任务',
-        description: '生成一个可取消任务',
+        goal: 'Create a task that can be cancelled',
+        description: 'Create a cancellable test task',
         publisher: 'manager',
       }) as ToolResult<PublishDetails>;
       const cancelTaskId = extractDetails(cancelPublish)!.taskId;
@@ -28,8 +28,8 @@ describe('publisher terminal actions e2e', () => {
       expect(harness.readTask(cancelTaskId)?.status).toBe('cancelled');
 
       const closePublish = await harness.exec('mteam_publish_task', {
-        goal: '准备验收关闭任务',
-        description: '生成一个待关闭任务',
+        goal: 'Produce a final file that can be accepted',
+        description: 'Generate the final result file',
         publisher: 'manager',
       }) as ToolResult<PublishDetails>;
       const closeTaskId = extractDetails(closePublish)!.taskId;
@@ -49,8 +49,8 @@ describe('publisher terminal actions e2e', () => {
       expect(harness.readTask(closeTaskId)?.status).toBe('closed');
 
       const rejectPublish = await harness.exec('mteam_publish_task', {
-        goal: '准备驳回任务',
-        description: '生成一个待驳回任务',
+        goal: 'Produce a report that can be revised after review',
+        description: 'Generate a candidate report for review',
         publisher: 'manager',
       }) as ToolResult<PublishDetails>;
       const rejectTaskId = extractDetails(rejectPublish)!.taskId;
@@ -72,8 +72,8 @@ describe('publisher terminal actions e2e', () => {
     const harness = await createPluginHarness();
     try {
       const publishResult = await harness.exec('mteam_publish_task', {
-        goal: '验证 publisher 权限链',
-        description: '生成一个只能由 manager 操作的任务',
+        goal: 'Verify publisher permission boundaries',
+        description: 'Create a task restricted to manager approval',
       }, {
         agentId: 'manager',
         sessionKey: 'agent:manager:main',
@@ -100,8 +100,8 @@ describe('publisher terminal actions e2e', () => {
     const harness = await createPluginHarness();
     try {
       const blocked = await harness.exec('mteam_publish_task', {
-        goal: 'heartbeat 禁止发布',
-        description: '不应成功创建任务',
+        goal: 'Verify heartbeat cannot publish tasks',
+        description: 'Record a heartbeat publish attempt',
       }, {
         agentId: 'manager',
         sessionKey: 'agent:manager:main:heartbeat',
@@ -120,8 +120,8 @@ describe('publisher terminal actions e2e', () => {
     try {
       const logRecords: Array<{ level: 'info' | 'warn' | 'error'; message: string }> = [];
       const taskId = publishTask({
-        goal: '验证 publish ownership mismatch 审计',
-        description: '显式 publisher 与 hook ctx 故意不一致',
+        goal: 'Verify publish ownership mismatch auditing',
+        description: 'Record a publish with mismatched explicit publisher and hook context',
         publisher: 'manager',
       });
       registerAfterToolCallHook({
@@ -130,8 +130,8 @@ describe('publisher terminal actions e2e', () => {
             (handler as (event: unknown, ctx: unknown) => void)({
               toolName: 'mteam_publish_task',
               params: {
-                goal: '验证 publish ownership mismatch 审计',
-                description: '显式 publisher 与 hook ctx 故意不一致',
+                goal: 'Verify publish ownership mismatch auditing',
+                description: 'Record a publish with mismatched explicit publisher and hook context',
                 publisher: 'manager',
               },
               result: { details: { taskId } },

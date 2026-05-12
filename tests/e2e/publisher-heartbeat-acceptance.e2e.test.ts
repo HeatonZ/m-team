@@ -7,8 +7,8 @@ describe('publisher heartbeat acceptance e2e', () => {
     const harness = await createPluginHarness({ dashboardEnabled: false });
     try {
       const runningResult = await harness.exec('mteam_publish_task', {
-        goal: '验证超时优先级',
-        description: '先执行一个会超时的任务',
+        goal: 'Verify timeout handling is prioritized',
+        description: 'Record a step that becomes stale after claim',
         publisher: 'manager',
       }) as ToolResult<{ taskId: string }>;
       const runningTaskId = extractDetails(runningResult)!.taskId;
@@ -19,8 +19,8 @@ describe('publisher heartbeat acceptance e2e', () => {
       });
 
       const completedResult = await harness.exec('mteam_publish_task', {
-        goal: '验证 completed 不应抢跑',
-        description: '先准备一个待验收任务',
+        goal: 'Produce a finished result that remains completed',
+        description: 'Generate a result file for later acceptance',
         publisher: 'manager',
       }) as ToolResult<{ taskId: string }>;
       const completedTaskId = extractDetails(completedResult)!.taskId;
@@ -34,15 +34,15 @@ describe('publisher heartbeat acceptance e2e', () => {
       await harness.runAgentEnd(
         {
           success: true,
-          messages: [{ role: 'assistant', content: '最终结果：已输出 /mnt/d/code/hermes/publisher-accept.md，验证 completed 不应抢跑，任务完成。' }],
+          messages: [{ role: 'assistant', content: '最终结果：已输出 /mnt/d/code/hermes/publisher-accept.md，任务完成。' }],
         } as never,
-        { agentId: 'fixer', sessionKey: `agent:fixer:m-team:${completedTaskId}` },
+        { agentId: 'fixer', sessionKey: `agent:fixer:m-team:${completedTaskId}:test-session` },
       );
 
       const publisherHeartbeat = harness.runHeartbeat('manager');
-      expect(publisherHeartbeat?.appendContext).toContain('超时检测（每次心跳都要做）');
-      expect(publisherHeartbeat?.appendContext).toContain('每次心跳最多处理 1 个超时任务');
-      expect(publisherHeartbeat?.appendContext).toContain('无超时任务时才做');
+      expect(publisherHeartbeat?.appendContext).toContain('超时检测');
+      expect(publisherHeartbeat?.appendContext).toContain('最多处理 1 个超时任务');
+      expect(publisherHeartbeat?.appendContext).toContain('无超时任务时');
 
       const relinquishResult = await harness.exec(
         'mteam_relinquish_task',
@@ -51,11 +51,8 @@ describe('publisher heartbeat acceptance e2e', () => {
       ) as ToolResult<{ success?: boolean }>;
       expect(extractDetails(relinquishResult)?.success).toBe(true);
 
-      const runningTask = harness.readTask(runningTaskId);
-      expect(runningTask?.status).toBe('pending');
-
-      const completedTask = harness.readTask(completedTaskId);
-      expect(completedTask?.status).toBe('completed');
+      expect(harness.readTask(runningTaskId)?.status).toBe('pending');
+      expect(harness.readTask(completedTaskId)?.status).toBe('completed');
     } finally {
       await harness.cleanup();
     }

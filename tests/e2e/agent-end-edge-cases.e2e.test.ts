@@ -7,8 +7,8 @@ describe('agent_end edge cases e2e', () => {
     const harness = await createPluginHarness({ dashboardEnabled: false });
     try {
       const publishResult = await harness.exec('mteam_publish_task', {
-        goal: '验证异常失败链路',
-        description: '先执行异常任务',
+        goal: 'Verify runtime error handling for an executor step',
+        description: 'Record a step that times out during execution',
         publisher: 'manager',
       }) as ToolResult<{ taskId: string }>;
       const taskId = extractDetails(publishResult)!.taskId;
@@ -26,20 +26,18 @@ describe('agent_end edge cases e2e', () => {
       const failedTask = harness.readTask(taskId);
       expect(failedTask?.status).toBe('failed');
       expect(failedTask?.context.at(-1)?.output?.error).toBe('TOOL_TIMEOUT');
-
-      const failLogs = harness.readLogs(taskId, 'fail');
-      expect(failLogs[0]?.error).toBe('TOOL_TIMEOUT');
+      expect(harness.readLogs(taskId, 'fail')[0]?.error).toBe('TOOL_TIMEOUT');
     } finally {
       await harness.cleanup();
     }
   });
 
-  test('fails task when assistant produces no recoverable progress', async () => {
+  test('fails fast when assistant produces no usable progress and llm judge is unavailable', async () => {
     const harness = await createPluginHarness({ dashboardEnabled: false });
     try {
       const publishResult = await harness.exec('mteam_publish_task', {
-        goal: '验证无进展失败链路',
-        description: '先做无进展任务',
+        goal: 'Verify fail-fast behavior when no usable progress is reported',
+        description: 'Record a step with no usable output',
         publisher: 'manager',
       }) as ToolResult<{ taskId: string }>;
       const taskId = extractDetails(publishResult)!.taskId;
@@ -55,13 +53,13 @@ describe('agent_end edge cases e2e', () => {
 
       const failedTask = harness.readTask(taskId);
       expect(failedTask?.status).toBe('failed');
-      expect(failedTask?.context.at(-1)?.output?.error).toBe('NO_RECOVERABLE_PROGRESS');
+      expect(failedTask?.context.at(-1)?.output?.error).toBe('RUNTIME_AGENT_END_JUDGE_EMPTY');
     } finally {
       await harness.cleanup();
     }
   });
 
-  test('keeps task running on repeated retains without progress when llm does not fail it', async () => {
+  test('keeps task pending across repeated next decisions when llm keeps returning the same actionable step', async () => {
     const harness = await createPluginHarness({ dashboardEnabled: false });
     try {
       (harness.api as unknown as { runtime: { agentEndJudge: Function } }).runtime.agentEndJudge = async () => ({
@@ -73,8 +71,8 @@ describe('agent_end edge cases e2e', () => {
       });
 
       const publishResult = await harness.exec('mteam_publish_task', {
-        goal: '验证循环熔断',
-        description: '先整理最终结果并核对缺口',
+        goal: 'Verify repeated next decisions do not fail immediately',
+        description: 'Review the final output gap and record missing items',
         publisher: 'manager',
       }) as ToolResult<{ taskId: string }>;
       const taskId = extractDetails(publishResult)!.taskId;
@@ -88,12 +86,11 @@ describe('agent_end edge cases e2e', () => {
         { agentId: 'maker', sessionKey: `agent:maker:m-team:${taskId}:test-session` },
       );
 
-      const finalizingTask = harness.readTask(taskId);
-      expect(finalizingTask?.status).toBe('pending');
-      expect(finalizingTask?.description).toBe('继续补齐最终输出文件');
+      const firstNext = harness.readTask(taskId);
+      expect(firstNext?.status).toBe('pending');
+      expect(firstNext?.description).toBe('继续补齐最终输出文件');
 
       await harness.exec('mteam_claim_task', { taskId, agentId: 'maker' }, { agentId: 'maker' });
-
       await harness.runAgentEnd(
         {
           success: true,
@@ -102,15 +99,12 @@ describe('agent_end edge cases e2e', () => {
         { agentId: 'maker', sessionKey: `agent:maker:m-team:${taskId}:test-session` },
       );
 
-      const failedTask = harness.readTask(taskId);
-      expect(failedTask?.status).toBe('pending');
-      expect(failedTask?.description).toBe('继续补齐最终输出文件');
-      expect(failedTask?.context.at(-1)?.output?.summary).toContain('最终整理');
-
-      const failLogs = harness.readLogs(taskId, 'fail');
-      expect(failLogs).toHaveLength(0);
-      const nextLogs = harness.readLogs(taskId, 'next');
-      expect(nextLogs.length).toBeGreaterThanOrEqual(2);
+      const secondNext = harness.readTask(taskId);
+      expect(secondNext?.status).toBe('pending');
+      expect(secondNext?.description).toBe('继续补齐最终输出文件');
+      expect(secondNext?.context.at(-1)?.output?.summary).toContain('已核对候选列表');
+      expect(harness.readLogs(taskId, 'fail')).toHaveLength(0);
+      expect(harness.readLogs(taskId, 'next').length).toBeGreaterThanOrEqual(2);
     } finally {
       await harness.cleanup();
     }

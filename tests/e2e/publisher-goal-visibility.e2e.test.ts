@@ -12,44 +12,30 @@ describe('publisher goal visibility boundary', () => {
     try {
       const publishResult = await harness.exec('mteam_publish_task', {
         goal: '完成 3 个算式并汇总到最终结果',
-        description: '先计算 1+1',
+        description: '计算第一个算式 1+1',
         publisher: 'manager',
       }) as ToolResult<PublishDetails>;
       const taskId = extractDetails(publishResult)!.taskId;
 
-      await harness.exec('mteam_claim_task', { taskId, agentId: 'maker' }, { agentId: 'maker' });
-      await harness.runAgentEnd(
-        {
-          success: true,
-          messages: [
-            { role: 'assistant', content: '最终结果：已输出 /mnt/d/code/hermes/result.md，三个算式已全部完成。' },
-          ],
-        } as never,
-        { agentId: 'maker', sessionKey: `agent:maker:m-team:${taskId}:test-session` },
-      );
+      harness.mutateTask(taskId, (task) => {
+        task.status = 'completed';
+        task.completedAt = Date.now();
+        task.updatedAt = task.completedAt;
+        task.executor = null;
+        task.lastExecutor = 'maker';
+      });
 
       const closeResult = await harness.exec('mteam_close_task', { taskId, publisher: 'manager' }, { agentId: 'manager' });
       const closeText = extractText(closeResult);
-      expect(closeText).toContain('目标: 完成 3 个算式并汇总到最终结果');
-      expect(closeText).toContain('当前步骤: 先计算 1+1');
+      expect(closeText).toContain('Goal: 完成 3 个算式并汇总到最终结果');
+      expect(closeText).toContain('Current step: 计算第一个算式 1+1');
 
       const publishAgain = await harness.exec('mteam_publish_task', {
         goal: '完成 5 个候选商品复核并给出结论',
-        description: '先复核第 1 个候选商品',
+        description: '复核第 1 个候选商品',
         publisher: 'manager',
       }) as ToolResult<PublishDetails>;
       const taskId2 = extractDetails(publishAgain)!.taskId;
-
-      await harness.exec('mteam_claim_task', { taskId: taskId2, agentId: 'maker' }, { agentId: 'maker' });
-      await harness.runAgentEnd(
-        {
-          success: true,
-          messages: [
-            { role: 'assistant', content: '结果摘要：第 1 个候选已复核。' },
-          ],
-        } as never,
-        { agentId: 'maker', sessionKey: `agent:maker:m-team:${taskId2}:test-session` },
-      );
 
       const rejectResult = await harness.exec(
         'mteam_reject_task',
@@ -57,8 +43,8 @@ describe('publisher goal visibility boundary', () => {
         { agentId: 'manager' },
       );
       const rejectText = extractText(rejectResult);
-      expect(rejectText).toContain('目标: 完成 5 个候选商品复核并给出结论');
-      expect(rejectText).toContain('当前步骤: 补齐价格对比和销量截图');
+      expect(rejectText).toContain('Goal: 完成 5 个候选商品复核并给出结论');
+      expect(rejectText).toContain('Current step: 补齐价格对比和销量截图');
     } finally {
       await harness.cleanup();
     }

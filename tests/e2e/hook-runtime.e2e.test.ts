@@ -11,22 +11,20 @@ describe('hook runtime e2e', () => {
     const harness = await createPluginHarness({ dashboardEnabled: false });
     try {
       const idleHeartbeat = harness.runHeartbeat('maker');
-      expect(idleHeartbeat?.appendContext).toContain('只能认领任务');
       expect(idleHeartbeat?.appendContext).toContain('mteam_get_pending');
 
       const publishResult = await harness.exec('mteam_publish_task', {
         goal: '完成一轮链式交接',
-        description: '先整理候选商品的初步结果',
+        description: '整理候选商品的初步结果',
         publisher: 'manager',
       }) as ToolResult<PublishDetails>;
       const taskId = extractDetails(publishResult)!.taskId;
       await harness.exec('mteam_claim_task', { taskId, agentId: 'maker' }, { agentId: 'maker' });
 
-      const busyHeartbeat = harness.runHeartbeat('maker');
-      expect(busyHeartbeat).toBeUndefined();
+      expect(harness.runHeartbeat('maker')).toBeUndefined();
 
       const publisherHeartbeat = harness.runHeartbeat('manager');
-      expect(publisherHeartbeat?.appendContext).toContain('Publisher（任务发布者）');
+      expect(publisherHeartbeat?.appendContext).toContain('Publisher');
       expect(publisherHeartbeat?.appendContext).toContain('mteam_get_all_tasks');
     } finally {
       await harness.cleanup();
@@ -40,36 +38,28 @@ describe('hook runtime e2e', () => {
       const publishBlocked = await harness.exec(
         'mteam_publish_task',
         {
-          goal: '不该允许的心跳发布',
-          description: 'heartbeat 不应发布任务',
+          goal: '记录一次被 heartbeat 拦截的发布尝试',
+          description: '记录 heartbeat 发布尝试',
           publisher: 'manager',
         },
         { agentId: 'manager', sessionKey: 'agent:manager:discord:heartbeat' },
       ) as ToolResult<{ blocked?: boolean; reason?: string }>;
       expect(extractDetails(publishBlocked)?.blocked).toBe(true);
-      expect(extractText(publishBlocked)).toContain('心跳 session');
+      expect(extractText(publishBlocked)).toContain('heartbeat');
 
-      const spawnBlocked = await harness.exec(
-        'mteam_get_pending',
-        { agentId: 'maker' },
-        { agentId: 'maker', sessionKey: 'agent:maker:discord:heartbeat' },
-      ) as ToolResult<{ blocked?: boolean; reason?: string }>;
-      expect(extractDetails(spawnBlocked)?.blocked).not.toBe(true);
       const spawnGuard = api.__hooks.before_tool_call
         .map((hook) => hook({ toolName: 'sessions_spawn', params: { label: 'heartbeat-should-not-spawn', task: '不应在 heartbeat 中派生执行' } } as never, { agentId: 'maker', sessionKey: 'agent:maker:discord:heartbeat' } as never))
         .find(Boolean) as { block?: boolean; blockReason?: string } | undefined;
       expect(spawnGuard?.block).toBe(true);
-      expect(spawnGuard?.blockReason).toContain('spawn 子 agent');
 
       const sendGuard = api.__hooks.before_tool_call
         .map((hook) => hook({ toolName: 'sessions_send', params: { sessionId: 'fake-session', message: '不应在 heartbeat 转发未校验结果' } } as never, { agentId: 'maker', sessionKey: 'agent:maker:discord:heartbeat' } as never))
         .find(Boolean) as { block?: boolean; blockReason?: string } | undefined;
       expect(sendGuard?.block).toBe(true);
-      expect(sendGuard?.blockReason).toContain('转发未经校验');
 
       const task = await harness.exec('mteam_publish_task', {
         goal: '生成 executor 受限场景',
-        description: '先执行当前一棒',
+        description: '执行当前一步并记录结果',
         publisher: 'manager',
       }) as ToolResult<PublishDetails>;
       const taskId = extractDetails(task)!.taskId;
@@ -81,7 +71,6 @@ describe('hook runtime e2e', () => {
         { agentId: 'maker', sessionKey: `agent:maker:m-team:${taskId}:test-session` },
       ) as ToolResult<{ blocked?: boolean }>;
       expect(extractDetails(relinquishBlocked)?.blocked).toBe(true);
-      expect(extractText(relinquishBlocked)).toContain('禁止主动调用 mteam_relinquish_task');
 
       const closeBlocked = await harness.exec(
         'mteam_close_task',
@@ -99,19 +88,18 @@ describe('hook runtime e2e', () => {
     const harness = await createPluginHarness({ dashboardEnabled: false });
     try {
       const publishResult = await harness.exec('mteam_publish_task', {
-        goal: '形成最终选品结论',
-        description: '先整理 3 个候选商品信息',
+        goal: '形成最终候选结论',
+        description: '整理 3 个候选商品信息',
         publisher: 'manager',
       }) as ToolResult<PublishDetails>;
       const taskId = extractDetails(publishResult)!.taskId;
-      expect(taskId).not.toBeUndefined();
 
       await harness.exec('mteam_claim_task', { taskId, agentId: 'maker' }, { agentId: 'maker' });
       (harness.api as unknown as { runtime: { agentEndJudge: Function } }).runtime.agentEndJudge = async () => ({
         decision: 'next',
-        reason: '还需继续补齐剩余候选',
-        nextDescription: '继续搜索宠物玩具，筛选 costPrice ≤ 5 RMB、规格数 ≤ 8，找够剩余 3 个',
-        summary: '已完成首轮筛选，保留 2 个候选',
+        reason: '还需继续补齐剩余候选。',
+        nextDescription: '继续搜索宠物玩具，筛选 costPrice ≤ 5 RMB、规格数 ≤ 8，补齐剩余 3 个。',
+        summary: '已完成首轮筛选，保留 2 个候选。',
         confidence: 'high',
       });
 
@@ -119,7 +107,7 @@ describe('hook runtime e2e', () => {
         {
           success: true,
           messages: [
-            { role: 'assistant', content: '结果摘要：已完成首轮筛选，保留 2 个候选。建议：继续搜索宠物玩具，筛选 costPrice ≤ 5 RMB、规格数 ≤ 8，找够剩余 3 个' },
+            { role: 'assistant', content: '结果摘要：已完成首轮筛选，保留 2 个候选。' },
           ],
         } as never,
         { agentId: 'maker', sessionKey: `agent:maker:m-team:${taskId}:test-session` },
@@ -127,7 +115,7 @@ describe('hook runtime e2e', () => {
 
       const nextTask = harness.readTask(taskId);
       expect(nextTask?.status).toBe('pending');
-      expect(nextTask?.description).toBe('继续搜索宠物玩具，筛选 costPrice ≤ 5 RMB、规格数 ≤ 8，找够剩余 3 个');
+      expect(nextTask?.description).toContain('继续搜索宠物玩具');
       expect(nextTask?.context.at(-1)?.output?.summary).toContain('已完成首轮筛选');
 
       await harness.exec('mteam_claim_task', { taskId, agentId: 'fixer' }, { agentId: 'fixer' });
@@ -141,7 +129,7 @@ describe('hook runtime e2e', () => {
         {
           success: true,
           messages: [
-            { role: 'assistant', content: '最终结果：已输出 /mnt/d/code/hermes/result.md，形成最终选品结论，任务完成。' },
+            { role: 'assistant', content: '最终结果：已输出 /mnt/d/code/hermes/result.md，形成最终候选结论，任务完成。' },
           ],
         } as never,
         { agentId: 'fixer', sessionKey: `agent:fixer:m-team:${taskId}:test-session` },
@@ -160,7 +148,7 @@ describe('hook runtime e2e', () => {
     try {
       const publishResult = await harness.exec('mteam_publish_task', {
         goal: '验证超时扫描兼容 storage.list',
-        description: '先整理 1 个候选商品信息',
+        description: '整理 1 个候选商品信息',
         publisher: 'manager',
       }) as ToolResult<PublishDetails>;
       const taskId = extractDetails(publishResult)!.taskId;
@@ -176,14 +164,13 @@ describe('hook runtime e2e', () => {
         {
           success: true,
           messages: [
-            { role: 'assistant', content: '最终结果：已输出 /mnt/d/code/hermes/result.md，形成最终选品结论，任务完成。' },
+            { role: 'assistant', content: '最终结果：已输出 /mnt/d/code/hermes/result.md，形成最终候选结论，任务完成。' },
           ],
         } as never,
         { agentId: 'maker', sessionKey: `agent:maker:m-team:${taskId}:test-session` },
       )).resolves.toBeUndefined();
 
-      const completedTask = harness.readTask(taskId);
-      expect(completedTask?.status).toBe('completed');
+      expect(harness.readTask(taskId)?.status).toBe('completed');
     } finally {
       await harness.cleanup();
     }

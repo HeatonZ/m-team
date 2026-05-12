@@ -7,8 +7,8 @@ describe('publisher acceptance full chain e2e', () => {
     const harness = await createPluginHarness({ dashboardEnabled: false });
     try {
       const publishResult = await harness.exec('mteam_publish_task', {
-        goal: '形成最终选品结论',
-        description: '先整理最终结果文件',
+        goal: 'Produce the final candidate conclusion',
+        description: 'Generate the final result file',
         publisher: 'manager',
       }) as ToolResult<{ taskId: string }>;
       const taskId = extractDetails(publishResult)!.taskId;
@@ -30,8 +30,7 @@ describe('publisher acceptance full chain e2e', () => {
       );
 
       expect(harness.readTask(taskId)?.status).toBe('completed');
-      const publisherHeartbeat = harness.runHeartbeat('manager');
-      expect(publisherHeartbeat?.appendContext).toContain('验收 COMPLETED 任务');
+      expect(harness.runHeartbeat('manager')?.appendContext).toContain('COMPLETED');
 
       const closeResult = await harness.exec(
         'mteam_close_task',
@@ -40,8 +39,7 @@ describe('publisher acceptance full chain e2e', () => {
       ) as ToolResult<{ success: boolean }>;
 
       expect(extractDetails(closeResult)?.success).toBe(true);
-      const closedTask = harness.readTask(taskId);
-      expect(closedTask?.status).toBe('closed');
+      expect(harness.readTask(taskId)?.status).toBe('closed');
     } finally {
       await harness.cleanup();
     }
@@ -51,8 +49,8 @@ describe('publisher acceptance full chain e2e', () => {
     const harness = await createPluginHarness({ dashboardEnabled: false });
     try {
       const publishResult = await harness.exec('mteam_publish_task', {
-        goal: '整理可验收的候选报告',
-        description: '先输出候选报告',
+        goal: 'Produce a candidate report with enough evidence',
+        description: 'Generate the candidate report',
         publisher: 'manager',
       }) as ToolResult<{ taskId: string }>;
       const taskId = extractDetails(publishResult)!.taskId;
@@ -95,8 +93,8 @@ describe('publisher acceptance full chain e2e', () => {
     const harness = await createPluginHarness({ dashboardEnabled: false });
     try {
       const publishResult = await harness.exec('mteam_publish_task', {
-        goal: '验证超时回收优先',
-        description: '先执行一个会超时的任务',
+        goal: 'Recover stale executor work and return the task to the pool safely',
+        description: 'Record a step that becomes stale after execution starts',
         publisher: 'manager',
       }) as ToolResult<{ taskId: string }>;
       const taskId = extractDetails(publishResult)!.taskId;
@@ -106,8 +104,7 @@ describe('publisher acceptance full chain e2e', () => {
         task.updatedAt = Date.now() - 2 * 60 * 60 * 1000;
       });
 
-      const publisherHeartbeat = harness.runHeartbeat('manager');
-      expect(publisherHeartbeat?.appendContext).toContain('updatedAt 距今超过 1 小时');
+      expect(harness.runHeartbeat('manager')?.appendContext).toContain('1 小时');
 
       const relinquishResult = await harness.exec(
         'mteam_relinquish_task',

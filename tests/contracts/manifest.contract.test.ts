@@ -4,6 +4,7 @@ import pluginManifest from '../../openclaw.plugin.json' with { type: 'json' };
 const EXPECTED_TOOL_NAMES = [
   'mteam_publish_task',
   'mteam_claim_task',
+  'mteam_next_task',
   'mteam_relinquish_task',
   'mteam_get_task',
   'mteam_get_pending',

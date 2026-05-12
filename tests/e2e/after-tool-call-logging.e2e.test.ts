@@ -8,7 +8,7 @@ describe('after_tool_call logging e2e', () => {
     try {
       const publishResult = await harness.exec('mteam_publish_task', {
         goal: '验证 task log 记录',
-        description: '先创建一个要取消的任务',
+        description: '创建一个可取消的测试任务',
         publisher: 'manager',
         priority: 'high',
       }, { agentId: 'manager', sessionKey: 'agent:manager:manual' }) as ToolResult<{ taskId: string }>;
@@ -32,7 +32,7 @@ describe('after_tool_call logging e2e', () => {
       const publishLog = logs.find((item) => item.action === 'publish');
       expect(publishLog?.agentId).toBe('manager');
       expect(publishLog?.params).toMatchObject({
-        description: '先创建一个要取消的任务',
+        description: '创建一个可取消的测试任务',
         goal: '验证 task log 记录',
         priority: 'high',
       });
@@ -43,13 +43,9 @@ describe('after_tool_call logging e2e', () => {
       const claimLog = logs.find((item) => item.action === 'claim');
       expect(claimLog?.agentId).toBe('maker');
       expect(claimLog?.params).toMatchObject({ taskId, agentId: 'maker' });
-      expect(claimLog?.result).toMatchObject({
-        details: {
-          taskId,
-          sessionKey: `agent:maker:m-team:${taskId}:test-session`,
-          runId: 'test-run-id',
-        },
-      });
+      expect(claimLog?.result?.details?.taskId).toBe(taskId);
+      expect(claimLog?.result?.details?.runId).toBe('test-run-id');
+      expect(claimLog?.result?.details?.sessionKey).toMatch(new RegExp(`^agent:maker:m-team:${taskId}:[^:]+$`));
 
       const cancelLog = logs.find((item) => item.action === 'cancel');
       expect(cancelLog?.agentId).toBe('manager');
