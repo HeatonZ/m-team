@@ -120,4 +120,34 @@ describe('agent_end conservative fallback e2e', () => {
       await harness.cleanup();
     }
   });
+
+  test('fails instead of looping when llm is unavailable and the same step is already done with no real unresolved issue', async () => {
+    const harness = await createPluginHarness({ dashboardEnabled: false });
+    try {
+      (harness.api as unknown as { runtime: { agentEndJudge: Function } }).runtime.agentEndJudge = async () => null;
+
+      const publishResult = await harness.exec('mteam_publish_task', {
+        goal: '完成三步计算并最终汇总',
+        description: '计算 1+1，结果写入 step1_result.md',
+        publisher: 'manager',
+      }) as ToolResult<{ taskId: string }>;
+      const taskId = extractDetails(publishResult)!.taskId;
+      await harness.exec('mteam_claim_task', { taskId, agentId: 'maker' }, { agentId: 'maker' });
+
+      await harness.runAgentEnd(
+        {
+          success: true,
+          messages: [{ role: 'assistant', content: '结果摘要：计算 1+1 = 2，已写入 step1_result.md。\n产出文件：step1_result.md\n未解决问题：无' }],
+        } as never,
+        { agentId: 'maker', sessionKey: `agent:maker:m-team:${taskId}` },
+      );
+
+      const task = harness.readTask(taskId);
+      expect(task?.status).toBe('failed');
+      const failLog = harness.readLogs(taskId, 'fail').at(-1);
+      expect(failLog?.result?.via).toBe('repeat_guard');
+    } finally {
+      await harness.cleanup();
+    }
+  });
 });

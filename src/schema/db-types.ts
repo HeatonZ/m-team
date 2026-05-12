@@ -1,7 +1,5 @@
 /**
- * M-Team 数据库行类型
- *
- * SQLite 行使用 snake_case 列名，与内存中 Task 的 camelCase 对应。
+ * DB row ? task conversions.
  */
 
 import {
@@ -12,13 +10,13 @@ import {
   normalizeTask,
 } from './task.js';
 
-// DB 行类型（snake_case）
 export interface TaskRow {
   task_id: string;
   task_type: string;
   description: string;
   goal: string;
-  context: string; // JSON string
+  step_contract: string | null;
+  context: string;
   flow: string | null;
   priority: string;
   publisher: string;
@@ -30,7 +28,6 @@ export interface TaskRow {
   updated_at: number;
 }
 
-// 序列化：Task → TaskRow（写入 DB）
 export function serializeTask(input: Task): TaskRow {
   const task = normalizeTask(input);
   return {
@@ -38,6 +35,7 @@ export function serializeTask(input: Task): TaskRow {
     task_type: task.taskType,
     description: task.description,
     goal: task.goal,
+    step_contract: task.stepContract ? JSON.stringify(task.stepContract) : null,
     context: JSON.stringify(task.context),
     flow: null,
     priority: task.priority,
@@ -51,13 +49,13 @@ export function serializeTask(input: Task): TaskRow {
   };
 }
 
-// 反序列化：TaskRow → Task（从 DB 读出）
 export function deserializeTask(row: TaskRow): Task {
   return normalizeTask({
     taskId: row.task_id,
     taskType: (row.task_type ?? 'general') as TaskType,
     description: row.description,
     goal: row.goal,
+    ...(row.step_contract ? { stepContract: JSON.parse(row.step_contract) } : {}),
     context: JSON.parse(row.context),
     priority: row.priority as TaskPriority,
     publisher: row.publisher,
@@ -66,6 +64,6 @@ export function deserializeTask(row: TaskRow): Task {
     lastExecutor: row.last_executor,
     createdAt: row.created_at,
     completedAt: row.completed_at,
-    updatedAt: row.updated_at
+    updatedAt: row.updated_at,
   });
 }

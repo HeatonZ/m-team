@@ -11,6 +11,12 @@ export type AgentEndDecision = {
   decision: 'complete' | 'next' | 'fail';
   reason: string;
   nextDescription?: string;
+  nextStepContract?: {
+    expectedOutputs: Array<{ kind: 'file' | 'json' | 'text' | 'report' | 'code_change' | 'command_result'; path?: string; name?: string; formatHint?: string; required?: boolean }>;
+    doneWhen: string[];
+    constraints?: string[];
+    inputHints?: string[];
+  };
   summary?: string;
   unresolvedIssues?: string[];
   confidence?: 'low' | 'medium' | 'high';
@@ -41,6 +47,7 @@ function buildDecisionPrompt(params: {
     '规则：',
     '1. complete：只有当前步骤完成、整体 goal 满足、没有待处理问题、没有明确下一步时才允许。',
     '2. next：已有有效进展，但整体 goal 未完成，或已明确暴露出下一步需要解决的问题。next 时必须提供 nextDescription，且必须是单步、可执行指令。',
+    '2.1 next 时应尽量同时提供 nextStepContract：至少包含 expectedOutputs 和 doneWhen，用来约束下一步交付质量。',
     '3. fail：当前阻塞或无有效进展，且无法形成可执行下一步。',
     '5. 优先避免任务偏移：不要因为 executor 顺手做了别的事就把无关工作判成进展，必须围绕当前 description 判断。',
     '6. executor 的职责是报告结果和问题，不是自己扩展成长链修复计划；问题解决通常应由 agent_end 转成下一步。',
@@ -57,6 +64,7 @@ function buildDecisionPrompt(params: {
     '  "decision": "complete|next|fail",',
     '  "reason": "string",',
     '  "nextDescription": "string (optional, required when decision=next)",',
+    '  "nextStepContract": { "expectedOutputs": [{"kind":"report","path":"..."}], "doneWhen":["..."], "constraints":["..."], "inputHints":["..."] } (optional, recommended when decision=next),',
     '  "summary": "string (optional)",',
     '  "unresolvedIssues": ["string", ...] (optional),',
     '  "confidence": "low|medium|high"',
@@ -103,6 +111,9 @@ function parseDecision(raw: string): AgentEndDecision | null {
         decision: decision as AgentEndDecision['decision'],
         reason: reason.trim(),
         nextDescription,
+        nextStepContract: parsed.nextStepContract && typeof parsed.nextStepContract === 'object'
+          ? parsed.nextStepContract as AgentEndDecision['nextStepContract']
+          : undefined,
         summary: typeof parsed.summary === 'string' && parsed.summary.trim() ? parsed.summary.trim() : undefined,
         unresolvedIssues: Array.isArray(parsed.unresolvedIssues)
           ? parsed.unresolvedIssues.map(item => String(item).trim()).filter(Boolean).slice(0, 10)

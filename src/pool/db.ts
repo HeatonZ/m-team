@@ -1,5 +1,5 @@
 /**
- * M-Team SQLite — 任务持久化
+ * M-Team SQLite persistence.
  */
 
 import Database from 'better-sqlite3';
@@ -44,6 +44,7 @@ function initSchema(db: Database.Database): void {
       task_type      TEXT NOT NULL DEFAULT 'general',
       description    TEXT NOT NULL,
       goal           TEXT NOT NULL,
+      step_contract  TEXT,
       context        TEXT NOT NULL DEFAULT '[]',
       flow           TEXT,
       priority       TEXT NOT NULL DEFAULT 'normal',
@@ -68,30 +69,25 @@ function initSchema(db: Database.Database): void {
       created_at  INTEGER NOT NULL
     );
 
-    CREATE INDEX IF NOT EXISTS idx_task_logs_task_id   ON task_logs(task_id);
-    CREATE INDEX IF NOT EXISTS idx_task_logs_action    ON task_logs(action);
+    CREATE INDEX IF NOT EXISTS idx_task_logs_task_id ON task_logs(task_id);
+    CREATE INDEX IF NOT EXISTS idx_task_logs_action ON task_logs(action);
     CREATE INDEX IF NOT EXISTS idx_task_logs_created_at ON task_logs(created_at);
   `);
 
   const columns = db.prepare('PRAGMA table_info(tasks)').all() as Array<{ name: string }>;
   const hasTaskType = columns.some(col => col.name === 'task_type');
+  const hasStepContract = columns.some(col => col.name === 'step_contract');
   const hasFlow = columns.some(col => col.name === 'flow');
   const hasUpdatedAt = columns.some(col => col.name === 'updated_at');
-  if (!hasTaskType) {
-    db.exec("ALTER TABLE tasks ADD COLUMN task_type TEXT NOT NULL DEFAULT 'general';");
-  }
-  if (!hasFlow) {
-    db.exec('ALTER TABLE tasks ADD COLUMN flow TEXT');
-  }
+
+  if (!hasTaskType) db.exec("ALTER TABLE tasks ADD COLUMN task_type TEXT NOT NULL DEFAULT 'general';");
+  if (!hasStepContract) db.exec('ALTER TABLE tasks ADD COLUMN step_contract TEXT');
+  if (!hasFlow) db.exec('ALTER TABLE tasks ADD COLUMN flow TEXT');
   if (!hasUpdatedAt) {
     db.exec("ALTER TABLE tasks ADD COLUMN updated_at INTEGER NOT NULL DEFAULT 0;");
     db.exec('UPDATE tasks SET updated_at = COALESCE(completed_at, created_at, 0) WHERE updated_at = 0');
   }
 }
-
-// ============================================================
-// CRUD helpers
-// ============================================================
 
 export function getTaskRow(taskId: string): Task | null {
   const db = getDb();
@@ -118,9 +114,7 @@ export function getTaskRowsByStatus(status: string): Task[] {
 
 export function getTaskRowByExecutor(executor: string): Task | null {
   const db = getDb();
-  const row = db.prepare(
-    'SELECT * FROM tasks WHERE executor = ? AND status = ?'
-  ).get(executor, 'running') as TaskRow | undefined;
+  const row = db.prepare('SELECT * FROM tasks WHERE executor = ? AND status = ?').get(executor, 'running') as TaskRow | undefined;
   if (!row) return null;
   return deserializeTask(row);
 }
@@ -130,10 +124,10 @@ export function insertTask(task: Task): void {
   const row = serializeTask(task);
   db.prepare(`
     INSERT INTO tasks
-      (task_id, task_type, description, goal, context, flow, priority, publisher,
+      (task_id, task_type, description, goal, step_contract, context, flow, priority, publisher,
        status, executor, last_executor, created_at, completed_at, updated_at)
     VALUES
-      (@task_id, @task_type, @description, @goal, @context, @flow, @priority, @publisher,
+      (@task_id, @task_type, @description, @goal, @step_contract, @context, @flow, @priority, @publisher,
        @status, @executor, @last_executor, @created_at, @completed_at, @updated_at)
   `).run(row);
 }
@@ -146,7 +140,8 @@ export function updateTaskRow(taskId: string, patch: TaskPatch): Task | null {
     taskId: 'task_id',
     completedAt: 'completed_at',
     lastExecutor: 'last_executor',
-    updatedAt: 'updated_at'
+    updatedAt: 'updated_at',
+    stepContract: 'step_contract',
   };
 
   for (const [k, v] of Object.entries(patch)) {
@@ -164,10 +159,6 @@ export function deleteTaskRow(taskId: string): void {
   db.prepare('DELETE FROM tasks WHERE task_id = ?').run(taskId);
 }
 
-// ============================================================
-// 任务操作日志（TTL 3天）
-// ============================================================
-
 export interface TaskLogInput {
   taskId: string;
   action: string;
@@ -181,11 +172,9 @@ export interface TaskLogInput {
 export function writeTaskLog(input: TaskLogInput): void {
   const db = getDb();
   const now = Date.now();
-  // TTL: 3天 = 3 * 24 * 60 * 60 * 1000 = 259200000 ms
   const ttl = 3 * 24 * 60 * 60 * 1000;
   const cutoff = now - ttl;
 
-  // 写入新日志 + 清理 3 天前旧数据
   db.prepare(`
     INSERT INTO task_logs (task_id, action, session_key, agent_id, params, result, error, created_at)
     VALUES (@task_id, @action, @session_key, @agent_id, @params, @result, @error, @created_at)
@@ -229,9 +218,7 @@ export function countTaskLogs(taskId?: string, action?: string): number {
     conditions.push('action = ?');
     args.push(action);
   }
-  if (conditions.length > 0) {
-    sql += ' WHERE ' + conditions.join(' AND ');
-  }
+  if (conditions.length > 0) sql += ' WHERE ' + conditions.join(' AND ');
 
   const row = db.prepare(sql).get(...args) as { count: number };
   return row.count;
@@ -251,16 +238,20 @@ export function getTaskLogs(taskId?: string, action?: string, limit = 200, offse
     conditions.push('action = ?');
     args.push(action);
   }
-  if (conditions.length > 0) {
-    sql += ' WHERE ' + conditions.join(' AND ');
-  }
+  if (conditions.length > 0) sql += ' WHERE ' + conditions.join(' AND ');
   sql += ' ORDER BY created_at DESC LIMIT ? OFFSET ?';
   args.push(limit, offset);
 
   const rows = db.prepare(sql).all(...args) as Array<{
-    id: number; task_id: string; action: string; session_key: string | null;
-    agent_id: string | null; params: string | null;
-    result: string | null; error: string | null; created_at: number;
+    id: number;
+    task_id: string;
+    action: string;
+    session_key: string | null;
+    agent_id: string | null;
+    params: string | null;
+    result: string | null;
+    error: string | null;
+    created_at: number;
   }>;
 
   return rows.map(r => ({

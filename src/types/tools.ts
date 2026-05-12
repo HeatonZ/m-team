@@ -1,13 +1,13 @@
 /**
- * 工具参数 Schema — 单一来源
+ * Tool parameter schemas.
  */
 
 export const ContextOutputSchema = {
   type: 'object' as const,
-  description: '步骤输出',
+  description: 'Step output payload',
   properties: {
-    summary: { type: 'string', description: '步骤摘要' },
-    files: { type: 'array', items: { type: 'string' }, description: '任务文件夹内的相对路径' },
+    summary: { type: 'string', description: 'Step summary' },
+    files: { type: 'array', items: { type: 'string' }, description: 'Relative file paths inside the task directory' },
   },
 } as const;
 
@@ -18,18 +18,77 @@ export interface ContextStepOutputInterface {
   [key: string]: unknown;
 }
 
+export const StepOutputSpecSchema = {
+  type: 'object' as const,
+  properties: {
+    kind: {
+      type: 'string' as const,
+      enum: ['file', 'json', 'text', 'report', 'code_change', 'command_result'] as const,
+      description: 'Expected output kind for the current step',
+    },
+    path: { type: 'string', description: 'Relative output path inside the task directory' },
+    name: { type: 'string', description: 'Output name when path is not applicable' },
+    formatHint: { type: 'string', description: 'Format hint such as json / markdown / patch' },
+    required: { type: 'boolean', description: 'Whether this output is required; defaults to true' },
+  },
+  required: ['kind'] as const,
+} as const;
+
+export const StepContractSchema = {
+  type: 'object' as const,
+  properties: {
+    expectedOutputs: {
+      type: 'array' as const,
+      description: 'What the current step must deliver',
+      items: StepOutputSpecSchema,
+    },
+    doneWhen: {
+      type: 'array' as const,
+      description: 'Verifiable completion criteria for the current step',
+      items: { type: 'string' as const },
+    },
+    constraints: {
+      type: 'array' as const,
+      description: 'Scope and drift-prevention constraints for the current step',
+      items: { type: 'string' as const },
+    },
+    inputHints: {
+      type: 'array' as const,
+      description: 'Optional hints about allowed inputs for the current step',
+      items: { type: 'string' as const },
+    },
+  },
+  required: ['expectedOutputs', 'doneWhen'] as const,
+} as const;
+
+export interface StepOutputSpecInterface {
+  kind: 'file' | 'json' | 'text' | 'report' | 'code_change' | 'command_result';
+  path?: string;
+  name?: string;
+  formatHint?: string;
+  required?: boolean;
+}
+
+export interface StepContractInterface {
+  expectedOutputs: StepOutputSpecInterface[];
+  doneWhen: string[];
+  constraints?: string[];
+  inputHints?: string[];
+}
+
 export const PublishTaskParams = {
   type: 'object' as const,
   properties: {
-    goal: { type: 'string', description: '任务目标（仅用于 agent_end 终态判断、复盘和 publisher 验收；executor 认领时不作为判断依据）' },
-    description: { type: 'string', description: '当前这一步做什么（每次只写一步，进入 next 时由上一棒生成下一步）' },
+    goal: { type: 'string', description: 'Overall goal; only for agent_end and publisher acceptance, not for executor execution' },
+    description: { type: 'string', description: 'Current step only. One step, one action.' },
     taskType: {
       type: 'string',
-      description: '任务类型。general=通用动作；coding/research/ops/data/design/content=专业任务，供 heartbeat 先按类型粗筛',
-      enum: ['general', 'coding', 'research', 'ops', 'data', 'design', 'content']
+      description: 'Task category for coarse routing',
+      enum: ['general', 'coding', 'research', 'ops', 'data', 'design', 'content'],
     },
-    publisher: { type: 'string', description: '发布者；未显式提供时默认取当前调用者 agentId' },
-    priority: { type: 'string', description: '优先级 high/normal/low，默认 normal', enum: ['high', 'normal', 'low'] },
+    stepContract: StepContractSchema,
+    publisher: { type: 'string', description: 'Publisher; defaults to current toolContext.agentId if omitted' },
+    priority: { type: 'string', description: 'Priority: high / normal / low', enum: ['high', 'normal', 'low'] },
   },
   required: ['goal', 'description'] as const,
 } as const;
@@ -38,6 +97,7 @@ export interface PublishTaskParamsInterface {
   goal: string;
   description: string;
   taskType?: 'general' | 'coding' | 'research' | 'ops' | 'data' | 'design' | 'content';
+  stepContract?: StepContractInterface;
   publisher?: string;
   priority?: 'high' | 'normal' | 'low';
 }
@@ -45,8 +105,8 @@ export interface PublishTaskParamsInterface {
 export const ClaimTaskParams = {
   type: 'object' as const,
   properties: {
-    taskId: { type: 'string', description: '任务ID' },
-    agentId: { type: 'string', description: '认领者 agentId' },
+    taskId: { type: 'string', description: 'Task ID' },
+    agentId: { type: 'string', description: 'Executor agentId' },
   },
   required: ['taskId', 'agentId'] as const,
 } as const;
@@ -59,9 +119,9 @@ export interface ClaimTaskParamsInterface {
 export const CancelTaskParams = {
   type: 'object' as const,
   properties: {
-    taskId: { type: 'string', description: '任务ID' },
-    publisher: { type: 'string', description: '发布者（需与创建时 publisher 一致）' },
-    reason: { type: 'string', description: '取消原因' },
+    taskId: { type: 'string', description: 'Task ID' },
+    publisher: { type: 'string', description: 'Publisher; must match the original publisher' },
+    reason: { type: 'string', description: 'Cancellation reason' },
   },
   required: ['taskId', 'publisher'] as const,
 } as const;
@@ -69,8 +129,8 @@ export const CancelTaskParams = {
 export const CloseTaskParams = {
   type: 'object' as const,
   properties: {
-    taskId: { type: 'string', description: '任务ID' },
-    publisher: { type: 'string', description: '发布者（需与创建时 publisher 一致）' },
+    taskId: { type: 'string', description: 'Task ID' },
+    publisher: { type: 'string', description: 'Publisher; must match the original publisher' },
   },
   required: ['taskId', 'publisher'] as const,
 } as const;
@@ -78,8 +138,8 @@ export const CloseTaskParams = {
 export const CompleteTaskParams = {
   type: 'object' as const,
   properties: {
-    taskId: { type: 'string', description: '任务ID' },
-    contextStep: { type: 'string', description: '当前步骤描述（必填，必须说明这一步做了什么）' },
+    taskId: { type: 'string', description: 'Task ID' },
+    contextStep: { type: 'string', description: 'Current step description' },
     contextOutput: ContextOutputSchema,
   },
   required: ['taskId', 'contextStep'] as const,
@@ -88,8 +148,9 @@ export const CompleteTaskParams = {
 export const RejectTaskParams = {
   type: 'object' as const,
   properties: {
-    taskId: { type: 'string', description: '任务ID' },
-    reason: { type: 'string', description: '驳回原因' },
+    taskId: { type: 'string', description: 'Task ID' },
+    reason: { type: 'string', description: 'Rejection reason' },
+    stepContract: StepContractSchema,
   },
   required: ['taskId', 'reason'] as const,
 } as const;
@@ -97,11 +158,12 @@ export const RejectTaskParams = {
 export const NextTaskParams = {
   type: 'object' as const,
   properties: {
-    taskId: { type: 'string', description: '任务ID' },
-    agentId: { type: 'string', description: '执行者 agentId' },
-    contextStep: { type: 'string', description: '当前步骤描述' },
+    taskId: { type: 'string', description: 'Task ID' },
+    agentId: { type: 'string', description: 'Current executor agentId' },
+    contextStep: { type: 'string', description: 'Current step description' },
     contextOutput: ContextOutputSchema,
-    description: { type: 'string', description: 'next 后任务的 description（下一棒看到的内容）' },
+    description: { type: 'string', description: 'Next current-step description' },
+    stepContract: StepContractSchema,
   },
   required: ['taskId', 'agentId', 'contextStep', 'description'] as const,
 } as const;
@@ -109,9 +171,9 @@ export const NextTaskParams = {
 export const RelinquishTaskParams = {
   type: 'object' as const,
   properties: {
-    taskId: { type: 'string', description: '任务ID' },
-    executorId: { type: 'string', description: '执行者 agentId' },
-    reason: { type: 'string', description: '放弃原因（会在 context step 中记录）' },
+    taskId: { type: 'string', description: 'Task ID' },
+    executorId: { type: 'string', description: 'Current executor agentId' },
+    reason: { type: 'string', description: 'Optional relinquish reason' },
   },
   required: ['taskId', 'executorId'] as const,
 } as const;
@@ -135,7 +197,7 @@ export const GetAgentActiveParams = {
 export const GetTaskParams = {
   type: 'object' as const,
   properties: {
-    taskId: { type: 'string', description: '任务ID' },
+    taskId: { type: 'string', description: 'Task ID' },
   },
   required: ['taskId'] as const,
 } as const;
@@ -145,9 +207,9 @@ export const GetAllTasksParams = {
   properties: {
     status: {
       type: 'string' as const,
-      description: '按状态筛选任务（pending / running / completed / failed / cancelled / closed）',
+      description: 'Filter by status: pending / running / completed / failed / cancelled / closed',
     },
-  } as const,
+  },
   required: [] as const,
 } as const;
 
@@ -171,6 +233,7 @@ export interface CompleteTaskParamsInterface {
 export interface RejectTaskParamsInterface {
   taskId: string;
   reason: string;
+  stepContract?: StepContractInterface;
 }
 
 export interface NextTaskParamsInterface {
@@ -179,6 +242,7 @@ export interface NextTaskParamsInterface {
   contextStep: string;
   contextOutput?: ContextStepOutputInterface;
   description: string;
+  stepContract?: StepContractInterface;
 }
 
 export interface RelinquishTaskParamsInterface {

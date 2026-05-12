@@ -227,7 +227,7 @@ async function cmdTasks(argv: string[]) {
       if (!status && !step && !description) fatal('至少需要 --status / --step / --description 之一');
 
       const contextEntry = step ? { step, output: {} } : null;
-      const task = updateTask(taskId, status ?? null, contextEntry, description ?? null, updatedAtRaw ? parseInt(updatedAtRaw, 10) : null, executorId ?? null);
+      const task = updateTask(taskId, status ?? null, contextEntry, description ?? null, null, updatedAtRaw ? parseInt(updatedAtRaw, 10) : null, executorId ?? null);
       if (!task) fatal(`任务不存在: ${taskId}`);
       ok({ task });
       break;
@@ -290,7 +290,7 @@ async function cmdHeartbeat(argv: string[]) {
     return;
   }
 
-  const task = updateTask(activeTask.taskId, null, null, null, Date.now(), null);
+  const task = updateTask(activeTask.taskId, null, null, null, null, Date.now(), null);
   ok({ agentId, heartbeat: true, taskId: activeTask.taskId, updatedAt: task?.updatedAt });
 }
 

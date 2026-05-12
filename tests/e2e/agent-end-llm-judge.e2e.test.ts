@@ -167,4 +167,36 @@ describe('agent_end llm judge e2e', () => {
       await harness.cleanup();
     }
   });
+
+  test('ignores llm next when it repeats the current step and there is no real unresolved issue', async () => {
+    const harness = await createPluginHarness({ dashboardEnabled: false });
+    try {
+      (harness.api as unknown as { runtime: { agentEndJudge: Function } }).runtime.agentEndJudge = async () => ({
+        decision: 'next',
+        reason: '继续当前步骤',
+        nextDescription: '计算 1+1，结果写入 step1_result.md',
+        confidence: 'medium',
+      });
+
+      const publishResult = await harness.exec('mteam_publish_task', {
+        goal: '完成三步计算并最终汇总',
+        description: '计算 1+1，结果写入 step1_result.md',
+        publisher: 'manager',
+      }) as ToolResult<{ taskId: string }>;
+      const taskId = extractDetails(publishResult)!.taskId;
+      await harness.exec('mteam_claim_task', { taskId, agentId: 'maker' }, { agentId: 'maker' });
+
+      await harness.runAgentEnd({
+        success: true,
+        messages: [{ role: 'assistant', content: '结果摘要：计算 1+1 = 2，已写入 step1_result.md。\n产出文件：step1_result.md\n未解决问题：无' }],
+      } as never, { agentId: 'maker', sessionKey: `agent:maker:m-team:${taskId}` });
+
+      const task = harness.readTask(taskId);
+      expect(task?.status).toBe('failed');
+      const failLog = harness.readLogs(taskId, 'fail').at(-1);
+      expect(failLog?.result?.via).toBe('llm_repeat_guard');
+    } finally {
+      await harness.cleanup();
+    }
+  });
 });

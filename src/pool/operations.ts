@@ -20,6 +20,7 @@ import {
   type TaskPatch,
   type ContextStepEntry,
   type ContextStepOutput,
+  type StepContract,
   createTask,
   normalizeTask,
 } from '../schema/task';
@@ -87,16 +88,18 @@ export function publishTask(input: {
   taskType?: string;
   description: string;
   goal: string;
+  stepContract?: import('../schema/task').StepContract;
   publisher?: string;
   priority?: string;
 }): string {
   init();
 
-  const { taskType, description, goal, publisher, priority } = input;
+  const { taskType, description, goal, stepContract, publisher, priority } = input;
   const task = createTask({
     taskType: taskType as import('../schema/task').TaskType | undefined,
     description,
     goal,
+    stepContract,
     publisher,
     priority: priority as TaskPriority | undefined
   });
@@ -166,6 +169,7 @@ export function updateTask(
   status: string | null,
   contextEntry: ContextStepInput | null,
   description: string | null,
+  stepContract: StepContract | null,
   updatedAt: number | null,
   executorId: string | null
 ): Task | null {
@@ -178,6 +182,7 @@ export function updateTask(
   return setTaskState(taskId, {
     ...(status ? { status: status as Task['status'] } : {}),
     ...(description ? { description } : {}),
+    ...(stepContract ? { stepContract: JSON.stringify(stepContract) } : {}),
     ...(updatedAt ? { updatedAt } : { updatedAt: Date.now() }),
     context: JSON.stringify(context),
   });
@@ -252,6 +257,7 @@ export function nextTask(
   executorId: string,
   contextEntry: ContextStepInput | null,
   description?: string,
+  stepContract?: StepContract,
 ): NextResult {
   init();
   const task = getTaskRow(taskId);
@@ -270,6 +276,7 @@ export function nextTask(
       executor: null,
       lastExecutor: executorId,
       description: nextDescription,
+      ...(stepContract ? { stepContract: JSON.stringify(stepContract) } : {}),
       updatedAt: Date.now(),
       context: JSON.stringify(context),
     })

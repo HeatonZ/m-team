@@ -11,7 +11,7 @@ import { formatTaskAsText } from './helpers.js';
 import { formatRejectNotifications } from '../notifications.js';
 import { sendNotifications } from '../notifications.js';
 import { RejectTaskParams } from '../types/tools.js';
-import type { RejectTaskParamsInterface } from '../types/tools.js';
+import type { RejectTaskParamsInterface, StepContractInterface } from '../types/tools.js';
 
 /**
  * 从驳回原因中解析出下一步描述。
@@ -31,6 +31,16 @@ function parseNextDescription(reason: string): string | null {
   return null;
 }
 
+function normalizeStepContract(raw: StepContractInterface | undefined): StepContractInterface | undefined {
+  if (!raw) return undefined;
+  return {
+    expectedOutputs: Array.isArray(raw.expectedOutputs) ? raw.expectedOutputs : [],
+    doneWhen: Array.isArray(raw.doneWhen) ? raw.doneWhen.filter((item): item is string => typeof item === 'string' && item.trim().length > 0) : [],
+    ...(Array.isArray(raw.constraints) ? { constraints: raw.constraints.filter((item): item is string => typeof item === 'string' && item.trim().length > 0) } : {}),
+    ...(Array.isArray(raw.inputHints) ? { inputHints: raw.inputHints.filter((item): item is string => typeof item === 'string' && item.trim().length > 0) } : {}),
+  };
+}
+
 export function register(
   api: OpenClawPluginApi,
   config: MTeamPluginConfig
@@ -47,9 +57,10 @@ export function register(
 
       // 从 reason 中解析下一步描述，用于更新 task.description
       const nextDescription = parseNextDescription(reason);
+      const nextStepContract = normalizeStepContract(rawParams.stepContract);
 
       const contextEntry = { step: reason, output: {} };
-      const task = updateTask(taskId, 'pending', contextEntry, nextDescription, null, null);
+      const task = updateTask(taskId, 'pending', contextEntry, nextDescription, nextStepContract ?? null, null, null);
 
       if (config.notifications?.length && task) {
         try {

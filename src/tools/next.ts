@@ -9,7 +9,7 @@ import { nextTask } from '../pool/index.js';
 import { formatTaskAsText } from './helpers.js';
 import { formatNextNotifications, sendNotifications } from '../notifications.js';
 import { NextTaskParams } from '../types/tools.js';
-import type { NextTaskParamsInterface } from '../types/tools.js';
+import type { NextTaskParamsInterface, StepContractInterface } from '../types/tools.js';
 
 function normalizeContextOutput(raw: unknown): Record<string, unknown> | undefined {
   if (raw === null || raw === undefined) return undefined;
@@ -30,6 +30,16 @@ function normalizeContextOutput(raw: unknown): Record<string, unknown> | undefin
   return undefined;
 }
 
+function normalizeStepContract(raw: StepContractInterface | undefined): StepContractInterface | undefined {
+  if (!raw) return undefined;
+  return {
+    expectedOutputs: Array.isArray(raw.expectedOutputs) ? raw.expectedOutputs : [],
+    doneWhen: Array.isArray(raw.doneWhen) ? raw.doneWhen.filter((item): item is string => typeof item === 'string' && item.trim().length > 0) : [],
+    ...(Array.isArray(raw.constraints) ? { constraints: raw.constraints.filter((item): item is string => typeof item === 'string' && item.trim().length > 0) } : {}),
+    ...(Array.isArray(raw.inputHints) ? { inputHints: raw.inputHints.filter((item): item is string => typeof item === 'string' && item.trim().length > 0) } : {}),
+  };
+}
+
 export function register(
   api: OpenClawPluginApi,
   config: MTeamPluginConfig
@@ -44,8 +54,9 @@ export function register(
       const taskId = readTaskId(rawParams, 'taskId', { required: true })!;
       const { agentId, contextStep, contextOutput, description } = rawParams;
       const normalizedContextOutput = normalizeContextOutput(contextOutput) ?? {};
+      const normalizedStepContract = normalizeStepContract(rawParams.stepContract);
 
-      const result = nextTask(taskId, agentId, { step: contextStep, output: normalizedContextOutput }, description);
+      const result = nextTask(taskId, agentId, { step: contextStep, output: normalizedContextOutput }, description, normalizedStepContract);
       if (!result.success) return failedTextResult(result.reason || '操作失败', { success: result.success, reason: result.reason });
 
       if (result.task && config.notifications?.length) {

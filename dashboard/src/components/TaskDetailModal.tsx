@@ -20,13 +20,13 @@ function getLatestIssues(task: Task): string[] {
 }
 
 function getFlowSummary(task: Task) {
-  if (task.status === 'running') return '当前由执行者持有，正在完成这一棒。';
-  if (task.status === 'pending' && task.context.length === 0) return '新任务，等待第一位执行者认领。';
-  if (task.status === 'pending') return '上一棒已结束，agent_end 已生成下一步，等待重新认领。';
-  if (task.status === 'completed') return '整体结果已提交，等待 Publisher 验收。';
-  if (task.status === 'closed') return '任务已完成并通过验收。';
-  if (task.status === 'failed') return '当前任务已失败，需人工判断是否重新发布或补前置。';
-  return '任务已取消。';
+  if (task.status === 'running') return 'Currently held by an executor and working on this step.';
+  if (task.status === 'pending' && task.context.length === 0) return 'Fresh task waiting for the first claim.';
+  if (task.status === 'pending') return 'Previous step ended and next step is queued for reclaim.';
+  if (task.status === 'completed') return 'Executor work is done and waiting for publisher acceptance.';
+  if (task.status === 'closed') return 'Task has passed acceptance and is closed.';
+  if (task.status === 'failed') return 'Task failed and likely needs human judgment or republish.';
+  return 'Task has been cancelled.';
 }
 
 export const TaskDetailModal: FC<TaskDetailModalProps> = ({ task, onClose, onUpdate }) => {
@@ -36,17 +36,18 @@ export const TaskDetailModal: FC<TaskDetailModalProps> = ({ task, onClose, onUpd
   const steps = task.context as ContextStepEntry[];
   const latest = getLatestStep(task);
   const latestIssues = getLatestIssues(task);
+  const stepContract = task.stepContract;
 
   return (
     <div className="modal-backdrop open" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className="modal modal-xl">
-        <button className="modal-close" onClick={onClose}>✕</button>
+        <button className="modal-close" onClick={onClose}>?</button>
 
         <div className="modal-hero">
           <div>
-            <div className="hero-eyebrow">{TASK_TYPE_LABELS[task.taskType || 'general']} · {task.taskId}</div>
+            <div className="hero-eyebrow">{TASK_TYPE_LABELS[task.taskType || 'general']} ? {task.taskId}</div>
             <h3>{escHtml(task.description)}</h3>
-            <div className="modal-goal">目标：{escHtml(task.goal)}</div>
+            <div className="modal-goal">Goal: {escHtml(task.goal)}</div>
             <div className="modal-goal modal-flow">{getFlowSummary(task)}</div>
           </div>
           <div className="modal-badges">
@@ -58,27 +59,27 @@ export const TaskDetailModal: FC<TaskDetailModalProps> = ({ task, onClose, onUpd
 
         <div className="detail-grid detail-grid-top">
           <div className="detail-panel">
-            <h4>任务状态</h4>
-            <Field label="发布者"><span className="field-value">{escHtml(task.publisher)}</span></Field>
-            <Field label="当前执行者"><span className="field-value">{task.executor || '—'}</span></Field>
-            <Field label="上一棒执行者"><span className="field-value">{task.lastExecutor || '—'}</span></Field>
-            <Field label="创建时间"><span className="field-value">{formatTime(task.createdAt)}</span></Field>
-            <Field label="更新时间"><span className="field-value">{formatTime(task.updatedAt)}</span></Field>
-            <Field label="完成时间"><span className="field-value">{formatTime(task.completedAt)}</span></Field>
+            <h4>Task state</h4>
+            <Field label="Publisher"><span className="field-value">{escHtml(task.publisher)}</span></Field>
+            <Field label="Current executor"><span className="field-value">{task.executor || '?'}</span></Field>
+            <Field label="Last executor"><span className="field-value">{task.lastExecutor || '?'}</span></Field>
+            <Field label="Created at"><span className="field-value">{formatTime(task.createdAt)}</span></Field>
+            <Field label="Updated at"><span className="field-value">{formatTime(task.updatedAt)}</span></Field>
+            <Field label="Completed at"><span className="field-value">{formatTime(task.completedAt)}</span></Field>
           </div>
 
           <div className="detail-panel detail-panel-accent">
-            <h4>本轮关注点</h4>
-            <Field label="最新步骤"><span className="field-value">{latest?.step || '—'}</span></Field>
-            <Field label="最新摘要"><span className="field-value">{latest?.output?.summary || '—'}</span></Field>
-            <Field label="最新产物"><span className="field-value">{latest?.output?.files?.join(', ') || '—'}</span></Field>
-            <Field label="下一步状态"><span className="field-value">{task.status === 'pending' && task.context.length > 0 ? '已生成下一步，等待认领' : '—'}</span></Field>
+            <h4>Current focus</h4>
+            <Field label="Latest step"><span className="field-value">{latest?.step || '?'}</span></Field>
+            <Field label="Latest summary"><span className="field-value">{latest?.output?.summary || '?'}</span></Field>
+            <Field label="Latest outputs"><span className="field-value">{latest?.output?.files?.join(', ') || '?'}</span></Field>
+            <Field label="Next-step state"><span className="field-value">{task.status === 'pending' && task.context.length > 0 ? 'Queued and waiting for claim' : '?'}</span></Field>
           </div>
 
           <div className="detail-panel detail-panel-warning">
-            <h4>未解决问题</h4>
+            <h4>Open issues</h4>
             {latestIssues.length === 0 ? (
-              <div className="empty compact-empty">当前无未解决问题</div>
+              <div className="empty compact-empty">No unresolved issues right now</div>
             ) : (
               <div className="pill-row">
                 {latestIssues.map((issue, idx) => (
@@ -91,9 +92,52 @@ export const TaskDetailModal: FC<TaskDetailModalProps> = ({ task, onClose, onUpd
 
         <div className="detail-grid detail-grid-bottom">
           <div className="detail-panel detail-panel-wide">
-            <h4>最新结果与证据</h4>
+            <h4>Step Contract</h4>
+            {!stepContract ? (
+              <div className="empty compact-empty">No explicit contract on this step</div>
+            ) : (
+              <div className="contract-sections">
+                <div className="contract-block">
+                  <div className="task-summary-label">Expected outputs</div>
+                  <div className="pill-row">
+                    {stepContract.expectedOutputs.map((output, idx) => (
+                      <span className="data-pill" key={`${output.kind}-${output.path ?? output.name ?? idx}`}>
+                        {output.path || output.name || output.kind}
+                        {output.formatHint ? ` (${output.formatHint})` : ''}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+                <div className="contract-block">
+                  <div className="task-summary-label">Done when</div>
+                  <ul className="contract-list">
+                    {stepContract.doneWhen.map((item, idx) => <li key={`${item}-${idx}`}>{escHtml(item)}</li>)}
+                  </ul>
+                </div>
+                {!!stepContract.constraints?.length && (
+                  <div className="contract-block">
+                    <div className="task-summary-label">Constraints</div>
+                    <ul className="contract-list">
+                      {stepContract.constraints.map((item, idx) => <li key={`${item}-${idx}`}>{escHtml(item)}</li>)}
+                    </ul>
+                  </div>
+                )}
+                {!!stepContract.inputHints?.length && (
+                  <div className="contract-block">
+                    <div className="task-summary-label">Input hints</div>
+                    <ul className="contract-list">
+                      {stepContract.inputHints.map((item, idx) => <li key={`${item}-${idx}`}>{escHtml(item)}</li>)}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          <div className="detail-panel detail-panel-wide">
+            <h4>Latest evidence</h4>
             <div className="field-value modal-block">
-              {latest?.output?.summary || latest?.step || '暂无摘要'}
+              {latest?.output?.summary || latest?.step || 'No summary yet'}
             </div>
             {latest?.output?.files?.length ? (
               <div className="pill-row">
@@ -112,23 +156,21 @@ export const TaskDetailModal: FC<TaskDetailModalProps> = ({ task, onClose, onUpd
           </div>
 
           <div className="detail-panel detail-panel-wide">
-            <h4>Context 时间线</h4>
+            <h4>Context timeline</h4>
             {steps.length === 0 ? (
-              <div className="empty">暂无步骤历史</div>
+              <div className="empty">No step history yet</div>
             ) : (
               <div className="timeline-list">
                 {steps.map((step, index) => (
                   <div key={index} className="context-step timeline-step">
                     <div className="context-step-header">
-                      <span className="context-step-executor">{escHtml(step.executor || '—')}</span>
+                      <span className="context-step-executor">{escHtml(step.executor || '?')}</span>
                       <span className="context-step-time">{formatTime(step.completedAt)}</span>
                     </div>
                     <div className="context-step-title">{escHtml(step.step)}</div>
                     {step.output?.summary && <div className="context-step-summary">{escHtml(step.output.summary)}</div>}
-                    {step.output?.files?.length ? <div className="context-step-files">文件：{step.output.files.join(', ')}</div> : null}
-                    {step.output?.unresolvedIssues?.length ? (
-                      <div className="context-step-files">问题：{step.output.unresolvedIssues.join('；')}</div>
-                    ) : null}
+                    {step.output?.files?.length ? <div className="context-step-files">Files: {step.output.files.join(', ')}</div> : null}
+                    {step.output?.unresolvedIssues?.length ? <div className="context-step-files">Issues: {step.output.unresolvedIssues.join(' ; ')}</div> : null}
                   </div>
                 ))}
               </div>
@@ -137,15 +179,11 @@ export const TaskDetailModal: FC<TaskDetailModalProps> = ({ task, onClose, onUpd
         </div>
 
         <div className="modal-actions">
-          <button className="btn-edit" onClick={() => setShowEdit(true)}>✏️ 编辑</button>
+          <button className="btn-edit" onClick={() => setShowEdit(true)}>?? Edit</button>
         </div>
 
         {showEdit && (
-          <TaskEditModal
-            task={task}
-            onClose={() => setShowEdit(false)}
-            onSave={onUpdate}
-          />
+          <TaskEditModal task={task} onClose={() => setShowEdit(false)} onSave={onUpdate} />
         )}
       </div>
     </div>

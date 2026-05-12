@@ -1,10 +1,6 @@
 /**
- * M-Team 任务域类型
+ * M-Team task domain model.
  */
-
-// ============================================================
-// 枚举
-// ============================================================
 
 export const TaskStatus = {
   PENDING: 'pending',
@@ -12,33 +8,20 @@ export const TaskStatus = {
   COMPLETED: 'completed',
   CLOSED: 'closed',
   FAILED: 'failed',
-  CANCELLED: 'cancelled'
+  CANCELLED: 'cancelled',
 } as const;
 
 export type TaskStatus = typeof TaskStatus[keyof typeof TaskStatus];
-
-export const TASK_STATUSES: TaskStatus[] = [
-  TaskStatus.PENDING,
-  TaskStatus.RUNNING,
-  TaskStatus.COMPLETED,
-  TaskStatus.CLOSED,
-  TaskStatus.FAILED,
-  TaskStatus.CANCELLED
-];
+export const TASK_STATUSES: TaskStatus[] = Object.values(TaskStatus);
 
 export const TaskPriority = {
   HIGH: 'high',
   NORMAL: 'normal',
-  LOW: 'low'
+  LOW: 'low',
 } as const;
 
 export type TaskPriority = typeof TaskPriority[keyof typeof TaskPriority];
-
-export const VALID_PRIORITIES: TaskPriority[] = [
-  TaskPriority.HIGH,
-  TaskPriority.NORMAL,
-  TaskPriority.LOW
-];
+export const VALID_PRIORITIES: TaskPriority[] = Object.values(TaskPriority);
 
 export const TaskType = {
   GENERAL: 'general',
@@ -47,24 +30,11 @@ export const TaskType = {
   OPS: 'ops',
   DATA: 'data',
   DESIGN: 'design',
-  CONTENT: 'content'
+  CONTENT: 'content',
 } as const;
 
 export type TaskType = typeof TaskType[keyof typeof TaskType];
-
-export const VALID_TASK_TYPES: TaskType[] = [
-  TaskType.GENERAL,
-  TaskType.CODING,
-  TaskType.RESEARCH,
-  TaskType.OPS,
-  TaskType.DATA,
-  TaskType.DESIGN,
-  TaskType.CONTENT
-];
-
-// ============================================================
-// 核心类型
-// ============================================================
+export const VALID_TASK_TYPES: TaskType[] = Object.values(TaskType);
 
 export interface ContextStepOutput {
   summary?: string;
@@ -78,6 +48,21 @@ export interface ContextStepOutput {
   [key: string]: unknown;
 }
 
+export interface StepOutputSpec {
+  kind: 'file' | 'json' | 'text' | 'report' | 'code_change' | 'command_result';
+  path?: string;
+  name?: string;
+  formatHint?: string;
+  required?: boolean;
+}
+
+export interface StepContract {
+  expectedOutputs: StepOutputSpec[];
+  doneWhen: string[];
+  constraints?: string[];
+  inputHints?: string[];
+}
+
 export interface ContextStepEntry {
   type: 'step';
   executor: string;
@@ -88,19 +73,12 @@ export interface ContextStepEntry {
 
 export type ContextEntry = ContextStepEntry;
 
-/**
- * M-Team 任务 — 内存中的完整任务对象
- *
- * goal / taskType / description 的职责分离：
- * - taskType：认领前的粗筛类型
- * - description：当前这一步做什么，executor 认领时主要依据它
- * - goal：任务终态标尺，用于 agent_end 终态判断与 publisher 验收，不参与认领
- */
 export interface Task {
   taskId: string;
   taskType: TaskType;
   goal: string;
   description: string;
+  stepContract?: StepContract;
   context: ContextEntry[];
   priority: TaskPriority;
   publisher: string;
@@ -112,28 +90,59 @@ export interface Task {
   updatedAt: number;
 }
 
-// ============================================================
-// 校验
-// ============================================================
-
 export interface ValidationResult {
   valid: boolean;
   errors: string[];
 }
 
+function normalizeStringList(input: unknown): string[] | undefined {
+  if (!Array.isArray(input)) return undefined;
+  const values = input
+    .filter((item): item is string => typeof item === 'string')
+    .map(item => item.trim())
+    .filter(Boolean);
+  return values.length ? values : undefined;
+}
+
+function normalizeStepContract(stepContract: StepContract | undefined): StepContract | undefined {
+  if (!stepContract) return undefined;
+
+  const expectedOutputs = Array.isArray(stepContract.expectedOutputs)
+    ? stepContract.expectedOutputs
+      .filter((item): item is StepOutputSpec => !!item && typeof item === 'object' && typeof item.kind === 'string')
+      .map(item => ({
+        kind: item.kind,
+        ...(typeof item.path === 'string' && item.path.trim() ? { path: item.path.trim() } : {}),
+        ...(typeof item.name === 'string' && item.name.trim() ? { name: item.name.trim() } : {}),
+        ...(typeof item.formatHint === 'string' && item.formatHint.trim() ? { formatHint: item.formatHint.trim() } : {}),
+        ...(typeof item.required === 'boolean' ? { required: item.required } : {}),
+      }))
+    : [];
+
+  return {
+    expectedOutputs,
+    doneWhen: normalizeStringList(stepContract.doneWhen) ?? [],
+    ...(normalizeStringList(stepContract.constraints) ? { constraints: normalizeStringList(stepContract.constraints) } : {}),
+    ...(normalizeStringList(stepContract.inputHints) ? { inputHints: normalizeStringList(stepContract.inputHints) } : {}),
+  };
+}
+
 export function normalizeTask(task: Task): Task {
-  const normalizedContext = (task.context ?? []).filter((entry): entry is ContextStepEntry => {
-    return entry?.type === 'step'
-      && typeof entry.executor === 'string'
-      && typeof entry.step === 'string'
-      && typeof entry.completedAt === 'number';
-  }).map(entry => ({
-    ...entry,
-    output: entry.output ?? {}
-  }));
+  const normalizedContext = (task.context ?? [])
+    .filter((entry): entry is ContextStepEntry => {
+      return entry?.type === 'step'
+        && typeof entry.executor === 'string'
+        && typeof entry.step === 'string'
+        && typeof entry.completedAt === 'number';
+    })
+    .map(entry => ({
+      ...entry,
+      output: entry.output ?? {},
+    }));
 
   return {
     ...task,
+    ...(normalizeStepContract(task.stepContract) ? { stepContract: normalizeStepContract(task.stepContract) } : {}),
     context: normalizedContext,
   };
 }
@@ -142,54 +151,57 @@ export function validateTask(task: unknown): ValidationResult {
   const errors: string[] = [];
 
   if (!task || typeof task !== 'object') {
-    return { valid: false, errors: ['task 必须是对象'] };
+    return { valid: false, errors: ['task must be an object'] };
   }
 
   const t = task as Record<string, unknown>;
 
   if (!t.taskId || !String(t.taskId).startsWith('task_')) {
-    errors.push('taskId 格式无效，应为 task_{Date.now()}');
+    errors.push('taskId must look like task_{timestamp}');
   }
   if (!t.description || typeof t.description !== 'string') {
-    errors.push('description 必填且为字符串');
+    errors.push('description is required and must be a string');
   }
   if (!t.goal || typeof t.goal !== 'string') {
-    errors.push('goal 必填且为字符串');
+    errors.push('goal is required and must be a string');
   }
   if (t.taskType && !VALID_TASK_TYPES.includes(t.taskType as TaskType)) {
-    errors.push(`taskType 无效，可选值: ${VALID_TASK_TYPES.join(', ')}`);
+    errors.push(`taskType must be one of: ${VALID_TASK_TYPES.join(', ')}`);
+  }
+  if (t.stepContract !== undefined) {
+    if (!t.stepContract || typeof t.stepContract !== 'object') {
+      errors.push('stepContract must be an object');
+    } else {
+      const stepContract = t.stepContract as Record<string, unknown>;
+      if (!Array.isArray(stepContract.expectedOutputs) || stepContract.expectedOutputs.length === 0) {
+        errors.push('stepContract.expectedOutputs must contain at least one output spec');
+      }
+      if (!Array.isArray(stepContract.doneWhen) || stepContract.doneWhen.length === 0) {
+        errors.push('stepContract.doneWhen must contain at least one completion rule');
+      }
+    }
   }
   if (Array.isArray(t.context)) {
     for (let i = 0; i < t.context.length; i++) {
       const entry = t.context[i] as Record<string, unknown>;
       if (!entry || typeof entry !== 'object') {
-        errors.push(`context[${i}] 必须是对象`);
+        errors.push(`context[${i}] must be an object`);
         continue;
       }
-      if (entry.type !== 'step') {
-        errors.push(`context[${i}].type 必须是 step`);
-      }
-      if (!entry.executor || typeof entry.executor !== 'string') {
-        errors.push(`context[${i}].executor 必填且为字符串`);
-      }
-      if (!entry.step || typeof entry.step !== 'string') {
-        errors.push(`context[${i}].step 必填且为字符串`);
-      }
+      if (entry.type != 'step') errors.push(`context[${i}].type must be step`);
+      if (!entry.executor || typeof entry.executor !== 'string') errors.push(`context[${i}].executor must be a string`);
+      if (!entry.step || typeof entry.step !== 'string') errors.push(`context[${i}].step must be a string`);
     }
   }
   if (!TASK_STATUSES.includes(t.status as TaskStatus)) {
-    errors.push(`status 无效，可选值: ${TASK_STATUSES.join(', ')}`);
+    errors.push(`status must be one of: ${TASK_STATUSES.join(', ')}`);
   }
   if (t.priority && !VALID_PRIORITIES.includes(t.priority as TaskPriority)) {
-    errors.push(`priority 无效，可选值: ${VALID_PRIORITIES.join(', ')}`);
+    errors.push(`priority must be one of: ${VALID_PRIORITIES.join(', ')}`);
   }
 
   return { valid: errors.length === 0, errors };
 }
-
-// ============================================================
-// Patch（用于 updateTaskRow）
-// ============================================================
 
 export interface TaskPatch {
   taskType?: TaskType;
@@ -197,19 +209,17 @@ export interface TaskPatch {
   executor?: string | null;
   lastExecutor?: string | null;
   description?: string;
-  context?: string; // JSON stringified ContextEntry[]
+  stepContract?: string;
+  context?: string;
   completedAt?: number | null;
   updatedAt?: number;
 }
-
-// ============================================================
-// 构造
-// ============================================================
 
 export interface CreateTaskInput {
   taskType?: TaskType;
   goal: string;
   description: string;
+  stepContract?: StepContract;
   publisher?: string;
   priority?: TaskPriority;
 }
@@ -219,8 +229,9 @@ export function createTask(input: CreateTaskInput): Task {
     taskType = TaskType.GENERAL,
     goal,
     description,
+    stepContract,
     publisher = 'user',
-    priority = TaskPriority.NORMAL
+    priority = TaskPriority.NORMAL,
   } = input;
 
   return {
@@ -228,6 +239,7 @@ export function createTask(input: CreateTaskInput): Task {
     taskType,
     description: String(description),
     goal: String(goal),
+    ...(stepContract ? { stepContract: normalizeStepContract(stepContract) } : {}),
     context: [],
     priority,
     publisher: publisher || 'user',
@@ -236,37 +248,33 @@ export function createTask(input: CreateTaskInput): Task {
     lastExecutor: null,
     createdAt: Date.now(),
     completedAt: null,
-    updatedAt: Date.now()
+    updatedAt: Date.now(),
   };
 }
 
-// ============================================================
-// 格式化（对外展示）
-// ============================================================
-
 export const STATUS_LABELS: Record<TaskStatus, string> = {
-  [TaskStatus.PENDING]: '⏳ 待认领',
-  [TaskStatus.RUNNING]: '⚙️ 执行中',
-  [TaskStatus.COMPLETED]: '✅ 完成（待验收）',
-  [TaskStatus.CLOSED]: '🔒 已验收',
-  [TaskStatus.FAILED]: '❌ 失败',
-  [TaskStatus.CANCELLED]: '🚫 已取消'
+  [TaskStatus.PENDING]: 'Pending',
+  [TaskStatus.RUNNING]: 'Running',
+  [TaskStatus.COMPLETED]: 'Completed (awaiting acceptance)',
+  [TaskStatus.CLOSED]: 'Closed',
+  [TaskStatus.FAILED]: 'Failed',
+  [TaskStatus.CANCELLED]: 'Cancelled',
 };
 
 export const PRIORITY_LABELS: Record<TaskPriority, string> = {
-  [TaskPriority.HIGH]: '🔴 高',
-  [TaskPriority.NORMAL]: '🟡 中',
-  [TaskPriority.LOW]: '🟢 低'
+  [TaskPriority.HIGH]: 'High',
+  [TaskPriority.NORMAL]: 'Normal',
+  [TaskPriority.LOW]: 'Low',
 };
 
 export const TASK_TYPE_LABELS: Record<TaskType, string> = {
-  [TaskType.GENERAL]: '通用',
-  [TaskType.CODING]: '代码',
-  [TaskType.RESEARCH]: '调研',
-  [TaskType.OPS]: '运维',
-  [TaskType.DATA]: '数据',
-  [TaskType.DESIGN]: '设计',
-  [TaskType.CONTENT]: '内容'
+  [TaskType.GENERAL]: 'General',
+  [TaskType.CODING]: 'Coding',
+  [TaskType.RESEARCH]: 'Research',
+  [TaskType.OPS]: 'Ops',
+  [TaskType.DATA]: 'Data',
+  [TaskType.DESIGN]: 'Design',
+  [TaskType.CONTENT]: 'Content',
 };
 
 export function getTaskTypeLabel(taskType: TaskType): string {
@@ -280,34 +288,36 @@ export function getStatusLabel(status: TaskStatus): string {
 export function formatTaskForHuman(input: Task): string {
   const task = normalizeTask(input);
   const lines: string[] = [
-    `🎯 ${task.goal}`,
-    `🏷️ 类型: ${getTaskTypeLabel(task.taskType)}`,
-    `📋 当前：${task.description}`,
+    `Goal: ${task.goal}`,
+    `Type: ${getTaskTypeLabel(task.taskType)}`,
+    `Current step: ${task.description}`,
     `ID: ${task.taskId}`,
-    `优先级: ${PRIORITY_LABELS[task.priority] ?? '🟡 中'}`,
-    `状态: ${getStatusLabel(task.status)}`
+    `Priority: ${PRIORITY_LABELS[task.priority] ?? 'Normal'}`,
+    `Status: ${getStatusLabel(task.status)}`,
   ];
 
-  const stepCount = task.context.length;
-  if (stepCount === 0) {
-    lines.push('📝 还未开始执行');
-  } else {
-    lines.push(`📝 已完成 ${stepCount} 步`);
+  if (task.stepContract?.expectedOutputs?.length) {
+    lines.push(`Expected outputs: ${task.stepContract.expectedOutputs.map(item => item.path ?? item.name ?? item.kind).join(', ')}`);
+  }
+  if (task.stepContract?.doneWhen?.length) {
+    lines.push(`Done when: ${task.stepContract.doneWhen.join(' | ')}`);
   }
 
-  if (task.executor) lines.push(`执行者: ${task.executor}`);
-  if (task.lastExecutor) lines.push(`上一步: ${task.lastExecutor}`);
+  const stepCount = task.context.length;
+  lines.push(stepCount === 0 ? 'No step completed yet' : `Completed ${stepCount} step(s)`);
+  if (task.executor) lines.push(`Executor: ${task.executor}`);
+  if (task.lastExecutor) lines.push(`Last executor: ${task.lastExecutor}`);
 
   return lines.join('\n');
 }
 
 export function getTaskSummary(input: Task): string {
   const task = normalizeTask(input);
-  if (!task.context || task.context.length === 0) return '（无上下文）';
+  if (!task.context || task.context.length === 0) return '(no context)';
 
   const last = task.context[task.context.length - 1];
   if (last.output?.summary) return last.output.summary;
-  if (last.output?.files?.length) return `[文件] ${last.output.files.join(', ')}`;
+  if (last.output?.files?.length) return `[files] ${last.output.files.join(', ')}`;
   if (last.output?.handoffNote) return last.output.handoffNote;
-  return '（无摘要）';
+  return '(no summary)';
 }

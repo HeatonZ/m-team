@@ -14,6 +14,11 @@ describe('executor prompt contract e2e', () => {
         goal: '形成最终选品结论',
         description: '先整理 3 个候选商品信息',
         publisher: 'manager',
+        stepContract: {
+          expectedOutputs: [{ kind: 'report', path: 'candidates.md' }],
+          doneWhen: ['candidates.md ???', '?? 3 ???????'],
+          constraints: ['????????'],
+        },
       }) as ToolResult<PublishDetails>;
       const taskId = extractDetails(publishResult)!.taskId;
 

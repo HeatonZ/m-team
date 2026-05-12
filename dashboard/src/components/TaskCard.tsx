@@ -18,17 +18,23 @@ function getNextKind(task: Task): 'new' | 'next' | 'blocked' | 'running' | 'term
   if (task.status !== 'pending') return 'terminal';
   if (task.context.length === 0) return 'new';
   const issues = getLatestStep(task)?.output?.unresolvedIssues ?? [];
-  if (issues.some((issue) => /阻塞|权限|前置|外部|失败|无法继续/i.test(issue))) return 'blocked';
+  if (issues.some((issue) => ['??', '??', '??', '??', '??', '????', 'blocked', 'permission', 'external'].some((token) => issue.toLowerCase().includes(token.toLowerCase())))) return 'blocked';
   return 'next';
 }
 
 function getLatestSummary(task: Task): string {
   const latest = getLatestStep(task);
-  return latest?.output?.summary || latest?.step || '暂无步骤摘要';
+  return latest?.output?.summary || latest?.step || 'No latest summary';
 }
 
 function getLatestIssues(task: Task): string[] {
   return getLatestStep(task)?.output?.unresolvedIssues ?? [];
+}
+
+function getContractHeadline(task: Task): string {
+  const output = task.stepContract?.expectedOutputs?.[0];
+  if (!output) return 'No explicit contract';
+  return output.path || output.name || output.kind;
 }
 
 export const TaskCard: FC<TaskCardProps> = ({ task, onClick, decorator }) => {
@@ -36,6 +42,7 @@ export const TaskCard: FC<TaskCardProps> = ({ task, onClick, decorator }) => {
   const nextKind = getNextKind(task);
   const latestIssues = getLatestIssues(task);
   const latestFiles = latest?.output?.files ?? [];
+  const doneWhen = task.stepContract?.doneWhen ?? [];
 
   return (
     <div className={`task-card task-card-${nextKind}`} onClick={() => onClick(task.taskId)}>
@@ -43,24 +50,30 @@ export const TaskCard: FC<TaskCardProps> = ({ task, onClick, decorator }) => {
         <span className="task-type-badge">{TASK_TYPE_LABELS[task.taskType || 'general']}</span>
         <span className={`status-chip status-${task.status}`}>{STATUS_LABELS[task.status]}</span>
         <span className={`flow-chip flow-${nextKind}`}>
-          {nextKind === 'new' && '新任务'}
-          {nextKind === 'next' && '下一步已生成'}
-          {nextKind === 'blocked' && '阻塞待处理'}
-          {nextKind === 'running' && '当前执行中'}
-          {nextKind === 'terminal' && '终态'}
+          {nextKind === 'new' && 'New task'}
+          {nextKind === 'next' && 'Next step queued'}
+          {nextKind === 'blocked' && 'Blocked'}
+          {nextKind === 'running' && 'Running'}
+          {nextKind === 'terminal' && 'Terminal'}
         </span>
       </div>
 
       <div className="task-description">{escHtml(task.description)}</div>
 
+      <div className="task-contract-card">
+        <div className="task-summary-label">Current step contract</div>
+        <div className="task-contract-main">{escHtml(getContractHeadline(task))}</div>
+        {doneWhen.length > 0 && <div className="task-contract-sub">Done when: {escHtml(doneWhen[0])}</div>}
+      </div>
+
       <div className="task-summary-card">
-        <div className="task-summary-label">最新摘要</div>
+        <div className="task-summary-label">Latest summary</div>
         <div className="task-summary-text">{decorator || getLatestSummary(task)}</div>
       </div>
 
       {latestIssues.length > 0 && (
         <div className="task-issues">
-          <div className="task-summary-label">未解决问题</div>
+          <div className="task-summary-label">Open issues</div>
           <div className="pill-row">
             {latestIssues.slice(0, 3).map((issue, idx) => (
               <span className="issue-pill" key={`${issue}-${idx}`}>{issue}</span>
@@ -71,17 +84,17 @@ export const TaskCard: FC<TaskCardProps> = ({ task, onClick, decorator }) => {
 
       {latestFiles.length > 0 && (
         <div className="task-files">
-          <div className="task-summary-label">最新产物</div>
-          <div className="file-list">{latestFiles.slice(0, 2).join(' · ')}</div>
+          <div className="task-summary-label">Latest outputs</div>
+          <div className="file-list">{latestFiles.slice(0, 2).join(' ? ')}</div>
         </div>
       )}
 
       <div className="task-meta">
         <span>{PRIORITY_LABELS[task.priority]}</span>
-        <span>📢 {escHtml(task.publisher)}</span>
-        {task.executor && <span>⚙️ {escHtml(task.executor)}</span>}
-        {!task.executor && task.lastExecutor && <span>🧩 {escHtml(task.lastExecutor)}</span>}
-        <span>🕒 {formatRelativeTime(task.updatedAt)}</span>
+        <span>Publisher {escHtml(task.publisher)}</span>
+        {task.executor && <span>Executor {escHtml(task.executor)}</span>}
+        {!task.executor && task.lastExecutor && <span>Last {escHtml(task.lastExecutor)}</span>}
+        <span>{formatRelativeTime(task.updatedAt)}</span>
         <span title={formatTime(task.updatedAt)}>#{task.taskId.slice(-6)}</span>
       </div>
     </div>

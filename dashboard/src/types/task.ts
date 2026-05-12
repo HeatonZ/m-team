@@ -2,6 +2,21 @@ export type TaskStatus = 'pending' | 'running' | 'completed' | 'closed' | 'faile
 export type TaskPriority = 'high' | 'normal' | 'low';
 export type TaskType = 'general' | 'coding' | 'research' | 'ops' | 'data' | 'design' | 'content';
 
+export interface StepOutputSpec {
+  kind: 'file' | 'json' | 'text' | 'report' | 'code_change' | 'command_result';
+  path?: string;
+  name?: string;
+  formatHint?: string;
+  required?: boolean;
+}
+
+export interface StepContract {
+  expectedOutputs: StepOutputSpec[];
+  doneWhen: string[];
+  constraints?: string[];
+  inputHints?: string[];
+}
+
 export interface ContextStepOutput {
   summary?: string;
   files?: string[];
@@ -28,6 +43,7 @@ export interface Task {
   taskType?: TaskType;
   goal: string;
   description: string;
+  stepContract?: StepContract;
   context: ContextEntry[];
   priority: TaskPriority;
   status: TaskStatus;
@@ -40,28 +56,28 @@ export interface Task {
 }
 
 export const STATUS_LABELS: Record<TaskStatus, string> = {
-  pending: '⏳ 待认领',
-  running: '⚙️ 执行中',
-  completed: '✅ 待验收',
-  closed: '🔒 已验收',
-  failed: '❌ 失败',
-  cancelled: '🚫 已取消',
+  pending: 'Pending',
+  running: 'Running',
+  completed: 'Completed / Awaiting acceptance',
+  closed: 'Closed',
+  failed: 'Failed',
+  cancelled: 'Cancelled',
 };
 
 export const PRIORITY_LABELS: Record<TaskPriority, string> = {
-  high: '🔴 高',
-  normal: '🟡 中',
-  low: '🟢 低',
+  high: 'High',
+  normal: 'Normal',
+  low: 'Low',
 };
 
 export const TASK_TYPE_LABELS: Record<TaskType, string> = {
-  general: '通用',
-  coding: '代码',
-  research: '调研',
-  ops: '运维',
-  data: '数据',
-  design: '设计',
-  content: '内容',
+  general: 'General',
+  coding: 'Coding',
+  research: 'Research',
+  ops: 'Ops',
+  data: 'Data',
+  design: 'Design',
+  content: 'Content',
 };
 
 export const HISTORY_STATUSES: TaskStatus[] = ['completed', 'closed', 'failed', 'cancelled'];
