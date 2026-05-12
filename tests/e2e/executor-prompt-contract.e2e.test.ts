@@ -11,13 +11,13 @@ describe('executor prompt contract e2e', () => {
     const harness = await createPluginHarness({ dashboardEnabled: false });
     try {
       const publishResult = await harness.exec('mteam_publish_task', {
-        goal: '形成最终选品结论',
-        description: '先整理 3 个候选商品信息',
+        goal: 'form final candidate conclusion',
+        description: 'collect 3 candidate items',
         publisher: 'manager',
         stepContract: {
-          expectedOutputs: [{ kind: 'report', path: 'candidates.md' }],
-          doneWhen: ['candidates.md ???', '?? 3 ???????'],
-          constraints: ['????????'],
+          expectedOutcome: 'produce a structured 3-item candidate result',
+          doneWhen: ['candidates.md exists', 'contains at least 3 candidates'],
+          constraints: ['only work on the current step'],
         },
       }) as ToolResult<PublishDetails>;
       const taskId = extractDetails(publishResult)!.taskId;
@@ -25,23 +25,16 @@ describe('executor prompt contract e2e', () => {
       const claimResult = await harness.exec('mteam_claim_task', { taskId, agentId: 'maker' }, { agentId: 'maker' }) as ToolResult<{ sessionKey: string }>;
       const claimText = extractText(claimResult);
 
-      expect(claimText).toContain('当前步骤');
-      expect(claimText).not.toContain('目标:');
+      expect(claimText).toContain('Current step:');
+      expect(claimText).not.toContain('Goal:');
 
       const runMessage = harness.readSubagentRuns().at(-1)?.message ?? '';
-      expect(runMessage).toContain('最后一条消息必须结构化汇报 3 件事');
-      expect(runMessage).toContain('问题报告清楚');
-      expect(runMessage).toContain('由它决定下一步如何解决');
-      expect(runMessage).toContain('结果摘要');
-      expect(runMessage).toContain('未解决问题');
-      expect(runMessage).toContain('无未解决问题');
-      expect(runMessage).toContain('不要写“下一步建议”或替下一棒下指令');
-      expect(runMessage).toContain('你不拥有 goal 视角，不判断整任务是否完成');
-      expect(runMessage).not.toContain('无下一步建议');
-      expect(runMessage).not.toContain('如果没有下一步，要说明为什么整个任务已满足 goal');
-      expect(runMessage).not.toContain('本步完成 ≠ 整任务完成');
-      expect(runMessage).not.toContain('目标: 形成最终选品结论');
-      expect(runMessage).not.toContain('goal 是整任务终态标尺');
+      expect(runMessage).toContain('Result summary');
+      expect(runMessage).toContain('Output files / data references');
+      expect(runMessage).toContain('Unresolved issues');
+      expect(runMessage).toContain('Do not suggest the next step');
+      expect(runMessage).toContain('You do not use the task goal as your execution target');
+      expect(runMessage).not.toContain('Goal: form final candidate conclusion');
     } finally {
       await harness.cleanup();
     }

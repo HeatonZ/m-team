@@ -16,39 +16,39 @@ describe('publish/query e2e', () => {
     const harness = await createPluginHarness();
     try {
       const publishResult = await harness.exec('mteam_publish_task', {
-        goal: '???? 1 ????????',
-        description: '??? 3 ??????????',
+        goal: 'finish one candidate collection task',
+        description: 'collect 3 candidate items',
         taskType: 'research',
         priority: 'high',
         stepContract: {
-          expectedOutputs: [{ kind: 'report', path: 'candidate_report.md', formatHint: 'markdown' }],
-          doneWhen: ['candidate_report.md ???', '????? 3 ??????????'],
-          constraints: ['????? 3 ???????????'],
+          expectedOutcome: 'produce a verifiable 3-item candidate report',
+          doneWhen: ['candidate_report.md exists', 'report contains 3 candidates'],
+          constraints: ['only work on these 3 candidate items'],
         },
       }, { agentId: 'manager' }) as ToolResult<PublishDetails>;
 
       const publishText = extractText(publishResult);
       const publishDetails = extractDetails(publishResult);
-      expect(publishText).toContain('??????');
+      expect(publishText.toLowerCase()).toContain('task');
       expect(publishDetails?.taskId).toMatch(/^task_/);
 
       const taskId = publishDetails!.taskId;
       const storedTask = harness.readTask(taskId);
-      expect(storedTask?.goal).toBe('???? 1 ????????');
-      expect(storedTask?.description).toBe('??? 3 ??????????');
+      expect(storedTask?.goal).toBe('finish one candidate collection task');
+      expect(storedTask?.description).toBe('collect 3 candidate items');
       expect(storedTask?.taskType).toBe('research');
       expect(storedTask?.publisher).toBe('manager');
-      expect(storedTask?.stepContract?.expectedOutputs?.[0]?.path).toBe('candidate_report.md');
+      expect(storedTask?.stepContract?.expectedOutcome).toContain('candidate report');
       expect(storedTask?.stepContract?.doneWhen?.[0]).toContain('candidate_report.md');
 
       const getTaskResult = await harness.exec('mteam_get_task', { taskId }) as ToolResult<{ task: Record<string, unknown> }>;
       const getTaskText = extractText(getTaskResult);
       const getTaskDetails = extractDetails(getTaskResult);
       expect(getTaskText).toContain(taskId);
-      expect(getTaskText).toContain('Current step: ??? 3 ??????????');
-      expect(getTaskText).toContain('[Expected outputs]');
-      expect(getTaskText).toContain('candidate_report.md');
-      expect(getTaskText).not.toContain('???? 1 ????????');
+      expect(getTaskText).toContain('Current step: collect 3 candidate items');
+      expect(getTaskText).toContain('[Expected outcome]');
+      expect(getTaskText).toContain('candidate report');
+      expect(getTaskText).not.toContain('finish one candidate collection task');
       expect(getTaskDetails?.task).not.toHaveProperty('goal');
       expect(getTaskDetails?.task).toHaveProperty('stepContract');
       expect(getTaskDetails?.task).toHaveProperty('recentContext');
@@ -56,9 +56,9 @@ describe('publish/query e2e', () => {
       const pendingResult = await harness.exec('mteam_get_pending', { agentId: 'maker' }) as ToolResult<TaskListDetails>;
       const pendingText = extractText(pendingResult);
       const pendingDetails = extractDetails(pendingResult);
-      expect(pendingText).toContain('????? 1 ?');
+      expect(pendingText).toContain('Pending tasks: 1');
       expect(pendingText).toContain('Research');
-      expect(pendingText).not.toContain('???? 1 ????????');
+      expect(pendingText).not.toContain('finish one candidate collection task');
       expect(pendingDetails?.pending?.[0]).not.toHaveProperty('goal');
       expect(pendingDetails?.pending?.[0]).toHaveProperty('stepContract');
 
@@ -66,7 +66,7 @@ describe('publish/query e2e', () => {
       const allTasksText = extractText(allTasksResult);
       const allTasksDetails = extractDetails(allTasksResult);
       expect(allTasksText).toContain('All tasks');
-      expect(allTasksText).not.toContain('???? 1 ????????');
+      expect(allTasksText).not.toContain('finish one candidate collection task');
       expect(allTasksDetails?.tasks?.[0]).not.toHaveProperty('goal');
     } finally {
       await harness.cleanup();
@@ -77,10 +77,10 @@ describe('publish/query e2e', () => {
     const harness = await createPluginHarness();
     try {
       await expect(harness.exec('mteam_publish_task', {
-        goal: '?????',
-        description: '?????????????',
+        goal: 'do the task',
+        description: 'continue handling and then see',
         publisher: 'manager',
-      })).rejects.toThrow(/stepContract|??|????/);
+      })).rejects.toThrow(/invalid input|completion rule|stepContract/);
     } finally {
       await harness.cleanup();
     }

@@ -18,7 +18,7 @@ function getNextKind(task: Task): 'new' | 'next' | 'blocked' | 'running' | 'term
   if (task.status !== 'pending') return 'terminal';
   if (task.context.length === 0) return 'new';
   const issues = getLatestStep(task)?.output?.unresolvedIssues ?? [];
-  if (issues.some((issue) => ['??', '??', '??', '??', '??', '????', 'blocked', 'permission', 'external'].some((token) => issue.toLowerCase().includes(token.toLowerCase())))) return 'blocked';
+  if (issues.some((issue) => ['blocked', 'permission', 'external', '阻塞', '权限', '外部'].some((token) => issue.toLowerCase().includes(token.toLowerCase())))) return 'blocked';
   return 'next';
 }
 
@@ -32,9 +32,7 @@ function getLatestIssues(task: Task): string[] {
 }
 
 function getContractHeadline(task: Task): string {
-  const output = task.stepContract?.expectedOutputs?.[0];
-  if (!output) return 'No explicit contract';
-  return output.path || output.name || output.kind;
+  return task.stepContract?.expectedOutcome || 'No explicit contract';
 }
 
 export const TaskCard: FC<TaskCardProps> = ({ task, onClick, decorator }) => {
@@ -85,7 +83,7 @@ export const TaskCard: FC<TaskCardProps> = ({ task, onClick, decorator }) => {
       {latestFiles.length > 0 && (
         <div className="task-files">
           <div className="task-summary-label">Latest outputs</div>
-          <div className="file-list">{latestFiles.slice(0, 2).join(' ? ')}</div>
+          <div className="file-list">{latestFiles.slice(0, 2).join(' · ')}</div>
         </div>
       )}
 

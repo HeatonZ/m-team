@@ -18,29 +18,12 @@ export interface ContextStepOutputInterface {
   [key: string]: unknown;
 }
 
-export const StepOutputSpecSchema = {
-  type: 'object' as const,
-  properties: {
-    kind: {
-      type: 'string' as const,
-      enum: ['file', 'json', 'text', 'report', 'code_change', 'command_result'] as const,
-      description: 'Expected output kind for the current step',
-    },
-    path: { type: 'string', description: 'Relative output path inside the task directory' },
-    name: { type: 'string', description: 'Output name when path is not applicable' },
-    formatHint: { type: 'string', description: 'Format hint such as json / markdown / patch' },
-    required: { type: 'boolean', description: 'Whether this output is required; defaults to true' },
-  },
-  required: ['kind'] as const,
-} as const;
-
 export const StepContractSchema = {
   type: 'object' as const,
   properties: {
-    expectedOutputs: {
-      type: 'array' as const,
-      description: 'What the current step must deliver',
-      items: StepOutputSpecSchema,
+    expectedOutcome: {
+      type: 'string' as const,
+      description: 'What result the current step is expected to achieve',
     },
     doneWhen: {
       type: 'array' as const,
@@ -58,19 +41,11 @@ export const StepContractSchema = {
       items: { type: 'string' as const },
     },
   },
-  required: ['expectedOutputs', 'doneWhen'] as const,
+  required: ['doneWhen'] as const,
 } as const;
 
-export interface StepOutputSpecInterface {
-  kind: 'file' | 'json' | 'text' | 'report' | 'code_change' | 'command_result';
-  path?: string;
-  name?: string;
-  formatHint?: string;
-  required?: boolean;
-}
-
 export interface StepContractInterface {
-  expectedOutputs: StepOutputSpecInterface[];
+  expectedOutcome?: string;
   doneWhen: string[];
   constraints?: string[];
   inputHints?: string[];

@@ -1,32 +1,33 @@
 /**
- * mteam_claim_task 工具定义
+ * mteam_claim_task tool definition.
  */
 import type { OpenClawPluginApi } from 'openclaw/plugin-sdk';
 import type { MTeamPluginConfig } from '../config.js';
 import { textResult, failedTextResult, readTaskId } from './shared.js';
 import { claimTask, getTask, relinquishTask } from '../pool/index.js';
 import { sanitizeTask, formatTaskAsText } from './helpers.js';
-import { formatClaimNotifications } from '../notifications.js';
-import { sendNotifications } from '../notifications.js';
+import { formatClaimNotifications, sendNotifications } from '../notifications.js';
 import type { ClaimTaskParamsInterface } from '../types/tools.js';
 import { ClaimTaskParams } from '../types/tools.js';
 
-export function register(
-  api: OpenClawPluginApi,
-  config: MTeamPluginConfig
-): void {
+export function register(api: OpenClawPluginApi, config: MTeamPluginConfig): void {
   api.logger?.info('[m-team] registering mteam_claim_task');
   api.registerTool({
     name: 'mteam_claim_task',
-    label: '认领任务',
-    description: '认领一个待处理任务（Plugin内部直接创建executor session）',
+    label: 'Claim task',
+    description: 'Claim a pending task and start an executor session inside the plugin',
     parameters: ClaimTaskParams,
     async execute(_toolCallId: string, rawParams: ClaimTaskParamsInterface) {
       const { taskId, agentId } = rawParams;
-      readTaskId(rawParams, 'taskId', { required: true }); // 格式校验
+      readTaskId(rawParams, 'taskId', { required: true });
 
       const result = claimTask(taskId, agentId);
-      if (!result.success) return failedTextResult(result.reason || '操作失败', { success: result.success, reason: result.reason });
+      if (!result.success) {
+        return failedTextResult(result.reason || 'Operation failed', {
+          success: result.success,
+          reason: result.reason,
+        });
+      }
 
       const task = getTask(taskId) ?? result.task;
       const sanitized = task ? sanitizeTask(task) : undefined;
@@ -35,8 +36,8 @@ export function register(
         try {
           const notifications = formatClaimNotifications(task, config.notifications);
           await sendNotifications(notifications, api.logger ?? null);
-        } catch (e) {
-          api.logger?.warn('[m-team] 通知发送失败');
+        } catch {
+          api.logger?.warn('[m-team] claim notifications failed');
         }
       }
 
@@ -44,60 +45,59 @@ export function register(
       const taskWorkdir = `${config.workspaceRoot ?? '/mnt/d/code/m-team'}/tasks/${taskId}`;
 
       const systemPrompt = `
-【任务信息】
-- 任务ID: ${taskId}
-- 任务类型: ${task?.taskType ?? 'general'}
-- 任务目录: ${taskWorkdir}
-- 执行者 agentId: ${agentId}
+[Task info]
+- Task ID: ${taskId}
+- Task type: ${task?.taskType ?? 'general'}
+- Task workdir: ${taskWorkdir}
+- Executor agentId: ${agentId}
 
-【工作区约束】
-所有文件操作（读、写、终端命令）必须在任务目录内进行。
+[Workspace rule]
+All file operations and terminal commands must stay inside the task workdir.
 
-【角色边界】
-- 你是 executor，只负责当前这一棒执行与汇报事实
-- 你不负责宣布整条任务 complete / next / fail
-- 你不拥有 goal 视角，不判断整任务是否完成
-- description 是当前一步，不是整条任务计划
+[Role boundary]
+- You are the executor for the current step only.
+- You do not decide complete / next / fail.
+- You do not use the task goal as your execution target.
+- The description is the current step, not the whole-task plan.
 
-【执行流程】
-1. 先调用 mteam_get_task 查任务详情（含执行历史 + 当前 description）
-2. 根据执行历史确认：前面已完成什么、当前这一棒要补什么、哪些问题正待处理
-3. 只围绕当前 description 执行当前这一步，不要自行扩展为整条任务计划
-4. 若中途遇到问题，可以做最小必要的核对、检查或一次性重试，但不要把“解决问题”扩展成新的长链路
-5. 更重要的是把问题报告清楚：问题是什么、影响什么、还差什么、是否阻塞当前目标
-6. 把当前步骤做到什么程度、留下什么产物、存在哪些问题，如实汇报给 agent_end，由它决定下一步如何解决
-7. 做完后最后一条消息必须结构化汇报 3 件事：
-   - 结果摘要：当前步骤完成了什么
-   - 产出文件 / 数据引用：留下了什么可验证产物
-   - 未解决问题：当前还卡在哪、是否阻塞；如果无问题，也要明确写“无未解决问题”
-8. 你的汇报必须只描述“当前这一步”的事实，不要把 goal 是否达成、整任务是否完成、是否该关闭、是否等待 publisher 验收等整任务层信息写进结果摘要或问题字段
-9. 如果你认为任务整体已经完成，也只需要报告“当前步骤结果 + 当前无阻塞问题”，不要替系统下整任务结论
-10. 不要写“下一步建议”或替下一棒下指令；下一步由 agent_end 统一裁决
-11. 不要只写“任务完成”或“已完成”；必须同时写出产物和问题状态
-12. 做完后直接结束 session，m-team 会在 agent_end hook 收口并判断 complete / next / fail
+[Execution flow]
+1. Call mteam_get_task first.
+2. Read the recent history and the current step contract.
+3. Execute only the current step.
+4. If you hit a problem, you may do minimal checking or one retry, but do not expand into a long recovery chain.
+5. Report facts clearly: what was completed, what files were produced, and what unresolved issues remain.
+6. The final message must include:
+   - Result summary
+   - Output files / data references
+   - Unresolved issues (or explicitly say no unresolved issues)
+7. Report only step-level facts. Do not write whole-task judgments such as goal reached, task complete, wait for publisher, or close task.
+8. Do not suggest the next step. agent_end decides that.
+9. End the session after the step report.
 
-【禁止事项】
-- 禁止主动调用 mteam_relinquish_task / mteam_update_task / mteam_close_task
-- 禁止替 agent_end 下裁决
-- 禁止使用“goal 已满足 / 整体完成 / 整任务完成”这类整体收口表述
-- 禁止省略问题状态：即使本步有进展，也要说明当前是否还存在未解决问题
-- 禁止把当前一棒改写成新的总计划
-- 禁止自己决定“问题该怎么进入下一步”；这由 agent_end 统一决定
+[Language rule]
+- All natural-language reporting must be in Chinese.
+- Write the result summary, issue report, and step explanation in Chinese.
+- If you create markdown or text artifacts, prefer Chinese unless the current step explicitly requires another language.
+- Do not translate code, JSON keys, API fields, or file paths unless explicitly required.
 
+[Forbidden]
+- Do not call mteam_relinquish_task / mteam_update_task / mteam_close_task proactively.
+- Do not replace agent_end.
+- Do not turn the current step into a whole-task plan.
 `;
 
       const subagentRun = api.runtime?.subagent?.run({
         sessionKey,
-        message: `[M-Team Task #${taskId}] \n\n${systemPrompt}`,
+        message: `[M-Team Task #${taskId}]\n\n${systemPrompt}`,
       }).catch((_runErr: unknown) => {
-        api.logger?.error('[m-team] subagent.run 异步启动失败，回滚任务状态');
+        api.logger?.error('[m-team] subagent.run failed, rolling back task state');
         relinquishTask(taskId, agentId);
         return { runId: null };
       });
 
       const subagentResult = await subagentRun;
 
-      return textResult(`✅ 任务认领成功\n${formatTaskAsText(task!)}`, {
+      return textResult(`OK claimed task\n${formatTaskAsText(task!)}`, {
         success: result.success,
         taskId: result.taskId,
         task: sanitized,

@@ -48,16 +48,8 @@ export interface ContextStepOutput {
   [key: string]: unknown;
 }
 
-export interface StepOutputSpec {
-  kind: 'file' | 'json' | 'text' | 'report' | 'code_change' | 'command_result';
-  path?: string;
-  name?: string;
-  formatHint?: string;
-  required?: boolean;
-}
-
 export interface StepContract {
-  expectedOutputs: StepOutputSpec[];
+  expectedOutcome?: string;
   doneWhen: string[];
   constraints?: string[];
   inputHints?: string[];
@@ -107,20 +99,20 @@ function normalizeStringList(input: unknown): string[] | undefined {
 function normalizeStepContract(stepContract: StepContract | undefined): StepContract | undefined {
   if (!stepContract) return undefined;
 
-  const expectedOutputs = Array.isArray(stepContract.expectedOutputs)
-    ? stepContract.expectedOutputs
-      .filter((item): item is StepOutputSpec => !!item && typeof item === 'object' && typeof item.kind === 'string')
-      .map(item => ({
-        kind: item.kind,
-        ...(typeof item.path === 'string' && item.path.trim() ? { path: item.path.trim() } : {}),
-        ...(typeof item.name === 'string' && item.name.trim() ? { name: item.name.trim() } : {}),
-        ...(typeof item.formatHint === 'string' && item.formatHint.trim() ? { formatHint: item.formatHint.trim() } : {}),
-        ...(typeof item.required === 'boolean' ? { required: item.required } : {}),
-      }))
-    : [];
+  const legacyExpectedOutputs = (stepContract as StepContract & {
+    expectedOutputs?: Array<{ path?: string; name?: string; kind?: string }>;
+  }).expectedOutputs;
+  const normalizedExpectedOutcome = typeof stepContract.expectedOutcome === 'string' && stepContract.expectedOutcome.trim()
+    ? stepContract.expectedOutcome.trim()
+    : Array.isArray(legacyExpectedOutputs) && legacyExpectedOutputs.length > 0
+      ? legacyExpectedOutputs
+        .map(item => item.path ?? item.name ?? item.kind)
+        .filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+        .join(', ')
+      : undefined;
 
   return {
-    expectedOutputs,
+    ...(normalizedExpectedOutcome ? { expectedOutcome: normalizedExpectedOutcome } : {}),
     doneWhen: normalizeStringList(stepContract.doneWhen) ?? [],
     ...(normalizeStringList(stepContract.constraints) ? { constraints: normalizeStringList(stepContract.constraints) } : {}),
     ...(normalizeStringList(stepContract.inputHints) ? { inputHints: normalizeStringList(stepContract.inputHints) } : {}),
@@ -173,8 +165,8 @@ export function validateTask(task: unknown): ValidationResult {
       errors.push('stepContract must be an object');
     } else {
       const stepContract = t.stepContract as Record<string, unknown>;
-      if (!Array.isArray(stepContract.expectedOutputs) || stepContract.expectedOutputs.length === 0) {
-        errors.push('stepContract.expectedOutputs must contain at least one output spec');
+      if (stepContract.expectedOutcome !== undefined && typeof stepContract.expectedOutcome !== 'string') {
+        errors.push('stepContract.expectedOutcome must be a string when provided');
       }
       if (!Array.isArray(stepContract.doneWhen) || stepContract.doneWhen.length === 0) {
         errors.push('stepContract.doneWhen must contain at least one completion rule');
@@ -296,8 +288,8 @@ export function formatTaskForHuman(input: Task): string {
     `Status: ${getStatusLabel(task.status)}`,
   ];
 
-  if (task.stepContract?.expectedOutputs?.length) {
-    lines.push(`Expected outputs: ${task.stepContract.expectedOutputs.map(item => item.path ?? item.name ?? item.kind).join(', ')}`);
+  if (task.stepContract?.expectedOutcome) {
+    lines.push(`Expected outcome: ${task.stepContract.expectedOutcome}`);
   }
   if (task.stepContract?.doneWhen?.length) {
     lines.push(`Done when: ${task.stepContract.doneWhen.join(' | ')}`);

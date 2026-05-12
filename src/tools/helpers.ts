@@ -121,15 +121,9 @@ export function formatTaskAsText(task: Task, options?: { includeGoal?: boolean }
   if (includeGoal) lines.push(`Goal: ${task.goal}`);
   lines.push(`Current step: ${task.description}`);
 
-  if (task.stepContract?.expectedOutputs?.length) {
-    lines.push('\n[Expected outputs]');
-    for (const output of task.stepContract.expectedOutputs) {
-      const parts: string[] = [output.kind];
-      if (output.path) parts.push(output.path);
-      else if (output.name) parts.push(output.name);
-      if (output.formatHint) parts.push(`(${output.formatHint})`);
-      lines.push(`- ${parts.join(' ')}`);
-    }
+  if (task.stepContract?.expectedOutcome) {
+    lines.push('\n[Expected outcome]');
+    lines.push(`- ${task.stepContract.expectedOutcome}`);
   }
   if (task.stepContract?.doneWhen?.length) {
     lines.push('\n[Done when]');

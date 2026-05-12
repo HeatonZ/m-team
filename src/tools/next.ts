@@ -33,7 +33,7 @@ function normalizeContextOutput(raw: unknown): Record<string, unknown> | undefin
 function normalizeStepContract(raw: StepContractInterface | undefined): StepContractInterface | undefined {
   if (!raw) return undefined;
   return {
-    expectedOutputs: Array.isArray(raw.expectedOutputs) ? raw.expectedOutputs : [],
+    ...(typeof raw.expectedOutcome === 'string' && raw.expectedOutcome.trim() ? { expectedOutcome: raw.expectedOutcome.trim() } : {}),
     doneWhen: Array.isArray(raw.doneWhen) ? raw.doneWhen.filter((item): item is string => typeof item === 'string' && item.trim().length > 0) : [],
     ...(Array.isArray(raw.constraints) ? { constraints: raw.constraints.filter((item): item is string => typeof item === 'string' && item.trim().length > 0) } : {}),
     ...(Array.isArray(raw.inputHints) ? { inputHints: raw.inputHints.filter((item): item is string => typeof item === 'string' && item.trim().length > 0) } : {}),

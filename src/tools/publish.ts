@@ -46,20 +46,8 @@ function normalizeLineList(input: unknown): string[] | undefined {
 
 function normalizeStepContract(raw: StepContractInterface | undefined): StepContractInterface | undefined {
   if (!raw) return undefined;
-  const expectedOutputs = Array.isArray(raw.expectedOutputs)
-    ? raw.expectedOutputs
-      .filter((item): item is NonNullable<StepContractInterface['expectedOutputs']>[number] => !!item && typeof item === 'object' && typeof item.kind === 'string')
-      .map(item => ({
-        kind: item.kind,
-        ...(typeof item.path === 'string' && item.path.trim() ? { path: item.path.trim() } : {}),
-        ...(typeof item.name === 'string' && item.name.trim() ? { name: item.name.trim() } : {}),
-        ...(typeof item.formatHint === 'string' && item.formatHint.trim() ? { formatHint: item.formatHint.trim() } : {}),
-        ...(typeof item.required === 'boolean' ? { required: item.required } : {}),
-      }))
-    : [];
-
   return {
-    expectedOutputs,
+    ...(typeof raw.expectedOutcome === 'string' && raw.expectedOutcome.trim() ? { expectedOutcome: raw.expectedOutcome.trim() } : {}),
     doneWhen: normalizeLineList(raw.doneWhen) ?? [],
     ...(normalizeLineList(raw.constraints) ? { constraints: normalizeLineList(raw.constraints) } : {}),
     ...(normalizeLineList(raw.inputHints) ? { inputHints: normalizeLineList(raw.inputHints) } : {}),
@@ -78,7 +66,7 @@ function countAny(text: string, words: string[]): number {
 
 function buildDefaultStepContract(description: string): StepContractInterface {
   return {
-    expectedOutputs: [{ kind: 'report', path: 'step_result.md', formatHint: 'markdown', required: true }],
+    expectedOutcome: `Achieve the intended result of this current step: ${description}`,
     doneWhen: [
       `Completed the current step: ${description}`,
       'Produced at least one verifiable output or step summary',
@@ -107,8 +95,7 @@ function validatePublishTaskInput(input: PublishTaskParamsInterface & { publishe
   if (!stepContract) {
     return errors;
   }
-  if (stepContract.expectedOutputs.length === 0) errors.push('stepContract.expectedOutputs must contain at least one output spec.');
-  if (stepContract.expectedOutputs.length > 3) errors.push('stepContract.expectedOutputs must contain at most three items.');
+  if (stepContract.expectedOutcome !== undefined && !stepContract.expectedOutcome.trim()) errors.push('stepContract.expectedOutcome must not be empty when provided.');
   if (stepContract.doneWhen.length === 0) errors.push('stepContract.doneWhen must contain at least one completion rule.');
   if (stepContract.doneWhen.length > 4) errors.push('stepContract.doneWhen must contain at most four rules.');
   if (stepContract.doneWhen.some(item => containsAny(item, SUBJECTIVE_WORDS))) {

@@ -41,11 +41,11 @@ export const TaskDetailModal: FC<TaskDetailModalProps> = ({ task, onClose, onUpd
   return (
     <div className="modal-backdrop open" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className="modal modal-xl">
-        <button className="modal-close" onClick={onClose}>?</button>
+        <button className="modal-close" onClick={onClose}>×</button>
 
         <div className="modal-hero">
           <div>
-            <div className="hero-eyebrow">{TASK_TYPE_LABELS[task.taskType || 'general']} ? {task.taskId}</div>
+            <div className="hero-eyebrow">{TASK_TYPE_LABELS[task.taskType || 'general']} · {task.taskId}</div>
             <h3>{escHtml(task.description)}</h3>
             <div className="modal-goal">Goal: {escHtml(task.goal)}</div>
             <div className="modal-goal modal-flow">{getFlowSummary(task)}</div>
@@ -61,8 +61,8 @@ export const TaskDetailModal: FC<TaskDetailModalProps> = ({ task, onClose, onUpd
           <div className="detail-panel">
             <h4>Task state</h4>
             <Field label="Publisher"><span className="field-value">{escHtml(task.publisher)}</span></Field>
-            <Field label="Current executor"><span className="field-value">{task.executor || '?'}</span></Field>
-            <Field label="Last executor"><span className="field-value">{task.lastExecutor || '?'}</span></Field>
+            <Field label="Current executor"><span className="field-value">{task.executor || '-'}</span></Field>
+            <Field label="Last executor"><span className="field-value">{task.lastExecutor || '-'}</span></Field>
             <Field label="Created at"><span className="field-value">{formatTime(task.createdAt)}</span></Field>
             <Field label="Updated at"><span className="field-value">{formatTime(task.updatedAt)}</span></Field>
             <Field label="Completed at"><span className="field-value">{formatTime(task.completedAt)}</span></Field>
@@ -70,10 +70,10 @@ export const TaskDetailModal: FC<TaskDetailModalProps> = ({ task, onClose, onUpd
 
           <div className="detail-panel detail-panel-accent">
             <h4>Current focus</h4>
-            <Field label="Latest step"><span className="field-value">{latest?.step || '?'}</span></Field>
-            <Field label="Latest summary"><span className="field-value">{latest?.output?.summary || '?'}</span></Field>
-            <Field label="Latest outputs"><span className="field-value">{latest?.output?.files?.join(', ') || '?'}</span></Field>
-            <Field label="Next-step state"><span className="field-value">{task.status === 'pending' && task.context.length > 0 ? 'Queued and waiting for claim' : '?'}</span></Field>
+            <Field label="Latest step"><span className="field-value">{latest?.step || '-'}</span></Field>
+            <Field label="Latest summary"><span className="field-value">{latest?.output?.summary || '-'}</span></Field>
+            <Field label="Latest outputs"><span className="field-value">{latest?.output?.files?.join(', ') || '-'}</span></Field>
+            <Field label="Next-step state"><span className="field-value">{task.status === 'pending' && task.context.length > 0 ? 'Queued and waiting for claim' : '-'}</span></Field>
           </div>
 
           <div className="detail-panel detail-panel-warning">
@@ -97,17 +97,12 @@ export const TaskDetailModal: FC<TaskDetailModalProps> = ({ task, onClose, onUpd
               <div className="empty compact-empty">No explicit contract on this step</div>
             ) : (
               <div className="contract-sections">
-                <div className="contract-block">
-                  <div className="task-summary-label">Expected outputs</div>
-                  <div className="pill-row">
-                    {stepContract.expectedOutputs.map((output, idx) => (
-                      <span className="data-pill" key={`${output.kind}-${output.path ?? output.name ?? idx}`}>
-                        {output.path || output.name || output.kind}
-                        {output.formatHint ? ` (${output.formatHint})` : ''}
-                      </span>
-                    ))}
+                {!!stepContract.expectedOutcome && (
+                  <div className="contract-block">
+                    <div className="task-summary-label">Expected outcome</div>
+                    <div className="field-value modal-block">{escHtml(stepContract.expectedOutcome)}</div>
                   </div>
-                </div>
+                )}
                 <div className="contract-block">
                   <div className="task-summary-label">Done when</div>
                   <ul className="contract-list">
@@ -164,7 +159,7 @@ export const TaskDetailModal: FC<TaskDetailModalProps> = ({ task, onClose, onUpd
                 {steps.map((step, index) => (
                   <div key={index} className="context-step timeline-step">
                     <div className="context-step-header">
-                      <span className="context-step-executor">{escHtml(step.executor || '?')}</span>
+                      <span className="context-step-executor">{escHtml(step.executor || '-')}</span>
                       <span className="context-step-time">{formatTime(step.completedAt)}</span>
                     </div>
                     <div className="context-step-title">{escHtml(step.step)}</div>
@@ -179,7 +174,7 @@ export const TaskDetailModal: FC<TaskDetailModalProps> = ({ task, onClose, onUpd
         </div>
 
         <div className="modal-actions">
-          <button className="btn-edit" onClick={() => setShowEdit(true)}>?? Edit</button>
+          <button className="btn-edit" onClick={() => setShowEdit(true)}>Edit</button>
         </div>
 
         {showEdit && (

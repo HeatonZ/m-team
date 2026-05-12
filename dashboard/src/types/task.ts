@@ -2,16 +2,8 @@ export type TaskStatus = 'pending' | 'running' | 'completed' | 'closed' | 'faile
 export type TaskPriority = 'high' | 'normal' | 'low';
 export type TaskType = 'general' | 'coding' | 'research' | 'ops' | 'data' | 'design' | 'content';
 
-export interface StepOutputSpec {
-  kind: 'file' | 'json' | 'text' | 'report' | 'code_change' | 'command_result';
-  path?: string;
-  name?: string;
-  formatHint?: string;
-  required?: boolean;
-}
-
 export interface StepContract {
-  expectedOutputs: StepOutputSpec[];
+  expectedOutcome?: string;
   doneWhen: string[];
   constraints?: string[];
   inputHints?: string[];

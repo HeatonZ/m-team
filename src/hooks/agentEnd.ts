@@ -228,23 +228,15 @@ function isSameCurrentStepDescription(task: Task, nextDescription: string): bool
 }
 
 function buildNextStepContract(description: string, prior?: StepContract): StepContract {
-  const fallbackPath = description.toLowerCase().includes('json')
-    ? 'step_result.json'
-    : description.toLowerCase().includes('test')
-      ? 'verification_report.md'
-      : 'step_result.md';
-
-  const expectedOutputs = prior?.expectedOutputs?.length
-    ? prior.expectedOutputs.map(item => ({ ...item }))
-    : [{ kind: 'report', path: fallbackPath, formatHint: fallbackPath.endsWith('.json') ? 'json' : 'markdown', required: true } as const];
-
   const doneWhen = [
-    `完成当前步骤：${sanitizeStepInstruction(description) || description}`,
+    `Complete the current step: ${sanitizeStepInstruction(description) || description}`,
     ...(prior?.doneWhen?.slice(0, 1) ?? []),
   ].filter(Boolean).slice(0, 3);
 
   return {
-    expectedOutputs,
+    ...(prior?.expectedOutcome
+      ? { expectedOutcome: prior.expectedOutcome }
+      : { expectedOutcome: `Achieve the intended result of this current step: ${sanitizeStepInstruction(description) || description}` }),
     doneWhen,
     constraints: prior?.constraints?.length
       ? prior.constraints.slice(0, 4)
@@ -451,7 +443,7 @@ export function registerAgentEndHook(api: OpenClawPluginApi): void {
           return;
         }
 
-        const nextStepContract = judged.nextStepContract && judged.nextStepContract.expectedOutputs?.length && judged.nextStepContract.doneWhen?.length
+        const nextStepContract = judged.nextStepContract && judged.nextStepContract.doneWhen?.length
           ? judged.nextStepContract
           : buildNextStepContract(nextDescription, task.stepContract);
         const result = nextTask(taskId, agentId ?? task.executor ?? 'unknown', { step, output: sanitizeStoredOutput({ ...storedOutput, summary: stripGoalLevelLines(judged.summary) ?? storedOutput.summary, unresolvedIssues: judged.unresolvedIssues ?? storedOutput.unresolvedIssues }) }, nextDescription, nextStepContract);
