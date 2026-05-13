@@ -128,7 +128,7 @@ describe('agent_end llm fail-fast e2e', () => {
     const harness = await createPluginHarness({ dashboardEnabled: false });
     try {
       (harness.api as unknown as { runtime: { agentEndJudge: Function } }).runtime.agentEndJudge = async () =>
-        '{"decision":"next","reason":"当前步骤已完成，需要进入下一步","nextDescription":"计算 1×1=1，将结果写入 step2_result.md","nextStepContract":{"expectedOutcome":"得到 1×1=1 的计算结果","doneWhen":["step2_result.md 已生成并包含 1×1=1"]}';
+        '{"decision":"next","reason":"当前步骤已完成，需要进入下一步","nextDescription":"计算 1×1=1，将结果写入 step2_result.md"';
 
       const publishResult = await harness.exec('mteam_publish_task', {
         goal: '完成三步计算并最终汇总',

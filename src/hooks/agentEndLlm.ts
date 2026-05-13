@@ -13,12 +13,6 @@ export type AgentEndDecision = {
   reason: string;
   nextDescription?: string;
   nextTaskType?: Task['taskType'];
-  nextStepContract?: {
-    expectedOutcome?: string;
-    doneWhen: string[];
-    constraints?: string[];
-    inputHints?: string[];
-  };
   summary?: string;
   unresolvedIssues?: string[];
   confidence?: 'low' | 'medium' | 'high';
@@ -140,7 +134,7 @@ function buildDecisionPrompt(params: {
     '[Language rule]',
     '- Your JSON keys must stay in English.',
     '- All natural-language field values must be in Chinese.',
-    '- reason, summary, unresolvedIssues, nextDescription, expectedOutcome, doneWhen, constraints, and inputHints should all be written in Chinese.',
+    '- reason, summary, unresolvedIssues, and nextDescription should all be written in Chinese.',
     '- Do not translate code, JSON keys, API fields, or file paths.',
     '',
     'Allowed decisions: complete | next | fail',
@@ -149,7 +143,6 @@ function buildDecisionPrompt(params: {
     '2. next: use when there is valid progress but the overall goal is not finished, or the current step exposed a clear next action.',
     '2.1 When decision=next, provide nextDescription. It must be one step only, concise, and actionable.',
     '2.2 You may provide nextTaskType when the next step belongs to another task category (general/coding/research/ops/data/design/content).',
-    '2.3 Prefer to also provide nextStepContract with at least expectedOutcome and doneWhen.',
     '3. fail: use only when the task is blocked or there is no safe executable next step.',
     '4. Avoid drift. Judge progress only against the current description, not unrelated side work.',
     '5. The executor reports facts and problems. agent_end decides the next action.',
@@ -158,8 +151,7 @@ function buildDecisionPrompt(params: {
     '8. Keep the JSON concise to avoid truncation:',
     '8.1 reason <= 120 Chinese characters.',
     '8.2 nextDescription <= 80 Chinese characters.',
-    '8.3 doneWhen up to 3 items, each <= 60 Chinese characters.',
-    '8.4 unresolvedIssues up to 3 items.',
+    '8.3 unresolvedIssues up to 3 items.',
     '',
     'Return JSON only. No markdown. No code fences.',
     'JSON schema:',
@@ -168,7 +160,6 @@ function buildDecisionPrompt(params: {
     '  "reason": "string in Chinese",',
     '  "nextDescription": "string in Chinese (required when decision=next)",',
     '  "nextTaskType": "general|coding|research|ops|data|design|content" (optional),',
-    '  "nextStepContract": { "expectedOutcome": "string in Chinese", "doneWhen":["..."], "constraints":["..."], "inputHints":["..."] } (optional),',
     '  "summary": "string in Chinese (optional)",',
     '  "unresolvedIssues": ["string in Chinese", ...] (optional),',
     '  "confidence": "low|medium|high"',
@@ -240,24 +231,12 @@ function parseDecisionLoose(raw: string): AgentEndDecision | null {
   const confidence = extractQuotedField(raw, 'confidence');
   const summary = extractQuotedField(raw, 'summary');
   const unresolvedIssues = extractArrayField(raw, 'unresolvedIssues');
-  const expectedOutcome = extractQuotedField(raw, 'expectedOutcome');
-  const doneWhen = extractArrayField(raw, 'doneWhen');
-  const constraints = extractArrayField(raw, 'constraints');
-  const inputHints = extractArrayField(raw, 'inputHints');
 
   return {
     decision,
     reason,
     nextDescription,
     nextTaskType,
-    nextStepContract: decision === 'next' && (expectedOutcome || doneWhen?.length || constraints?.length || inputHints?.length)
-      ? {
-        ...(expectedOutcome ? { expectedOutcome } : {}),
-        doneWhen: doneWhen?.length ? doneWhen : [`Complete the current step: ${nextDescription ?? ''}`].filter(Boolean),
-        ...(constraints?.length ? { constraints } : {}),
-        ...(inputHints?.length ? { inputHints } : {}),
-      }
-      : undefined,
     summary,
     unresolvedIssues,
     confidence: confidence === 'low' || confidence === 'medium' || confidence === 'high' ? confidence : undefined,
@@ -295,9 +274,6 @@ function parseDecision(raw: string): AgentEndDecision | null {
         reason: reason.trim(),
         nextDescription,
         nextTaskType,
-        nextStepContract: parsed.nextStepContract && typeof parsed.nextStepContract === 'object'
-          ? parsed.nextStepContract as AgentEndDecision['nextStepContract']
-          : undefined,
         summary: typeof parsed.summary === 'string' && parsed.summary.trim() ? parsed.summary.trim() : undefined,
         unresolvedIssues: Array.isArray(parsed.unresolvedIssues)
           ? parsed.unresolvedIssues.map(item => String(item).trim()).filter(Boolean).slice(0, 10)

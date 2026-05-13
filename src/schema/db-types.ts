@@ -15,7 +15,6 @@ export interface TaskRow {
   task_type: string;
   description: string;
   goal: string;
-  step_contract: string | null;
   context: string;
   priority: string;
   publisher: string;
@@ -34,7 +33,6 @@ export function serializeTask(input: Task): TaskRow {
     task_type: task.taskType,
     description: task.description,
     goal: task.goal,
-    step_contract: task.stepContract ? JSON.stringify(task.stepContract) : null,
     context: JSON.stringify(task.context),
     priority: task.priority,
     publisher: task.publisher,
@@ -53,7 +51,6 @@ export function deserializeTask(row: TaskRow): Task {
     taskType: (row.task_type ?? 'general') as TaskType,
     description: row.description,
     goal: row.goal,
-    ...(row.step_contract ? { stepContract: JSON.parse(row.step_contract) } : {}),
     context: JSON.parse(row.context),
     priority: row.priority as TaskPriority,
     publisher: row.publisher,

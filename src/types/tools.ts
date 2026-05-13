@@ -18,39 +18,6 @@ export interface ContextStepOutputInterface {
   [key: string]: unknown;
 }
 
-export const StepContractSchema = {
-  type: 'object' as const,
-  properties: {
-    expectedOutcome: {
-      type: 'string' as const,
-      description: 'What result the current step is expected to achieve',
-    },
-    doneWhen: {
-      type: 'array' as const,
-      description: 'Verifiable completion criteria for the current step',
-      items: { type: 'string' as const },
-    },
-    constraints: {
-      type: 'array' as const,
-      description: 'Scope and drift-prevention constraints for the current step',
-      items: { type: 'string' as const },
-    },
-    inputHints: {
-      type: 'array' as const,
-      description: 'Optional hints about allowed inputs for the current step',
-      items: { type: 'string' as const },
-    },
-  },
-  required: ['doneWhen'] as const,
-} as const;
-
-export interface StepContractInterface {
-  expectedOutcome?: string;
-  doneWhen: string[];
-  constraints?: string[];
-  inputHints?: string[];
-}
-
 export const PublishTaskParams = {
   type: 'object' as const,
   properties: {
@@ -61,7 +28,6 @@ export const PublishTaskParams = {
       description: 'Task category for coarse routing',
       enum: ['general', 'coding', 'research', 'ops', 'data', 'design', 'content'],
     },
-    stepContract: StepContractSchema,
     publisher: { type: 'string', description: 'Publisher; defaults to current toolContext.agentId if omitted' },
     priority: { type: 'string', description: 'Priority: high / normal / low', enum: ['high', 'normal', 'low'] },
   },
@@ -72,7 +38,6 @@ export interface PublishTaskParamsInterface {
   goal: string;
   description: string;
   taskType: 'general' | 'coding' | 'research' | 'ops' | 'data' | 'design' | 'content';
-  stepContract?: StepContractInterface;
   publisher?: string;
   priority?: 'high' | 'normal' | 'low';
 }
@@ -116,7 +81,6 @@ export const RejectTaskParams = {
     taskId: { type: 'string', description: 'Task ID' },
     reason: { type: 'string', description: 'Rejection reason' },
     description: { type: 'string', description: 'Next current-step description after rejection' },
-    stepContract: StepContractSchema,
   },
   required: ['taskId', 'reason', 'description'] as const,
 } as const;
@@ -134,7 +98,6 @@ export const NextTaskParams = {
       description: 'Optional next taskType for routing the next step',
       enum: ['general', 'coding', 'research', 'ops', 'data', 'design', 'content'],
     },
-    stepContract: StepContractSchema,
   },
   required: ['taskId', 'agentId', 'contextStep', 'description'] as const,
 } as const;
@@ -199,7 +162,6 @@ export interface RejectTaskParamsInterface {
   taskId: string;
   reason: string;
   description: string;
-  stepContract?: StepContractInterface;
 }
 
 export interface NextTaskParamsInterface {
@@ -209,7 +171,6 @@ export interface NextTaskParamsInterface {
   contextOutput?: ContextStepOutputInterface;
   description: string;
   nextTaskType?: 'general' | 'coding' | 'research' | 'ops' | 'data' | 'design' | 'content';
-  stepContract?: StepContractInterface;
 }
 
 export interface RelinquishTaskParamsInterface {

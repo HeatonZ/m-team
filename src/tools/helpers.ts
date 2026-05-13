@@ -2,7 +2,7 @@
  * Task display and sanitization helpers.
  */
 
-import type { StepContract, Task } from '../schema/task.js';
+import type { Task } from '../schema/task.js';
 import { PRIORITY_LABELS, TASK_TYPE_LABELS, getStatusLabel } from '../schema/task.js';
 
 export function sanitizeTask(task: Task): Omit<Task, 'goal'> {
@@ -18,7 +18,6 @@ export interface ExecutorTaskView {
   taskId: string;
   taskType: Task['taskType'];
   description: string;
-  stepContract?: StepContract;
   priority: Task['priority'];
   publisher: string;
   status: Task['status'];
@@ -97,7 +96,6 @@ export function buildExecutorTaskView(task: Task): ExecutorTaskView {
     taskId: task.taskId,
     taskType: task.taskType,
     description: task.description,
-    ...(task.stepContract ? { stepContract: task.stepContract } : {}),
     priority: task.priority,
     publisher: task.publisher,
     status: task.status,
@@ -135,23 +133,6 @@ export function formatTaskAsText(task: Task, options?: { includeGoal?: boolean }
   ];
   if (includeGoal) lines.push(`Goal: ${task.goal}`);
   lines.push(`Current step: ${task.description}`);
-
-  if (task.stepContract?.expectedOutcome) {
-    lines.push('\n[Expected outcome]');
-    lines.push(`- ${task.stepContract.expectedOutcome}`);
-  }
-  if (task.stepContract?.doneWhen?.length) {
-    lines.push('\n[Done when]');
-    for (const item of task.stepContract.doneWhen.slice(0, 4)) lines.push(`- ${item}`);
-  }
-  if (task.stepContract?.constraints?.length) {
-    lines.push('\n[Constraints]');
-    for (const item of task.stepContract.constraints.slice(0, 4)) lines.push(`- ${item}`);
-  }
-  if (task.stepContract?.inputHints?.length) {
-    lines.push('\n[Input hints]');
-    for (const item of task.stepContract.inputHints.slice(0, 3)) lines.push(`- ${item}`);
-  }
 
   lines.push(`Publisher: ${task.publisher}`);
   if (task.executor) lines.push(`Executor: ${task.executor}`);

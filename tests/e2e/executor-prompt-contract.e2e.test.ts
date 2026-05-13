@@ -15,11 +15,6 @@ describe('executor prompt contract e2e', () => {
         description: 'collect 3 candidate items',
         taskType: 'general',
         publisher: 'manager',
-        stepContract: {
-          expectedOutcome: 'produce a structured 3-item candidate result',
-          doneWhen: ['candidates.md exists', 'contains at least 3 candidates'],
-          constraints: ['only work on the current step'],
-        },
       }) as ToolResult<PublishDetails>;
       const taskId = extractDetails(publishResult)!.taskId;
 

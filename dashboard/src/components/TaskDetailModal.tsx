@@ -36,7 +36,6 @@ export const TaskDetailModal: FC<TaskDetailModalProps> = ({ task, onClose, onUpd
   const steps = task.context as ContextStepEntry[];
   const latest = getLatestStep(task);
   const latestIssues = getLatestIssues(task);
-  const stepContract = task.stepContract;
 
   return (
     <div className="modal-backdrop open" onClick={(e) => e.target === e.currentTarget && onClose()}>
@@ -91,44 +90,6 @@ export const TaskDetailModal: FC<TaskDetailModalProps> = ({ task, onClose, onUpd
         </div>
 
         <div className="detail-grid detail-grid-bottom">
-          <div className="detail-panel detail-panel-wide">
-            <h4>Step Contract</h4>
-            {!stepContract ? (
-              <div className="empty compact-empty">No explicit contract on this step</div>
-            ) : (
-              <div className="contract-sections">
-                {!!stepContract.expectedOutcome && (
-                  <div className="contract-block">
-                    <div className="task-summary-label">Expected outcome</div>
-                    <div className="field-value modal-block">{escHtml(stepContract.expectedOutcome)}</div>
-                  </div>
-                )}
-                <div className="contract-block">
-                  <div className="task-summary-label">Done when</div>
-                  <ul className="contract-list">
-                    {stepContract.doneWhen.map((item, idx) => <li key={`${item}-${idx}`}>{escHtml(item)}</li>)}
-                  </ul>
-                </div>
-                {!!stepContract.constraints?.length && (
-                  <div className="contract-block">
-                    <div className="task-summary-label">Constraints</div>
-                    <ul className="contract-list">
-                      {stepContract.constraints.map((item, idx) => <li key={`${item}-${idx}`}>{escHtml(item)}</li>)}
-                    </ul>
-                  </div>
-                )}
-                {!!stepContract.inputHints?.length && (
-                  <div className="contract-block">
-                    <div className="task-summary-label">Input hints</div>
-                    <ul className="contract-list">
-                      {stepContract.inputHints.map((item, idx) => <li key={`${item}-${idx}`}>{escHtml(item)}</li>)}
-                    </ul>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-
           <div className="detail-panel detail-panel-wide">
             <h4>Latest evidence</h4>
             <div className="field-value modal-block">

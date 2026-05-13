@@ -2,13 +2,6 @@ export type TaskStatus = 'pending' | 'running' | 'completed' | 'closed' | 'faile
 export type TaskPriority = 'high' | 'normal' | 'low';
 export type TaskType = 'general' | 'coding' | 'research' | 'ops' | 'data' | 'design' | 'content';
 
-export interface StepContract {
-  expectedOutcome?: string;
-  doneWhen: string[];
-  constraints?: string[];
-  inputHints?: string[];
-}
-
 export interface ContextStepOutput {
   summary?: string;
   files?: string[];
@@ -35,7 +28,6 @@ export interface Task {
   taskType?: TaskType;
   goal: string;
   description: string;
-  stepContract?: StepContract;
   context: ContextEntry[];
   priority: TaskPriority;
   status: TaskStatus;

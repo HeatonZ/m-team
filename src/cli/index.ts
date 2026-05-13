@@ -229,7 +229,7 @@ async function cmdTasks(argv: string[]) {
       const contextEntry = step ? { step, output: {} } : null;
       let task = null;
       try {
-        task = updateTask(taskId, status ?? null, contextEntry, description ?? null, null, updatedAtRaw ? parseInt(updatedAtRaw, 10) : null, executorId ?? null);
+        task = updateTask(taskId, status ?? null, contextEntry, description ?? null, updatedAtRaw ? parseInt(updatedAtRaw, 10) : null, executorId ?? null);
       } catch (err) {
         fatal(err instanceof Error ? err.message : String(err));
       }
@@ -295,7 +295,7 @@ async function cmdHeartbeat(argv: string[]) {
     return;
   }
 
-  const task = updateTask(activeTask.taskId, null, null, null, null, Date.now(), null);
+  const task = updateTask(activeTask.taskId, null, null, null, Date.now(), null);
   ok({ agentId, heartbeat: true, taskId: activeTask.taskId, updatedAt: task?.updatedAt });
 }
 

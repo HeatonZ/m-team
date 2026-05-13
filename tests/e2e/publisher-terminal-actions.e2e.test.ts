@@ -134,7 +134,7 @@ describe('publisher terminal actions e2e', () => {
         task.updatedAt = task.completedAt;
       });
 
-      expect(() => updateTask(taskId, 'pending', null, null, null, null, null)).toThrow('TASK_TERMINAL_FAILED_IMMUTABLE');
+      expect(() => updateTask(taskId, 'pending', null, null, null, null)).toThrow('TASK_TERMINAL_FAILED_IMMUTABLE');
       expect(harness.readTask(taskId)?.status).toBe('failed');
     } finally {
       await harness.cleanup();

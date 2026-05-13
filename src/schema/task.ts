@@ -48,13 +48,6 @@ export interface ContextStepOutput {
   [key: string]: unknown;
 }
 
-export interface StepContract {
-  expectedOutcome?: string;
-  doneWhen: string[];
-  constraints?: string[];
-  inputHints?: string[];
-}
-
 export interface ContextStepEntry {
   type: 'step';
   executor: string;
@@ -70,7 +63,6 @@ export interface Task {
   taskType: TaskType;
   goal: string;
   description: string;
-  stepContract?: StepContract;
   context: ContextEntry[];
   priority: TaskPriority;
   publisher: string;
@@ -96,21 +88,6 @@ function normalizeStringList(input: unknown): string[] | undefined {
   return values.length ? values : undefined;
 }
 
-function normalizeStepContract(stepContract: StepContract | undefined): StepContract | undefined {
-  if (!stepContract) return undefined;
-
-  const normalizedExpectedOutcome = typeof stepContract.expectedOutcome === 'string' && stepContract.expectedOutcome.trim()
-    ? stepContract.expectedOutcome.trim()
-    : undefined;
-
-  return {
-    ...(normalizedExpectedOutcome ? { expectedOutcome: normalizedExpectedOutcome } : {}),
-    doneWhen: normalizeStringList(stepContract.doneWhen) ?? [],
-    ...(normalizeStringList(stepContract.constraints) ? { constraints: normalizeStringList(stepContract.constraints) } : {}),
-    ...(normalizeStringList(stepContract.inputHints) ? { inputHints: normalizeStringList(stepContract.inputHints) } : {}),
-  };
-}
-
 export function normalizeTask(task: Task): Task {
   const normalizedContext = (task.context ?? [])
     .filter((entry): entry is ContextStepEntry => {
@@ -126,7 +103,6 @@ export function normalizeTask(task: Task): Task {
 
   return {
     ...task,
-    ...(normalizeStepContract(task.stepContract) ? { stepContract: normalizeStepContract(task.stepContract) } : {}),
     context: normalizedContext,
   };
 }
@@ -151,19 +127,6 @@ export function validateTask(task: unknown): ValidationResult {
   }
   if (t.taskType && !VALID_TASK_TYPES.includes(t.taskType as TaskType)) {
     errors.push(`taskType must be one of: ${VALID_TASK_TYPES.join(', ')}`);
-  }
-  if (t.stepContract !== undefined) {
-    if (!t.stepContract || typeof t.stepContract !== 'object') {
-      errors.push('stepContract must be an object');
-    } else {
-      const stepContract = t.stepContract as Record<string, unknown>;
-      if (stepContract.expectedOutcome !== undefined && typeof stepContract.expectedOutcome !== 'string') {
-        errors.push('stepContract.expectedOutcome must be a string when provided');
-      }
-      if (!Array.isArray(stepContract.doneWhen) || stepContract.doneWhen.length === 0) {
-        errors.push('stepContract.doneWhen must contain at least one completion rule');
-      }
-    }
   }
   if (Array.isArray(t.context)) {
     for (let i = 0; i < t.context.length; i++) {
@@ -193,7 +156,6 @@ export interface TaskPatch {
   executor?: string | null;
   lastExecutor?: string | null;
   description?: string;
-  stepContract?: string;
   context?: string;
   completedAt?: number | null;
   updatedAt?: number;
@@ -203,7 +165,6 @@ export interface CreateTaskInput {
   taskType?: TaskType;
   goal: string;
   description: string;
-  stepContract?: StepContract;
   publisher?: string;
   priority?: TaskPriority;
 }
@@ -213,7 +174,6 @@ export function createTask(input: CreateTaskInput): Task {
     taskType = TaskType.GENERAL,
     goal,
     description,
-    stepContract,
     publisher = 'user',
     priority = TaskPriority.NORMAL,
   } = input;
@@ -223,7 +183,6 @@ export function createTask(input: CreateTaskInput): Task {
     taskType,
     description: String(description),
     goal: String(goal),
-    ...(stepContract ? { stepContract: normalizeStepContract(stepContract) } : {}),
     context: [],
     priority,
     publisher: publisher || 'user',
@@ -279,13 +238,6 @@ export function formatTaskForHuman(input: Task): string {
     `Priority: ${PRIORITY_LABELS[task.priority] ?? 'Normal'}`,
     `Status: ${getStatusLabel(task.status)}`,
   ];
-
-  if (task.stepContract?.expectedOutcome) {
-    lines.push(`Expected outcome: ${task.stepContract.expectedOutcome}`);
-  }
-  if (task.stepContract?.doneWhen?.length) {
-    lines.push(`Done when: ${task.stepContract.doneWhen.join(' | ')}`);
-  }
 
   const stepCount = task.context.length;
   lines.push(stepCount === 0 ? 'No step completed yet' : `Completed ${stepCount} step(s)`);

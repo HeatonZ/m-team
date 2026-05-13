@@ -19,7 +19,7 @@ import {
   formatNextNotifications,
   formatTaskNotifications,
 } from '../notifications.js';
-import { TaskStatus, type ContextStepOutput, type StepContract, type Task } from '../schema/task.js';
+import { TaskStatus, type ContextStepOutput, type Task } from '../schema/task.js';
 
 const DEFAULT_AGENT_END_JUDGE_TIMEOUT_MS = 90_000;
 
@@ -165,24 +165,6 @@ function sanitizeStoredOutput(output: ContextStepOutput): ContextStepOutput {
 }
 
 
-function buildNextStepContract(description: string, prior?: StepContract): StepContract {
-  const doneWhen = [
-    `Complete the current step: ${sanitizeStepInstruction(description) || description}`,
-    ...(prior?.doneWhen?.slice(0, 1) ?? []),
-  ].filter(Boolean).slice(0, 3);
-
-  return {
-    ...(prior?.expectedOutcome
-      ? { expectedOutcome: prior.expectedOutcome }
-      : { expectedOutcome: `Achieve the intended result of this current step: ${sanitizeStepInstruction(description) || description}` }),
-    doneWhen,
-    constraints: prior?.constraints?.length
-      ? prior.constraints.slice(0, 4)
-      : ['Only execute the current step', 'Do not expand into a whole-task plan'],
-    ...(prior?.inputHints?.length ? { inputHints: prior.inputHints.slice(0, 3) } : {}),
-  };
-}
-
 function hasNoRealIssues(output: ContextStepOutput): boolean {
   const issues = (output.unresolvedIssues ?? []).filter(issue => !isNonIssueLine(issue));
   return issues.length === 0 && !output.error;
@@ -257,7 +239,6 @@ function buildLlmLogData(llmDecision: AgentEndJudgeResult | null): Record<string
       confidence: llmDecision.decision.confidence,
       nextDescription: llmDecision.decision.nextDescription ?? null,
       nextTaskType: llmDecision.decision.nextTaskType ?? null,
-      nextStepContract: llmDecision.decision.nextStepContract ?? null,
       summary: llmDecision.decision.summary ?? null,
       unresolvedIssues: llmDecision.decision.unresolvedIssues ?? [],
     },
@@ -352,11 +333,8 @@ export function registerAgentEndHook(api: OpenClawPluginApi): void {
           return;
         }
 
-        const nextStepContract = judged.nextStepContract && judged.nextStepContract.doneWhen?.length
-          ? judged.nextStepContract
-          : buildNextStepContract(nextDescription, task.stepContract);
-        const result = nextTask(taskId, agentId ?? task.executor ?? 'unknown', { step, output: sanitizeStoredOutput({ ...storedOutput, summary: stripGoalLevelLines(judged.summary) ?? storedOutput.summary, unresolvedIssues: judged.unresolvedIssues ?? storedOutput.unresolvedIssues }) }, nextDescription, judged.nextTaskType, nextStepContract);
-        writeTaskLog({ taskId, action: 'next', sessionKey: sessionKey ?? undefined, agentId: agentId ?? undefined, result: { success: result.success, decision: 'next', via: 'llm', nextDescription, nextTaskType: judged.nextTaskType ?? null, nextStepContract, confidence: judged.confidence, reason: judged.reason, llm: buildLlmLogData(llmDecision), fallback: null, evidence: { summary: normalizedOutput.summary ?? '', files: normalizedOutput.files ?? [], unresolvedIssues: normalizedOutput.unresolvedIssues ?? [], error: normalizedOutput.error ?? null } } });
+        const result = nextTask(taskId, agentId ?? task.executor ?? 'unknown', { step, output: sanitizeStoredOutput({ ...storedOutput, summary: stripGoalLevelLines(judged.summary) ?? storedOutput.summary, unresolvedIssues: judged.unresolvedIssues ?? storedOutput.unresolvedIssues }) }, nextDescription, judged.nextTaskType);
+        writeTaskLog({ taskId, action: 'next', sessionKey: sessionKey ?? undefined, agentId: agentId ?? undefined, result: { success: result.success, decision: 'next', via: 'llm', nextDescription, nextTaskType: judged.nextTaskType ?? null, confidence: judged.confidence, reason: judged.reason, llm: buildLlmLogData(llmDecision), fallback: null, evidence: { summary: normalizedOutput.summary ?? '', files: normalizedOutput.files ?? [], unresolvedIssues: normalizedOutput.unresolvedIssues ?? [], error: normalizedOutput.error ?? null } } });
         if (judged.nextTaskType && judged.nextTaskType !== task.taskType) {
           api.logger?.info?.(`[m-team] agent_end taskType transition taskId=${taskId} ${task.taskType} -> ${judged.nextTaskType}`);
         }
@@ -389,7 +367,7 @@ export function registerAgentEndHook(api: OpenClawPluginApi): void {
         error: failReason,
         unresolvedIssues: storedOutput.unresolvedIssues?.length ? storedOutput.unresolvedIssues : [failReason],
       }),
-    }, { outcome: 'blocked', error: failReason });
+    });
     writeTaskLog({
       taskId,
       action: 'fail',

@@ -31,16 +31,11 @@ function getLatestIssues(task: Task): string[] {
   return getLatestStep(task)?.output?.unresolvedIssues ?? [];
 }
 
-function getContractHeadline(task: Task): string {
-  return task.stepContract?.expectedOutcome || 'No explicit contract';
-}
-
 export const TaskCard: FC<TaskCardProps> = ({ task, onClick, decorator }) => {
   const latest = getLatestStep(task);
   const nextKind = getNextKind(task);
   const latestIssues = getLatestIssues(task);
   const latestFiles = latest?.output?.files ?? [];
-  const doneWhen = task.stepContract?.doneWhen ?? [];
 
   return (
     <div className={`task-card task-card-${nextKind}`} onClick={() => onClick(task.taskId)}>
@@ -57,12 +52,6 @@ export const TaskCard: FC<TaskCardProps> = ({ task, onClick, decorator }) => {
       </div>
 
       <div className="task-description">{escHtml(task.description)}</div>
-
-      <div className="task-contract-card">
-        <div className="task-summary-label">Current step contract</div>
-        <div className="task-contract-main">{escHtml(getContractHeadline(task))}</div>
-        {doneWhen.length > 0 && <div className="task-contract-sub">Done when: {escHtml(doneWhen[0])}</div>}
-      </div>
 
       <div className="task-summary-card">
         <div className="task-summary-label">Latest summary</div>

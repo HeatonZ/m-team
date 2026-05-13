@@ -12,17 +12,7 @@ import { formatTaskAsText } from './helpers.js';
 import { formatRejectNotifications } from '../notifications.js';
 import { sendNotifications } from '../notifications.js';
 import { RejectTaskParams } from '../types/tools.js';
-import type { RejectTaskParamsInterface, StepContractInterface } from '../types/tools.js';
-
-function normalizeStepContract(raw: StepContractInterface | undefined): StepContractInterface | undefined {
-  if (!raw) return undefined;
-  return {
-    ...(typeof raw.expectedOutcome === 'string' && raw.expectedOutcome.trim() ? { expectedOutcome: raw.expectedOutcome.trim() } : {}),
-    doneWhen: Array.isArray(raw.doneWhen) ? raw.doneWhen.filter((item): item is string => typeof item === 'string' && item.trim().length > 0) : [],
-    ...(Array.isArray(raw.constraints) ? { constraints: raw.constraints.filter((item): item is string => typeof item === 'string' && item.trim().length > 0) } : {}),
-    ...(Array.isArray(raw.inputHints) ? { inputHints: raw.inputHints.filter((item): item is string => typeof item === 'string' && item.trim().length > 0) } : {}),
-  };
-}
+import type { RejectTaskParamsInterface } from '../types/tools.js';
 
 export function register(
   api: OpenClawPluginApi,
@@ -44,8 +34,7 @@ export function register(
       }
 
       const nextDescription = description.trim();
-      const nextStepContract = normalizeStepContract(rawParams.stepContract);
-      const result = rejectTask(taskId, publisher, reason, nextDescription, nextStepContract);
+      const result = rejectTask(taskId, publisher, reason, nextDescription);
       if (!result.success) {
         return textResult(`❌ reject failed: ${result.reason}`, { success: false, reason: result.reason });
       }

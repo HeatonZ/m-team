@@ -10,7 +10,7 @@ import { publishTask, getTask } from '../pool/index.js';
 import { formatTaskAsText } from './helpers.js';
 import { formatPublishNotifications, sendNotifications } from '../notifications.js';
 import { PublishTaskParams } from '../types/tools.js';
-import type { PublishTaskParamsInterface, StepContractInterface } from '../types/tools.js';
+import type { PublishTaskParamsInterface } from '../types/tools.js';
 
 function inferPublisher(rawParams: PublishTaskParamsInterface, toolContext?: OpenClawPluginToolContext): string {
   const explicitPublisher = rawParams.publisher?.trim();
@@ -26,43 +26,16 @@ type PublishToolParams = PublishTaskParamsInterface & {
   toolContext?: OpenClawPluginToolContext;
 };
 
-function normalizeLineList(input: unknown): string[] | undefined {
-  if (!Array.isArray(input)) return undefined;
-  const values = input
-    .filter((item): item is string => typeof item === 'string')
-    .map(item => item.trim())
-    .filter(Boolean);
-  return values.length ? values : undefined;
-}
-
-function normalizeStepContract(raw: StepContractInterface | undefined): StepContractInterface | undefined {
-  if (!raw) return undefined;
-  return {
-    ...(typeof raw.expectedOutcome === 'string' && raw.expectedOutcome.trim() ? { expectedOutcome: raw.expectedOutcome.trim() } : {}),
-    doneWhen: normalizeLineList(raw.doneWhen) ?? [],
-    ...(normalizeLineList(raw.constraints) ? { constraints: normalizeLineList(raw.constraints) } : {}),
-    ...(normalizeLineList(raw.inputHints) ? { inputHints: normalizeLineList(raw.inputHints) } : {}),
-  };
-}
-
 function validatePublishTaskInput(input: PublishTaskParamsInterface & { publisher: string }): string[] {
   const errors: string[] = [];
   const goal = input.goal.trim();
   const description = input.description.trim();
-  const stepContract = normalizeStepContract(input.stepContract);
 
   if (!goal) errors.push('goal is required.');
   if (!description) errors.push('description is required.');
   if (description.length > 120) errors.push('description is too long; keep it within 120 characters and only describe the current step.');
   if (goal.length > 200) errors.push('goal is too long; keep it within 200 characters and only describe final success.');
   if (goal === description) errors.push('goal and description must not be identical.');
-
-  if (!stepContract) {
-    return errors;
-  }
-  if (stepContract.expectedOutcome !== undefined && !stepContract.expectedOutcome.trim()) errors.push('stepContract.expectedOutcome must not be empty when provided.');
-  if (stepContract.doneWhen.length === 0) errors.push('stepContract.doneWhen must contain at least one completion rule.');
-  if (stepContract.doneWhen.length > 4) errors.push('stepContract.doneWhen must contain at most four rules.');
 
   return errors;
 }
@@ -84,8 +57,7 @@ export function register(api: OpenClawPluginApi, config: MTeamPluginConfig): voi
       if (!taskType) {
         throw new Error('mteam_publish_task invalid input:\n- taskType is required.');
       }
-      const stepContract = normalizeStepContract(params.stepContract);
-      const validationErrors = validatePublishTaskInput({ ...params, publisher, stepContract });
+      const validationErrors = validatePublishTaskInput({ ...params, publisher });
       if (validationErrors.length) {
         throw new Error(`mteam_publish_task invalid input:\n- ${validationErrors.join('\n- ')}`);
       }
@@ -94,7 +66,6 @@ export function register(api: OpenClawPluginApi, config: MTeamPluginConfig): voi
         taskType,
         description,
         goal,
-        stepContract,
         publisher,
         priority,
       });

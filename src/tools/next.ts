@@ -9,7 +9,7 @@ import { nextTask } from '../pool/index.js';
 import { formatTaskAsText } from './helpers.js';
 import { formatNextNotifications, sendNotifications } from '../notifications.js';
 import { NextTaskParams } from '../types/tools.js';
-import type { NextTaskParamsInterface, StepContractInterface } from '../types/tools.js';
+import type { NextTaskParamsInterface } from '../types/tools.js';
 import { VALID_TASK_TYPES, type TaskType } from '../schema/task.js';
 
 function normalizeContextOutput(raw: unknown): Record<string, unknown> | undefined {
@@ -29,16 +29,6 @@ function normalizeContextOutput(raw: unknown): Record<string, unknown> | undefin
     return raw as Record<string, unknown>;
   }
   return undefined;
-}
-
-function normalizeStepContract(raw: StepContractInterface | undefined): StepContractInterface | undefined {
-  if (!raw) return undefined;
-  return {
-    ...(typeof raw.expectedOutcome === 'string' && raw.expectedOutcome.trim() ? { expectedOutcome: raw.expectedOutcome.trim() } : {}),
-    doneWhen: Array.isArray(raw.doneWhen) ? raw.doneWhen.filter((item): item is string => typeof item === 'string' && item.trim().length > 0) : [],
-    ...(Array.isArray(raw.constraints) ? { constraints: raw.constraints.filter((item): item is string => typeof item === 'string' && item.trim().length > 0) } : {}),
-    ...(Array.isArray(raw.inputHints) ? { inputHints: raw.inputHints.filter((item): item is string => typeof item === 'string' && item.trim().length > 0) } : {}),
-  };
 }
 
 function normalizeTaskType(raw: string | undefined): TaskType | undefined {
@@ -62,10 +52,9 @@ export function register(
       const taskId = readTaskId(rawParams, 'taskId', { required: true })!;
       const { agentId, contextStep, contextOutput, description, nextTaskType } = rawParams;
       const normalizedContextOutput = normalizeContextOutput(contextOutput) ?? {};
-      const normalizedStepContract = normalizeStepContract(rawParams.stepContract);
       const normalizedNextTaskType = normalizeTaskType(nextTaskType);
 
-      const result = nextTask(taskId, agentId, { step: contextStep, output: normalizedContextOutput }, description, normalizedNextTaskType, normalizedStepContract);
+      const result = nextTask(taskId, agentId, { step: contextStep, output: normalizedContextOutput }, description, normalizedNextTaskType);
       if (!result.success) return failedTextResult(result.reason || '操作失败', { success: result.success, reason: result.reason });
 
       if (result.task && config.notifications?.length) {
