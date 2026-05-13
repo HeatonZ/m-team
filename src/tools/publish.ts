@@ -1,4 +1,4 @@
-/**
+﻿/**
  * mteam_publish_task
  */
 
@@ -19,7 +19,7 @@ function inferPublisher(rawParams: PublishTaskParamsInterface, toolContext?: Ope
   const contextAgentId = toolContext?.agentId?.trim();
   if (contextAgentId) return contextAgentId;
 
-  throw new Error('mteam_publish_task \u7f3a\u5c11 publisher');
+  throw new Error('mteam_publish_task 缺少 publisher');
 }
 
 type PublishToolParams = PublishTaskParamsInterface & {
@@ -44,19 +44,21 @@ export function register(api: OpenClawPluginApi, config: MTeamPluginConfig): voi
   api.logger?.info('[m-team] registering mteam_publish_task');
   api.registerTool({
     name: 'mteam_publish_task',
-    label: '\u53d1\u5e03\u4efb\u52a1',
-    description: '\u53d1\u5e03\u4efb\u52a1\u5230 M-Team \u4efb\u52a1\u6c60',
+    label: 'Publish task',
+    description: 'Publish task into M-Team queue',
     parameters: PublishTaskParams,
     async execute(_toolCallId: string, rawParams: unknown) {
       const params = rawParams as PublishToolParams;
       const toolContext = params.toolContext;
       const publisher = inferPublisher(params, toolContext);
+
       api.logger?.info?.(`[m-team] publish execute sessionKey=${toolContext?.sessionKey ?? 'missing-session-key'} agentId=${toolContext?.agentId?.trim() ?? 'missing-agent-id'} rawPublisher=${params.publisher?.trim() ?? 'missing'} effectivePublisher=${publisher}`);
 
       const { description, goal, taskType, priority } = params;
       if (!taskType) {
         throw new Error('mteam_publish_task invalid input:\n- taskType is required.');
       }
+
       const validationErrors = validatePublishTaskInput({ ...params, publisher });
       if (validationErrors.length) {
         throw new Error(`mteam_publish_task invalid input:\n- ${validationErrors.join('\n- ')}`);
@@ -82,7 +84,7 @@ export function register(api: OpenClawPluginApi, config: MTeamPluginConfig): voi
         }
       }
 
-      return textResult(`\u2705 task published\n${task ? formatTaskAsText(task) : `ID: ${taskId}`}`, { taskId });
+      return textResult(`task published\n${task ? formatTaskAsText(task) : `ID: ${taskId}`}`, { taskId });
     },
   });
 }

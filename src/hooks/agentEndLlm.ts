@@ -1,4 +1,4 @@
-import type { OpenClawConfig, PluginRuntime } from 'openclaw/plugin-sdk/core';
+﻿import type { OpenClawConfig, PluginRuntime } from 'openclaw/plugin-sdk/core';
 import {
   completeWithPreparedSimpleCompletionModel,
   prepareSimpleCompletionModelForAgent,
@@ -117,7 +117,7 @@ function buildDecisionPrompt(params: {
 }): string {
   const { task, transcript, output } = params;
   const contextLines = task.context
-    .filter(entry => entry.type === 'step')
+    .filter((entry) => entry.type === 'step')
     .slice(-8)
     .map((entry, index) => {
       const files = entry.output?.files?.length ? ` | files=${entry.output.files.join(', ')}` : '';
@@ -128,27 +128,27 @@ function buildDecisionPrompt(params: {
 
   return [
     'You are the m-team agent_end adjudicator.',
-    'Decide the task state from the overall goal, the current description, recent context, and the executor transcript.',
-    'Do not trust an executor claiming completion unless the evidence supports it.',
+    'Decide task state from goal, current step, recent context, and executor transcript.',
+    'Do not trust completion claims without evidence.',
     '',
     '[Language rule]',
-    '- Your JSON keys must stay in English.',
-    '- All natural-language field values must be in Chinese.',
-    '- reason, summary, unresolvedIssues, and nextDescription should all be written in Chinese.',
+    '- Keep JSON keys in English.',
+    '- Write natural-language values in Chinese.',
+    '- reason, summary, unresolvedIssues, nextDescription should be Chinese.',
     '- Do not translate code, JSON keys, API fields, or file paths.',
     '',
     'Allowed decisions: complete | next | fail',
     'Rules:',
-    '1. complete: only when the current step is complete, the overall goal is satisfied, there are no unresolved issues, and there is no clear next step.',
-    '2. next: use when there is valid progress but the overall goal is not finished, or the current step exposed a clear next action.',
-    '2.1 When decision=next, provide nextDescription. It must be one step only, concise, and actionable.',
-    '2.2 You may provide nextTaskType when the next step belongs to another task category (general/coding/research/ops/data/design/content).',
-    '3. fail: use only when the task is blocked or there is no safe executable next step.',
-    '4. Avoid drift. Judge progress only against the current description, not unrelated side work.',
-    '5. The executor reports facts and problems. agent_end decides the next action.',
-    '6. nextDescription must describe only the next current step. Do not paste history, long problem text, or whole-task commentary into it.',
-    '7. If the transcript is vague and lacks evidence, do not return complete.',
-    '8. Keep the JSON concise to avoid truncation:',
+    '1. complete only when step done + goal achieved + no unresolved issues + no next action.',
+    '2. next when there is progress but goal not done, or a clear next action exists.',
+    '2.1 For next, nextDescription is required, one-step, concise, actionable.',
+    '2.2 nextTaskType is optional when routing should change (general/coding/research/ops/data/design/content).',
+    '3. fail only when blocked or no safe executable next step.',
+    '4. Avoid drift; judge against current description.',
+    '5. Executor reports facts; agent_end decides next action.',
+    '6. nextDescription must contain only next current step.',
+    '7. If transcript lacks evidence, do not return complete.',
+    '8. Keep JSON concise:',
     '8.1 reason <= 120 Chinese characters.',
     '8.2 nextDescription <= 80 Chinese characters.',
     '8.3 unresolvedIssues up to 3 items.',
@@ -184,22 +184,25 @@ function extractQuotedField(raw: string, field: string): string | undefined {
     new RegExp(`"${field}"\\s*:\\s*"((?:\\\\.|[^"\\\\])*)"`, 'i'),
     new RegExp(`${field}\\s*[:=]\\s*"((?:\\\\.|[^"\\\\])*)"`, 'i'),
   ];
+
   for (const pattern of patterns) {
     const match = raw.match(pattern);
-    if (match?.[1]) {
-      try {
-        return JSON.parse(`"${match[1]}"`).trim();
-      } catch {
-        return match[1].replace(/\\"/g, '"').trim();
-      }
+    if (!match?.[1]) continue;
+
+    try {
+      return JSON.parse(`"${match[1]}"`).trim();
+    } catch {
+      return match[1].replace(/\\"/g, '"').trim();
     }
   }
+
   return undefined;
 }
 
 function extractArrayField(raw: string, field: string): string[] | undefined {
   const match = raw.match(new RegExp(`"${field}"\\s*:\\s*\\[([\\s\\S]*?)\\]`, 'i'));
   if (!match?.[1]) return undefined;
+
   const values = [...match[1].matchAll(/"((?:\\.|[^"\\])*)"/g)]
     .map((item) => {
       try {
@@ -210,6 +213,7 @@ function extractArrayField(raw: string, field: string): string[] | undefined {
     })
     .filter(Boolean)
     .slice(0, 10);
+
   return values.length ? values : undefined;
 }
 
@@ -224,6 +228,7 @@ function parseDecisionLoose(raw: string): AgentEndDecision | null {
     ? extractQuotedField(raw, 'nextDescription')
     : undefined;
   if (decision === 'next' && !nextDescription) return null;
+
   const nextTaskType = decision === 'next'
     ? normalizeDecisionTaskType(extractQuotedField(raw, 'nextTaskType'))
     : undefined;
@@ -246,10 +251,13 @@ function parseDecisionLoose(raw: string): AgentEndDecision | null {
 function parseDecision(raw: string): AgentEndDecision | null {
   const trimmed = raw.trim();
   const candidates = [trimmed];
+
   const latestJson = extractLatestJsonObject(trimmed);
   if (latestJson) candidates.unshift(latestJson);
+
   const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i)?.[1]?.trim();
   if (fenced) candidates.push(fenced);
+
   const objectSlice = trimmed.match(/\{[\s\S]*\}/)?.[0];
   if (objectSlice) candidates.push(objectSlice);
 
@@ -258,17 +266,22 @@ function parseDecision(raw: string): AgentEndDecision | null {
       const parsed = JSON.parse(candidate) as Record<string, unknown>;
       const decision = parsed.decision;
       const reason = parsed.reason;
+
       if (!['complete', 'next', 'fail'].includes(String(decision)) || typeof reason !== 'string' || !reason.trim()) {
         continue;
       }
+
       const nextDescription = typeof parsed.nextDescription === 'string' && parsed.nextDescription.trim()
         ? parsed.nextDescription.trim()
         : undefined;
+
       if (decision === 'next' && !nextDescription) {
         continue;
       }
+
       const confidence = parsed.confidence;
       const nextTaskType = decision === 'next' ? normalizeDecisionTaskType(parsed.nextTaskType) : undefined;
+
       return {
         decision: decision as AgentEndDecision['decision'],
         reason: reason.trim(),
@@ -276,7 +289,7 @@ function parseDecision(raw: string): AgentEndDecision | null {
         nextTaskType,
         summary: typeof parsed.summary === 'string' && parsed.summary.trim() ? parsed.summary.trim() : undefined,
         unresolvedIssues: Array.isArray(parsed.unresolvedIssues)
-          ? parsed.unresolvedIssues.map(item => String(item).trim()).filter(Boolean).slice(0, 10)
+          ? parsed.unresolvedIssues.map((item) => String(item).trim()).filter(Boolean).slice(0, 10)
           : undefined,
         confidence: confidence === 'low' || confidence === 'medium' || confidence === 'high' ? confidence : undefined,
       };
@@ -284,6 +297,7 @@ function parseDecision(raw: string): AgentEndDecision | null {
       continue;
     }
   }
+
   return parseDecisionLoose(trimmed);
 }
 
@@ -323,19 +337,25 @@ export async function judgeAgentEndWithLlm(params: {
 
       if (typeof judged === 'string') {
         const parsed = parseDecision(judged);
-        return parsed ? { ok: true, decision: parsed, raw: judged } : { ok: false, error: 'RUNTIME_AGENT_END_JUDGE_PARSE_FAILED', raw: judged };
+        return parsed
+          ? { ok: true, decision: parsed, raw: judged }
+          : { ok: false, error: 'RUNTIME_AGENT_END_JUDGE_PARSE_FAILED', raw: judged };
       }
+
       if (judged && typeof judged === 'object' && typeof judged.decision === 'string' && typeof judged.reason === 'string') {
         const judgedRecord = judged as Record<string, unknown>;
         if (judged.decision === 'next' && !(typeof judged.nextDescription === 'string' && judged.nextDescription.trim())) {
           return { ok: false, error: 'RUNTIME_AGENT_END_JUDGE_NEXT_WITHOUT_NEXT_DESCRIPTION', raw: JSON.stringify(judged) };
         }
+
         const normalizedJudged: AgentEndDecision = {
           ...judged,
           nextTaskType: judged.decision === 'next' ? normalizeDecisionTaskType(judgedRecord.nextTaskType) : undefined,
         };
+
         return { ok: true, decision: normalizedJudged, raw: JSON.stringify(judged) };
       }
+
       return { ok: false, error: 'RUNTIME_AGENT_END_JUDGE_EMPTY' };
     } catch (err) {
       return { ok: false, error: err instanceof Error ? err.message : String(err) };
@@ -406,6 +426,7 @@ export async function judgeAgentEndWithLlm(params: {
     ? (assistantMessage as AssistantMessageLike).errorMessage.trim()
     : '';
   const outputTokens = Number((assistantMessage as AssistantMessageLike).usage?.output ?? 0);
+
   const stopReasonIsErrorLike = stopReason === 'error' || stopReason === 'aborted';
   const stopReasonIsLength = stopReason === 'length';
 
@@ -430,5 +451,6 @@ export async function judgeAgentEndWithLlm(params: {
   if (!decision) {
     return { ok: false, error: 'LLM_DECISION_PARSE_FAILED', raw };
   }
+
   return { ok: true, decision, raw };
 }

@@ -1,17 +1,17 @@
-/**
+﻿/**
  * M-Team CLI
  *
- * 用法:
+ * Usage:
  *   npx tsx src/cli/index.ts tasks create --goal "..." --description "..."
  *   npx tsx src/cli/index.ts tasks list --status pending
  *   npx tsx src/cli/index.ts tasks get <taskId>
  *   npx tsx src/cli/index.ts tasks claim <taskId> --agent-id <agentId>
- *   npx tsx src/cli/index.ts tasks complete <taskId> --step "..." [--summary "..."]
- *   npx tsx src/cli/index.ts tasks next <taskId> --agent-id <agentId> --step "..." [--description "..."]
- *   npx tsx src/cli/index.ts tasks cancel <taskId> --publisher <publisher>
+ *   npx tsx src/cli/index.ts tasks complete <taskId> --step "..." [--summary "..."] [--files "a,b"]
+ *   npx tsx src/cli/index.ts tasks next <taskId> --agent-id <agentId> --step "..." [--summary "..."] [--description "..."]
+ *   npx tsx src/cli/index.ts tasks cancel <taskId> --publisher <publisher> [--reason "..."]
  *   npx tsx src/cli/index.ts tasks close <taskId> --publisher <publisher>
  *   npx tsx src/cli/index.ts tasks relinquish <taskId> --executor-id <executorId> [--reason "..."]
- *   npx tsx src/cli/index.ts tasks update <taskId> [--status] [--step] [--description]
+ *   npx tsx src/cli/index.ts tasks touch <taskId> [--executor-id <executorId>]
  *   npx tsx src/cli/index.ts executors list
  *   npx tsx src/cli/index.ts executors active --agent-id <agentId>
  *   npx tsx src/cli/index.ts heartbeat --agent-id <agentId>
@@ -29,8 +29,17 @@ import {
   getTask,
   getAgentActiveTask,
 } from '../pool/index.js';
-import { publishTask, claimTask, updateTask, relinquishTask, nextTask, cancelTask, completeTask, closeTask } from '../pool/index.js';
-import { TaskStatus } from '../schema/task.js';
+import {
+  publishTask,
+  claimTask,
+  updateTask,
+  relinquishTask,
+  nextTask,
+  cancelTask,
+  completeTask,
+  closeTask,
+} from '../pool/index.js';
+import { TaskStatus, VALID_TASK_TYPES, type TaskType } from '../schema/task.js';
 
 const WORKSPACE = process.env.WORKSPACE_ROOT || '/mnt/d/code/m-team';
 setWorkspaceRoot(WORKSPACE);
@@ -47,9 +56,19 @@ function ok(data: unknown): void {
 function parseStatus(s: string | undefined): string | undefined {
   if (!s) return undefined;
   if (!Object.values(TaskStatus).includes(s as TaskStatus)) {
-    fatal(`无效状态: ${s}，可用值: ${Object.values(TaskStatus).join(', ')}`);
+    fatal(`invalid status: ${s}; allowed: ${Object.values(TaskStatus).join(', ')}`);
   }
   return s;
+}
+
+function parseTaskType(value: string | undefined): TaskType | undefined {
+  if (!value) return undefined;
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) return undefined;
+  if (!VALID_TASK_TYPES.includes(normalized as TaskType)) {
+    fatal(`invalid taskType: ${value}; allowed: ${VALID_TASK_TYPES.join(', ')}`);
+  }
+  return normalized as TaskType;
 }
 
 async function cmdTasks(argv: string[]) {
@@ -58,14 +77,14 @@ async function cmdTasks(argv: string[]) {
 
   switch (sub) {
     case 'create': {
-      const goal = args.find(a => a === '--goal' || a === '-g') ? args[args.indexOf('--goal') + 1] ?? args[args.indexOf('-g') + 1] : undefined;
-      const description = args.find(a => a === '--description' || a === '-d') ? args[args.indexOf('--description') + 1] ?? args[args.indexOf('-d') + 1] : undefined;
+      const goal = extract(args, '--goal', '-g');
+      const description = extract(args, '--description', '-d');
       const taskType = extract(args, '--task-type');
       const publisher = extract(args, '--publisher', '-p');
       const priority = extract(args, '--priority');
 
-      if (!goal) fatal('--goal 必须提供');
-      if (!description) fatal('--description 必须提供');
+      if (!goal) fatal('--goal is required');
+      if (!description) fatal('--description is required');
 
       const taskId = publishTask({
         taskType: taskType ?? undefined,
@@ -91,7 +110,7 @@ async function cmdTasks(argv: string[]) {
         case 'cancelled': tasks = getCancelledTasks(); break;
         case 'closed': tasks = getClosedTasks(); break;
         case 'all': tasks = getAllTasks(); break;
-        default: fatal(`未知状态: ${status}`);
+        default: fatal(`unknown status: ${status}`);
       }
 
       ok({ status, count: tasks.length, tasks });
@@ -100,9 +119,9 @@ async function cmdTasks(argv: string[]) {
 
     case 'get': {
       const taskId = args[0];
-      if (!taskId) fatal('缺少 taskId');
+      if (!taskId) fatal('taskId is required');
       const task = getTask(taskId);
-      if (!task) fatal(`任务不存在: ${taskId}`);
+      if (!task) fatal(`task not found: ${taskId}`);
       ok({ task });
       break;
     }
@@ -110,12 +129,12 @@ async function cmdTasks(argv: string[]) {
     case 'claim': {
       const taskId = args[0];
       const agentId = extract(args, '--agent-id');
-      if (!taskId) fatal('缺少 taskId');
-      if (!agentId) fatal('--agent-id 必须提供');
+      if (!taskId) fatal('taskId is required');
+      if (!agentId) fatal('--agent-id is required');
 
       const result = claimTask(taskId, agentId);
       if (!result.success) {
-        console.error(`[mteam] claim 失败: ${result.reason}`);
+        console.error(`[mteam] claim failed: ${result.reason}`);
         process.exit(1);
       }
       ok(result);
@@ -128,16 +147,19 @@ async function cmdTasks(argv: string[]) {
       const summary = extract(args, '--summary');
       const files = extract(args, '--files');
 
-      if (!taskId) fatal('缺少 taskId');
-      if (!step) fatal('--step 必须提供');
+      if (!taskId) fatal('taskId is required');
+      if (!step) fatal('--step is required');
 
       const contextOutput = summary || files
-        ? { summary: summary ?? '', files: files ? files.split(',').map(f => f.trim()) : [] }
+        ? {
+          ...(summary ? { summary } : {}),
+          ...(files ? { files: files.split(',').map((f) => f.trim()).filter(Boolean) } : {}),
+        }
         : undefined;
 
       const result = completeTask(taskId, { step, output: contextOutput ?? {} });
       if (!result.success) {
-        console.error(`[mteam] complete 失败: ${result.reason}`);
+        console.error(`[mteam] complete failed: ${result.reason}`);
         process.exit(1);
       }
       ok({ success: true, task: result.task });
@@ -150,15 +172,16 @@ async function cmdTasks(argv: string[]) {
       const step = extract(args, '--step', '-s');
       const summary = extract(args, '--summary');
       const description = extract(args, '--description', '-d');
+      const nextTaskType = parseTaskType(extract(args, '--next-task-type'));
 
-      if (!taskId) fatal('缺少 taskId');
-      if (!agentId) fatal('--agent-id 必须提供');
-      if (!step) fatal('--step 必须提供');
+      if (!taskId) fatal('taskId is required');
+      if (!agentId) fatal('--agent-id is required');
+      if (!step) fatal('--step is required');
 
       const contextOutput = summary ? { summary } : undefined;
-      const result = nextTask(taskId, agentId, { step, output: contextOutput ?? {} }, description);
+      const result = nextTask(taskId, agentId, { step, output: contextOutput ?? {} }, description, nextTaskType);
       if (!result.success) {
-        console.error(`[mteam] next 失败: ${result.reason}`);
+        console.error(`[mteam] next failed: ${result.reason}`);
         process.exit(1);
       }
       ok({ success: true, task: result.task });
@@ -170,12 +193,12 @@ async function cmdTasks(argv: string[]) {
       const publisher = extract(args, '--publisher', '-p');
       const reason = extract(args, '--reason', '-r');
 
-      if (!taskId) fatal('缺少 taskId');
-      if (!publisher) fatal('--publisher 必须提供');
+      if (!taskId) fatal('taskId is required');
+      if (!publisher) fatal('--publisher is required');
 
       const result = cancelTask(taskId, publisher, reason ?? undefined);
       if (!result.success) {
-        console.error(`[mteam] cancel 失败: ${result.reason}`);
+        console.error(`[mteam] cancel failed: ${result.reason}`);
         process.exit(1);
       }
       ok({ success: true, task: result.task });
@@ -186,12 +209,12 @@ async function cmdTasks(argv: string[]) {
       const taskId = args[0];
       const publisher = extract(args, '--publisher', '-p');
 
-      if (!taskId) fatal('缺少 taskId');
-      if (!publisher) fatal('--publisher 必须提供');
+      if (!taskId) fatal('taskId is required');
+      if (!publisher) fatal('--publisher is required');
 
       const result = closeTask(taskId, publisher);
       if (!result.success) {
-        console.error(`[mteam] close 失败: ${result.reason}`);
+        console.error(`[mteam] close failed: ${result.reason}`);
         process.exit(1);
       }
       ok({ success: true, task: result.task });
@@ -203,15 +226,27 @@ async function cmdTasks(argv: string[]) {
       const executorId = extract(args, '--executor-id');
       const reason = extract(args, '--reason', '-r');
 
-      if (!taskId) fatal('缺少 taskId');
-      if (!executorId) fatal('--executor-id 必须提供');
+      if (!taskId) fatal('taskId is required');
+      if (!executorId) fatal('--executor-id is required');
 
       const result = relinquishTask(taskId, executorId, reason ?? 'cli_relinquish');
       if (!result.success) {
-        console.error(`[mteam] relinquish 失败: ${result.reason}`);
+        console.error(`[mteam] relinquish failed: ${result.reason}`);
         process.exit(1);
       }
       ok({ success: true, reason: result.reason, task: result.task });
+      break;
+    }
+
+    case 'touch': {
+      const taskId = args[0];
+      const executorId = extract(args, '--executor-id') ?? null;
+
+      if (!taskId) fatal('taskId is required');
+
+      const task = updateTask(taskId, null, null, null, Date.now(), executorId);
+      if (!task) fatal(`task not found: ${taskId}`);
+      ok({ success: true, taskId, updatedAt: task.updatedAt });
       break;
     }
 
@@ -223,23 +258,30 @@ async function cmdTasks(argv: string[]) {
       const updatedAtRaw = extract(args, '--updated-at');
       const executorId = extract(args, '--executor-id');
 
-      if (!taskId) fatal('缺少 taskId');
-      if (!status && !step && !description) fatal('至少需要 --status / --step / --description 之一');
+      if (!taskId) fatal('taskId is required');
+      if (!status && !step && !description) fatal('at least one of --status / --step / --description is required');
 
       const contextEntry = step ? { step, output: {} } : null;
       let task = null;
       try {
-        task = updateTask(taskId, status ?? null, contextEntry, description ?? null, updatedAtRaw ? parseInt(updatedAtRaw, 10) : null, executorId ?? null);
+        task = updateTask(
+          taskId,
+          status ?? null,
+          contextEntry,
+          description ?? null,
+          updatedAtRaw ? parseInt(updatedAtRaw, 10) : null,
+          executorId ?? null,
+        );
       } catch (err) {
         fatal(err instanceof Error ? err.message : String(err));
       }
-      if (!task) fatal(`任务不存在: ${taskId}`);
+      if (!task) fatal(`task not found: ${taskId}`);
       ok({ task });
       break;
     }
 
     default:
-      fatal(`未知 tasks 子命令: ${sub}，可用: create, list, get, claim, complete, next, cancel, close, relinquish, update`);
+      fatal(`unknown tasks command: ${sub}; available: create, list, get, claim, complete, next, cancel, close, relinquish, touch, update`);
   }
 }
 
@@ -273,7 +315,7 @@ async function cmdExecutors(argv: string[]) {
 
     case 'active': {
       const agentId = extract(args, '--agent-id');
-      if (!agentId) fatal('--agent-id 必须提供');
+      if (!agentId) fatal('--agent-id is required');
 
       const activeTask = getAgentActiveTask(agentId);
       ok({ agentId, activeTask });
@@ -281,13 +323,13 @@ async function cmdExecutors(argv: string[]) {
     }
 
     default:
-      fatal(`未知 executors 子命令: ${sub}，可用: list, active`);
+      fatal(`unknown executors command: ${sub}; available: list, active`);
   }
 }
 
 async function cmdHeartbeat(argv: string[]) {
   const agentId = extract(argv, '--agent-id', '-a');
-  if (!agentId) fatal('--agent-id 必须提供');
+  if (!agentId) fatal('--agent-id is required');
 
   const activeTask = getAgentActiveTask(agentId);
   if (!activeTask) {
@@ -316,15 +358,15 @@ async function main() {
   if (!sub) {
     console.log(`M-Team CLI
 
-用法:
+Usage:
   mteam tasks <command> [options]
   mteam executors <command> [options]
   mteam heartbeat --agent-id <agentId>
 
-子命令:
-  tasks       任务管理 (create|list|get|claim|complete|next|cancel|close|relinquish|update)
-  executors   Executor 管理 (list|active)
-  heartbeat   心跳保活
+Subcommands:
+  tasks       create|list|get|claim|complete|next|cancel|close|relinquish|touch|update
+  executors   list|active
+  heartbeat   refresh active-task heartbeat
 `);
     process.exit(0);
   }
@@ -335,7 +377,7 @@ async function main() {
       case 'executors': await cmdExecutors(rest); break;
       case 'heartbeat': await cmdHeartbeat(rest); break;
       default:
-        fatal(`未知子命令: ${sub}`);
+        fatal(`unknown command: ${sub}`);
     }
   } catch (err) {
     fatal(String(err));

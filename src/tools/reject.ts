@@ -1,6 +1,6 @@
-/**
- * mteam_reject_task 工具定义
- * Publisher 验收不通过，将任务打回 pending 池子
+﻿/**
+ * mteam_reject_task tool definition.
+ * Publisher rejects acceptance and sends task back to pending.
  */
 
 import type { OpenClawPluginApi } from 'openclaw/plugin-sdk';
@@ -16,13 +16,13 @@ import type { RejectTaskParamsInterface } from '../types/tools.js';
 
 export function register(
   api: OpenClawPluginApi,
-  config: MTeamPluginConfig
+  config: MTeamPluginConfig,
 ): void {
   api.logger?.info('[m-team] registering mteam_reject_task');
   api.registerTool({
     name: 'mteam_reject_task',
-    label: '驳回任务',
-    description: 'Publisher 验收不通过，驳回任务到 pending 池子（仅 Publisher 使用）',
+    label: 'Reject task',
+    description: 'Publisher rejects a completed task and sets the next step',
     parameters: RejectTaskParams,
     async execute(_toolCallId: string, rawParams: RejectTaskParamsInterface) {
       const taskId = readTaskId(rawParams, 'taskId', { required: true })!;
@@ -36,7 +36,7 @@ export function register(
       const nextDescription = description.trim();
       const result = rejectTask(taskId, publisher, reason, nextDescription);
       if (!result.success) {
-        return textResult(`❌ reject failed: ${result.reason}`, { success: false, reason: result.reason });
+        return textResult(`reject failed: ${result.reason}`, { success: false, reason: result.reason });
       }
       const task = result.task;
 
@@ -44,12 +44,12 @@ export function register(
         try {
           const notifications = formatRejectNotifications(task, config.notifications);
           await sendNotifications(notifications, api.logger ?? null);
-        } catch (e) {
-          api.logger?.warn('[m-team] 驳回通知发送失败');
+        } catch {
+          api.logger?.warn('[m-team] reject notifications failed');
         }
       }
 
-      return textResult(`🔁 任务已驳回\n${task ? formatTaskAsText(task, { includeGoal: true }) : `任务 ${taskId}`}`, { task });
+      return textResult(`任务已驳回\n${task ? formatTaskAsText(task, { includeGoal: true }) : `Task ${taskId}`}`, { task });
     },
   });
 }

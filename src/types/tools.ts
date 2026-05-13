@@ -1,35 +1,37 @@
-/**
+﻿/**
  * Tool parameter schemas.
  */
 
 export const ContextOutputSchema = {
   type: 'object' as const,
-  description: 'Step output payload',
+  description: 'Current step output payload',
   properties: {
-    summary: { type: 'string', description: 'Step summary' },
-    files: { type: 'array', items: { type: 'string' }, description: 'Relative file paths inside the task directory' },
+    summary: { type: 'string', description: 'Current step summary' },
+    files: { type: 'array', items: { type: 'string' }, description: 'Artifact file paths' },
+    unresolvedIssues: { type: 'array', items: { type: 'string' }, description: 'Blocking issues from this step' },
+    error: { type: 'string', description: 'Primary blocking error for this step' },
   },
 } as const;
 
 export interface ContextStepOutputInterface {
   summary?: string;
   files?: string[];
+  unresolvedIssues?: string[];
   error?: string;
-  [key: string]: unknown;
 }
 
 export const PublishTaskParams = {
   type: 'object' as const,
   properties: {
-    goal: { type: 'string', description: 'Overall goal; only for agent_end and publisher acceptance, not for executor execution' },
-    description: { type: 'string', description: 'Current step only. One step, one action.' },
+    goal: { type: 'string', description: 'Overall final goal, only for adjudication and publisher acceptance' },
+    description: { type: 'string', description: 'Current step only (one step, one action)' },
     taskType: {
       type: 'string',
-      description: 'Task category for coarse routing',
+      description: 'Task category for routing',
       enum: ['general', 'coding', 'research', 'ops', 'data', 'design', 'content'],
     },
     publisher: { type: 'string', description: 'Publisher; defaults to current toolContext.agentId if omitted' },
-    priority: { type: 'string', description: 'Priority: high / normal / low', enum: ['high', 'normal', 'low'] },
+    priority: { type: 'string', description: 'Priority', enum: ['high', 'normal', 'low'] },
   },
   required: ['goal', 'description', 'taskType'] as const,
 } as const;
@@ -60,7 +62,7 @@ export const CancelTaskParams = {
   type: 'object' as const,
   properties: {
     taskId: { type: 'string', description: 'Task ID' },
-    publisher: { type: 'string', description: 'Publisher; must match the original publisher' },
+    publisher: { type: 'string', description: 'Publisher; must match original publisher' },
     reason: { type: 'string', description: 'Cancellation reason' },
   },
   required: ['taskId', 'publisher'] as const,
@@ -70,7 +72,7 @@ export const CloseTaskParams = {
   type: 'object' as const,
   properties: {
     taskId: { type: 'string', description: 'Task ID' },
-    publisher: { type: 'string', description: 'Publisher; must match the original publisher' },
+    publisher: { type: 'string', description: 'Publisher; must match original publisher' },
   },
   required: ['taskId', 'publisher'] as const,
 } as const;

@@ -1,5 +1,5 @@
-/**
- * mteam_relinquish_task 工具定义
+﻿/**
+ * mteam_relinquish_task tool definition.
  */
 
 import type { OpenClawPluginApi } from 'openclaw/plugin-sdk';
@@ -16,13 +16,13 @@ const STALE_RUNNING_TASK_TIMEOUT_MS = 60 * 60 * 1000;
 
 export function register(
   api: OpenClawPluginApi,
-  config: MTeamPluginConfig
+  config: MTeamPluginConfig,
 ): void {
   api.logger?.info('[m-team] registering mteam_relinquish_task');
   api.registerTool({
     name: 'mteam_relinquish_task',
-    label: '放弃任务',
-    description: 'Executor 主动放弃当前任务（放回 pending）',
+    label: 'Relinquish task',
+    description: 'Executor relinquishes a running task back to pending',
     parameters: RelinquishTaskParams,
     async execute(_toolCallId: string, rawParams: RelinquishTaskParamsInterface) {
       const taskId = readTaskId(rawParams, 'taskId', { required: true })!;
@@ -30,10 +30,11 @@ export function register(
       const toolContext = (rawParams as RelinquishTaskParamsInterface & {
         toolContext?: { sessionKey?: string; agentId?: string };
       }).toolContext;
+
       const isPublisherHeartbeat = Boolean(
         toolContext?.sessionKey?.endsWith(':heartbeat')
         && toolContext?.agentId
-        && config.publishers?.includes(toolContext.agentId)
+        && config.publishers?.includes(toolContext.agentId),
       );
 
       if (isPublisherHeartbeat) {
@@ -56,18 +57,24 @@ export function register(
       }
 
       const result = relinquishTask(taskId, executorId, reason ?? 'executor_relinquish');
-      if (!result.success) return failedTextResult(result.reason || '操作失败', { success: result.success, reason: result.reason });
+      if (!result.success) {
+        return failedTextResult(result.reason || 'Operation failed', { success: result.success, reason: result.reason });
+      }
 
-      if (result.success && result.task && config.notifications?.length) {
+      if (result.task && config.notifications?.length) {
         try {
           const notifications = formatRelinquishNotifications(result.task, config.notifications);
           await sendNotifications(notifications, api.logger ?? null);
-        } catch (e) {
-          api.logger?.warn('[m-team] 通知发送失败');
+        } catch {
+          api.logger?.warn('[m-team] relinquish notifications failed');
         }
       }
 
-      return textResult(`↩️ 任务已放弃\n${result.task ? formatTaskAsText(result.task) : taskId}`, { success: result.success, reason: result.reason, task: result.task });
+      return textResult(`Task relinquished\n${result.task ? formatTaskAsText(result.task) : taskId}`, {
+        success: result.success,
+        reason: result.reason,
+        task: result.task,
+      });
     },
   });
 }

@@ -1,12 +1,6 @@
-/**
+﻿/**
  * M-Team API Server
- * Thin HTTP wrapper that invokes the CLI via child_process.
- *
- * 所有请求无认证（内网使用）。
- *
- * 启动:
- *   npx tsx src/api/server.ts
- *   PORT=3001 npx tsx src/api/server.ts
+ * Thin HTTP wrapper around the CLI.
  */
 
 import http from 'node:http';
@@ -37,10 +31,13 @@ function error(res: http.ServerResponse, status: number, message: string): void 
 function parseBody(req: http.IncomingMessage): Promise<Record<string, unknown>> {
   return new Promise((resolve, reject) => {
     let body = '';
-    req.on('data', chunk => { body += chunk; });
+    req.on('data', (chunk) => { body += chunk; });
     req.on('end', () => {
-      try { resolve(body ? JSON.parse(body) : {}); }
-      catch { reject(new Error('Invalid JSON')); }
+      try {
+        resolve(body ? JSON.parse(body) : {});
+      } catch {
+        reject(new Error('Invalid JSON'));
+      }
     });
     req.on('error', reject);
   });
@@ -51,25 +48,58 @@ function cli(args: string[], timeoutMs = 10000): Promise<{ stdout: string; stder
     const child = spawn(TSX, [CLI_SCRIPT, ...args], {
       cwd: ROOT,
       stdio: ['ignore', 'pipe', 'pipe'],
-      env: { ...process.env, WORKSPACE_ROOT: process.env.WORKSPACE_ROOT || ROOT, FORCE_COLOR: '0' },
+      env: {
+        ...process.env,
+        WORKSPACE_ROOT: process.env.WORKSPACE_ROOT || ROOT,
+        FORCE_COLOR: '0',
+      },
     });
+
     let stdout = '';
     let stderr = '';
+
     const timer = setTimeout(() => {
       child.kill('SIGTERM');
       resolve({ stdout, stderr, code: 124 });
     }, timeoutMs);
-    child.stdout.on('data', d => { stdout += d; });
-    child.stderr.on('data', d => { stderr += d; });
-    child.on('close', code => {
+
+    child.stdout.on('data', (d) => { stdout += d; });
+    child.stderr.on('data', (d) => { stderr += d; });
+    child.on('close', (code) => {
       clearTimeout(timer);
-      const clean = stdout.split('\n').filter(l => !l.startsWith('[m-team-pool]')).join('\n').trim();
+      const clean = stdout
+        .split('\n')
+        .filter((line) => !line.startsWith('[m-team-pool]'))
+        .join('\n')
+        .trim();
       resolve({ stdout: clean, stderr, code: code ?? 0 });
     });
   });
 }
 
-async function handle(req: http.IncomingMessage, res: http.ServerResponse) {
+function readContextOutput(body: Record<string, unknown>): {
+  summary?: string;
+  files?: string[] | string;
+  unresolvedIssues?: string[] | string;
+  error?: string;
+} {
+  return (body.contextOutput ?? {}) as {
+    summary?: string;
+    files?: string[] | string;
+    unresolvedIssues?: string[] | string;
+    error?: string;
+  };
+}
+
+function pushContextOutputArgs(args: string[], body: Record<string, unknown>): void {
+  const contextOutput = readContextOutput(body);
+  if (contextOutput.summary) args.push('--summary', String(contextOutput.summary));
+  if (contextOutput.files) {
+    args.push('--files', Array.isArray(contextOutput.files) ? contextOutput.files.join(',') : String(contextOutput.files));
+  }
+}
+
+async function handle(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
   if (req.method === 'OPTIONS') {
     res.writeHead(204, { 'Access-Control-Allow-Origin': '*' });
     res.end();
@@ -78,40 +108,44 @@ async function handle(req: http.IncomingMessage, res: http.ServerResponse) {
 
   const url = new URL(req.url ?? '/', `http://localhost:${PORT}`);
   const pathname = url.pathname.replace(/^\/api\/mteam/, '');
-  const readContextOutput = (body: Record<string, unknown>) => (body.contextOutput ?? {}) as {
-    summary?: string;
-    files?: string[] | string;
-  };
 
   if (req.method === 'POST' && pathname === '/tasks') {
     try {
       const body = await parseBody(req);
       const args = ['tasks', 'create'];
-      if (body.goal) { args.push('--goal', String(body.goal)); }
-      if (body.description) { args.push('--description', String(body.description)); }
-      if (body.taskType) { args.push('--task-type', String(body.taskType)); }
-      if (body.publisher) { args.push('--publisher', String(body.publisher)); }
-      if (body.priority) { args.push('--priority', String(body.priority)); }
+      if (body.goal) args.push('--goal', String(body.goal));
+      if (body.description) args.push('--description', String(body.description));
+      if (body.taskType) args.push('--task-type', String(body.taskType));
+      if (body.publisher) args.push('--publisher', String(body.publisher));
+      if (body.priority) args.push('--priority', String(body.priority));
 
       const result = await cli(args);
       if (result.code !== 0) return error(res, 400, result.stderr || 'CLI error');
       return json(res, 201, JSON.parse(result.stdout));
-    } catch (e: any) { return error(res, 400, e.message); }
+    } catch (e: any) {
+      return error(res, 400, e.message);
+    }
   }
 
   if (req.method === 'GET' && pathname === '/tasks') {
     const status = url.searchParams.get('status') ?? 'pending';
     const result = await cli(['tasks', 'list', '--status', status]);
-    try { return json(res, 200, JSON.parse(result.stdout)); }
-    catch { return error(res, 500, result.stderr || 'CLI parse error'); }
+    try {
+      return json(res, 200, JSON.parse(result.stdout));
+    } catch {
+      return error(res, 500, result.stderr || 'CLI parse error');
+    }
   }
 
   const taskIdMatch = pathname.match(/^\/tasks\/(task_\w+)$/);
   if (req.method === 'GET' && taskIdMatch) {
     const result = await cli(['tasks', 'get', taskIdMatch[1]]);
     if (result.code !== 0) return error(res, 404, 'Task not found');
-    try { return json(res, 200, JSON.parse(result.stdout)); }
-    catch { return error(res, 500, result.stderr); }
+    try {
+      return json(res, 200, JSON.parse(result.stdout));
+    } catch {
+      return error(res, 500, result.stderr);
+    }
   }
 
   const claimMatch = pathname.match(/^\/tasks\/(task_\w+)\/claim$/);
@@ -119,10 +153,13 @@ async function handle(req: http.IncomingMessage, res: http.ServerResponse) {
     try {
       const body = await parseBody(req);
       if (!body.agentId) return error(res, 400, 'agentId required');
+
       const result = await cli(['tasks', 'claim', claimMatch[1], '--agent-id', String(body.agentId)]);
       if (result.code !== 0) return error(res, 400, result.stderr);
       return json(res, 200, JSON.parse(result.stdout));
-    } catch (e: any) { return error(res, 400, e.message); }
+    } catch (e: any) {
+      return error(res, 400, e.message);
+    }
   }
 
   const completeMatch = pathname.match(/^\/tasks\/(task_\w+)\/complete$/);
@@ -130,14 +167,16 @@ async function handle(req: http.IncomingMessage, res: http.ServerResponse) {
     try {
       const body = await parseBody(req);
       if (!body.contextStep) return error(res, 400, 'contextStep required');
+
       const args = ['tasks', 'complete', completeMatch[1], '--step', String(body.contextStep)];
-      const contextOutput = readContextOutput(body);
-      if (contextOutput.summary) args.push('--summary', String(contextOutput.summary));
-      if (contextOutput.files) args.push('--files', Array.isArray(contextOutput.files) ? contextOutput.files.join(',') : String(contextOutput.files));
+      pushContextOutputArgs(args, body);
+
       const result = await cli(args);
       if (result.code !== 0) return error(res, 400, result.stderr);
       return json(res, 200, JSON.parse(result.stdout));
-    } catch (e: any) { return error(res, 400, e.message); }
+    } catch (e: any) {
+      return error(res, 400, e.message);
+    }
   }
 
   const nextMatch = pathname.match(/^\/tasks\/(task_\w+)\/next$/);
@@ -146,14 +185,18 @@ async function handle(req: http.IncomingMessage, res: http.ServerResponse) {
       const body = await parseBody(req);
       if (!body.agentId) return error(res, 400, 'agentId required');
       if (!body.contextStep) return error(res, 400, 'contextStep required');
+
       const args = ['tasks', 'next', nextMatch[1], '--agent-id', String(body.agentId), '--step', String(body.contextStep)];
-      const contextOutput = readContextOutput(body);
-      if (contextOutput.summary) args.push('--summary', String(contextOutput.summary));
+      pushContextOutputArgs(args, body);
       if (body.description) args.push('--description', String(body.description));
+      if (body.nextTaskType) args.push('--next-task-type', String(body.nextTaskType));
+
       const result = await cli(args);
       if (result.code !== 0) return error(res, 400, result.stderr);
       return json(res, 200, JSON.parse(result.stdout));
-    } catch (e: any) { return error(res, 400, e.message); }
+    } catch (e: any) {
+      return error(res, 400, e.message);
+    }
   }
 
   const cancelMatch = pathname.match(/^\/tasks\/(task_\w+)\/cancel$/);
@@ -161,12 +204,16 @@ async function handle(req: http.IncomingMessage, res: http.ServerResponse) {
     try {
       const body = await parseBody(req);
       if (!body.publisher) return error(res, 400, 'publisher required');
+
       const args = ['tasks', 'cancel', cancelMatch[1], '--publisher', String(body.publisher)];
       if (body.reason) args.push('--reason', String(body.reason));
+
       const result = await cli(args);
       if (result.code !== 0) return error(res, 400, result.stderr);
       return json(res, 200, JSON.parse(result.stdout));
-    } catch (e: any) { return error(res, 400, e.message); }
+    } catch (e: any) {
+      return error(res, 400, e.message);
+    }
   }
 
   const closeMatch = pathname.match(/^\/tasks\/(task_\w+)\/close$/);
@@ -174,10 +221,13 @@ async function handle(req: http.IncomingMessage, res: http.ServerResponse) {
     try {
       const body = await parseBody(req);
       if (!body.publisher) return error(res, 400, 'publisher required');
+
       const result = await cli(['tasks', 'close', closeMatch[1], '--publisher', String(body.publisher)]);
       if (result.code !== 0) return error(res, 400, result.stderr);
       return json(res, 200, JSON.parse(result.stdout));
-    } catch (e: any) { return error(res, 400, e.message); }
+    } catch (e: any) {
+      return error(res, 400, e.message);
+    }
   }
 
   const relinquishMatch = pathname.match(/^\/tasks\/(task_\w+)\/relinquish$/);
@@ -185,12 +235,16 @@ async function handle(req: http.IncomingMessage, res: http.ServerResponse) {
     try {
       const body = await parseBody(req);
       if (!body.executorId) return error(res, 400, 'executorId required');
+
       const args = ['tasks', 'relinquish', relinquishMatch[1], '--executor-id', String(body.executorId)];
       if (body.reason) args.push('--reason', String(body.reason));
+
       const result = await cli(args);
       if (result.code !== 0) return error(res, 400, result.stderr);
       return json(res, 200, JSON.parse(result.stdout));
-    } catch (e: any) { return error(res, 400, e.message); }
+    } catch (e: any) {
+      return error(res, 400, e.message);
+    }
   }
 
   if (req.method === 'PUT' && taskIdMatch) {
@@ -201,34 +255,50 @@ async function handle(req: http.IncomingMessage, res: http.ServerResponse) {
       if (body.contextStep) args.push('--step', String(body.contextStep));
       if (body.description) args.push('--description', String(body.description));
       if (body.executorId) args.push('--executor-id', String(body.executorId));
+
       const result = await cli(args);
       if (result.code !== 0) return error(res, 400, result.stderr);
       return json(res, 200, JSON.parse(result.stdout));
-    } catch (e: any) { return error(res, 400, e.message); }
+    } catch (e: any) {
+      return error(res, 400, e.message);
+    }
   }
 
   if (req.method === 'GET' && pathname === '/executors') {
     const result = await cli(['executors', 'list']);
-    try { return json(res, 200, JSON.parse(result.stdout)); }
-    catch { return error(res, 500, result.stderr || 'CLI parse error'); }
+    try {
+      return json(res, 200, JSON.parse(result.stdout));
+    } catch {
+      return error(res, 500, result.stderr || 'CLI parse error');
+    }
   }
 
   if (req.method === 'GET' && pathname === '/executors/active') {
     const agentId = url.searchParams.get('agentId');
     if (!agentId) return error(res, 400, 'agentId query param required');
+
     const result = await cli(['executors', 'active', '--agent-id', agentId]);
-    try { return json(res, 200, JSON.parse(result.stdout)); }
-    catch { return error(res, 500, result.stderr || 'CLI parse error'); }
+    try {
+      return json(res, 200, JSON.parse(result.stdout));
+    } catch {
+      return error(res, 500, result.stderr || 'CLI parse error');
+    }
   }
 
   if (req.method === 'POST' && pathname === '/heartbeat') {
     try {
       const body = await parseBody(req);
       if (!body.agentId) return error(res, 400, 'agentId required');
+
       const result = await cli(['heartbeat', '--agent-id', String(body.agentId)]);
-      try { return json(res, 200, JSON.parse(result.stdout)); }
-      catch { return json(res, 200, { raw: result.stdout }); }
-    } catch (e: any) { return error(res, 400, e.message); }
+      try {
+        return json(res, 200, JSON.parse(result.stdout));
+      } catch {
+        return json(res, 200, { raw: result.stdout });
+      }
+    } catch (e: any) {
+      return error(res, 400, e.message);
+    }
   }
 
   return error(res, 404, `Route not found: ${req.method} ${pathname}`);

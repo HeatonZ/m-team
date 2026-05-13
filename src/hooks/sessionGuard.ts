@@ -1,10 +1,10 @@
-/**
- * M-Team Hooks — sessionGuard
+﻿/**
+ * M-Team hook: session guard.
  *
  * Guardrails:
  * - Block risky tool calls in heartbeat sessions.
- * - Block executor task sessions from manually forcing next/relinquish.
- * - Restrict publish and publisher-terminal actions to authorized agents.
+ * - Block executor task sessions from forcing next/relinquish manually.
+ * - Restrict publish and publisher terminal actions.
  */
 
 import type {
@@ -37,7 +37,6 @@ export function registerSessionGuardHook(
       const isExecutorTaskSession = Boolean(sessionKey?.startsWith(`agent:${agentId}:m-team:task_`));
       const isHeartbeatSession = Boolean(sessionKey?.endsWith(':heartbeat'));
 
-      // Heartbeat session: do not execute steps or spawn/send side sessions.
       if (
         isHeartbeatSession
         && (
@@ -50,11 +49,10 @@ export function registerSessionGuardHook(
       ) {
         return {
           block: true,
-          blockReason: `Heartbeat session (${sessionKey}) cannot call ${toolName}. Heartbeat only handles claim/publisher acceptance, not execution flow or subagent forwarding.`,
+          blockReason: `Heartbeat session (${sessionKey}) cannot call ${toolName}. Heartbeat only handles claim/publisher acceptance.`,
         };
       }
 
-      // Heartbeat session cannot publish new tasks.
       if (toolName === 'mteam_publish_task' && isHeartbeatSession) {
         return {
           block: true,
@@ -62,22 +60,20 @@ export function registerSessionGuardHook(
         };
       }
 
-      // Executor task session should end naturally and let agent_end decide.
       if (toolName === 'mteam_relinquish_task' && isExecutorTaskSession) {
         return {
           block: true,
-          blockReason: `Executor session (${sessionKey}) cannot call mteam_relinquish_task. Finish the current step and end the session, then let agent_end decide next/complete/fail.`,
+          blockReason: `Executor session (${sessionKey}) cannot call mteam_relinquish_task. End session and let agent_end decide.`,
         };
       }
 
       if (toolName === 'mteam_next_task' && isExecutorTaskSession) {
         return {
           block: true,
-          blockReason: `Executor session (${sessionKey}) cannot call mteam_next_task. Finish the current step and end the session, then let agent_end decide the next step.`,
+          blockReason: `Executor session (${sessionKey}) cannot call mteam_next_task. End session and let agent_end decide.`,
         };
       }
 
-      // Only configured publishers can publish.
       if (toolName === 'mteam_publish_task' && (!agentId || !publishers.has(agentId))) {
         return {
           block: true,
@@ -85,7 +81,6 @@ export function registerSessionGuardHook(
         };
       }
 
-      // close/reject/cancel can only be performed by the declared publisher.
       if (
         toolName === 'mteam_close_task'
         || toolName === 'mteam_reject_task'

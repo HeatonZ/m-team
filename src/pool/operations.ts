@@ -1,5 +1,5 @@
-/**
- * M-Team 任务池 — 内部写操作（需要事务的操作）
+﻿/**
+ * M-Team task pool write operations.
  */
 
 import fs from 'node:fs';
@@ -27,6 +27,75 @@ import { canAgentClaimTask } from './claim-routing.js';
 
 let WORKSPACE_ROOT = '/mnt/d/code/m-team';
 export let DB_PATH: string | null = null;
+
+const STEP_MAX_LENGTH = 120;
+const GOAL_MAX_LENGTH = 200;
+const SUMMARY_MAX_LENGTH = 500;
+const ISSUE_MAX_LENGTH = 180;
+const FILE_PATH_MAX_LENGTH = 240;
+const MAX_FILES = 20;
+const MAX_ISSUES = 10;
+
+function normalizeText(value: string): string {
+  return value.replace(/\s+/g, ' ').trim();
+}
+
+function clipText(value: string, maxLength: number): string {
+  if (value.length <= maxLength) return value;
+  return value.slice(0, maxLength).trim();
+}
+
+function sanitizeStep(raw: string | undefined, fallback: string): string {
+  const normalized = normalizeText(String(raw ?? ''));
+  if (!normalized) return clipText(normalizeText(fallback), STEP_MAX_LENGTH);
+  return clipText(normalized, STEP_MAX_LENGTH);
+}
+
+function sanitizeGoal(raw: string): string {
+  const normalized = normalizeText(raw);
+  if (!normalized) return 'Complete the requested task';
+  return clipText(normalized, GOAL_MAX_LENGTH);
+}
+
+function uniqStrings(items: string[], maxItems: number, maxLength: number): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const item of items) {
+    const normalized = clipText(normalizeText(item), maxLength);
+    if (!normalized || seen.has(normalized)) continue;
+    seen.add(normalized);
+    out.push(normalized);
+    if (out.length >= maxItems) break;
+  }
+  return out;
+}
+
+function sanitizeContextOutput(output: ContextStepOutput | undefined): ContextStepOutput {
+  const raw = output ?? {};
+
+  const summary = typeof raw.summary === 'string'
+    ? clipText(normalizeText(raw.summary), SUMMARY_MAX_LENGTH)
+    : undefined;
+
+  const files = Array.isArray(raw.files)
+    ? uniqStrings(raw.files.filter((item): item is string => typeof item === 'string'), MAX_FILES, FILE_PATH_MAX_LENGTH)
+    : [];
+
+  const unresolvedIssues = Array.isArray(raw.unresolvedIssues)
+    ? uniqStrings(raw.unresolvedIssues.filter((item): item is string => typeof item === 'string'), MAX_ISSUES, ISSUE_MAX_LENGTH)
+    : [];
+
+  const error = typeof raw.error === 'string'
+    ? clipText(normalizeText(raw.error), ISSUE_MAX_LENGTH)
+    : undefined;
+
+  return {
+    ...(summary ? { summary } : {}),
+    ...(files.length ? { files } : {}),
+    ...(unresolvedIssues.length ? { unresolvedIssues } : {}),
+    ...(error ? { error } : {}),
+  };
+}
 
 export function setWorkspaceRoot(root: string): void {
   WORKSPACE_ROOT = root;
@@ -58,15 +127,16 @@ function init(): void {
 function appendContext(task: Task, executorId: string | null, contextEntry: ContextStepInput | null): ContextStepEntry[] {
   const current = task.context ?? [];
   if (!contextEntry) return current;
+
   return [
     ...current,
     {
       type: 'step',
       executor: executorId || task.executor || 'unknown',
-      step: contextEntry.step,
-      output: (contextEntry.output ?? {}) as ContextStepEntry['output'],
-      completedAt: Date.now()
-    }
+      step: sanitizeStep(contextEntry.step, task.description),
+      output: sanitizeContextOutput(contextEntry.output),
+      completedAt: Date.now(),
+    },
   ];
 }
 
@@ -87,7 +157,7 @@ function isTerminalStatus(status: TaskStatus): boolean {
 }
 
 // ============================================================
-// 写操作
+// Write operations
 // ============================================================
 
 export function publishTask(input: {
@@ -102,10 +172,10 @@ export function publishTask(input: {
   const { taskType, description, goal, publisher, priority } = input;
   const task = createTask({
     taskType: taskType as import('../schema/task').TaskType | undefined,
-    description,
-    goal,
+    description: sanitizeStep(description, 'Execute current step'),
+    goal: sanitizeGoal(goal),
     publisher,
-    priority: priority as TaskPriority | undefined
+    priority: priority as TaskPriority | undefined,
   });
 
   const db = getDb();
@@ -114,7 +184,7 @@ export function publishTask(input: {
     syncTaskJson(task);
   })();
 
-  console.log(`[m-team-pool] 任务发布: ${task.taskId} - ${input.description}`);
+  console.log(`[m-team-pool] task published: ${task.taskId} - ${task.description}`);
   return task.taskId;
 }
 
@@ -149,7 +219,7 @@ export function claimTask(taskId: string, agentId: string): ClaimResult {
       task.executor !== null ? task.executor : task.lastExecutor,
       Date.now(),
       taskId,
-      TaskStatus.PENDING
+      TaskStatus.PENDING,
     );
 
     if (updated.changes === 0) {
@@ -158,7 +228,7 @@ export function claimTask(taskId: string, agentId: string): ClaimResult {
 
     const updatedTask = normalizeTask(getTaskRow(taskId)!);
     syncTaskJson(updatedTask);
-    console.log(`[m-team-pool] ${agentId} 认领了任务 ${taskId}`);
+    console.log(`[m-team-pool] ${agentId} claimed task ${taskId}`);
     return { success: true, taskId, task: updatedTask };
   })();
 
@@ -176,7 +246,7 @@ export function updateTask(
   contextEntry: ContextStepInput | null,
   description: string | null,
   updatedAt: number | null,
-  executorId: string | null
+  executorId: string | null,
 ): Task | null {
   init();
   const task = getTaskRow(taskId);
@@ -190,7 +260,7 @@ export function updateTask(
 
   return setTaskState(taskId, {
     ...(status ? { status: status as Task['status'] } : {}),
-    ...(description ? { description } : {}),
+    ...(description ? { description: sanitizeStep(description, task.description) } : {}),
     ...(updatedAt ? { updatedAt } : { updatedAt: Date.now() }),
     context: JSON.stringify(context),
   });
@@ -211,7 +281,7 @@ export function cancelTask(taskId: string, _publisher?: string, reason?: string)
   }
 
   const context = reason
-    ? appendContext(task, task.executor, { step: '任务取消', output: { summary: reason } })
+    ? appendContext(task, task.executor, { step: 'Task cancelled', output: { summary: reason } })
     : task.context;
 
   return {
@@ -221,7 +291,7 @@ export function cancelTask(taskId: string, _publisher?: string, reason?: string)
       executor: null,
       updatedAt: Date.now(),
       context: JSON.stringify(context),
-    })
+    }),
   };
 }
 
@@ -239,7 +309,7 @@ export function relinquishTask(taskId: string, executorId?: string, reason?: str
   if (executorId && task.executor && executorId !== task.executor) return { success: false, reason: 'NOT_CURRENT_EXECUTOR' };
 
   const context = reason
-    ? appendContext(task, task.executor, { step: '主动放弃当前任务', output: { summary: reason, unresolvedIssues: [reason] } })
+    ? appendContext(task, task.executor, { step: 'Task relinquished', output: { summary: reason, unresolvedIssues: [reason] } })
     : task.context;
 
   return {
@@ -250,7 +320,7 @@ export function relinquishTask(taskId: string, executorId?: string, reason?: str
       lastExecutor: task.executor,
       updatedAt: Date.now(),
       context: JSON.stringify(context),
-    })
+    }),
   };
 }
 
@@ -274,7 +344,7 @@ export function nextTask(
   if (task.status !== TaskStatus.RUNNING) return { success: false, reason: `TASK_NOT_RUNNING_${task.status}` };
   if (task.executor !== executorId) return { success: false, reason: 'NOT_CURRENT_EXECUTOR' };
 
-  const nextDescription = description?.trim() || task.description;
+  const nextDescription = sanitizeStep(description?.trim() || task.description, task.description);
   const context = appendContext(task, executorId, contextEntry);
 
   return {
@@ -287,7 +357,7 @@ export function nextTask(
       ...(nextTaskType ? { taskType: nextTaskType } : {}),
       updatedAt: Date.now(),
       context: JSON.stringify(context),
-    })
+    }),
   };
 }
 
@@ -329,16 +399,16 @@ export function rejectTask(
     task: setTaskState(taskId, {
       status: TaskStatus.PENDING,
       executor: null,
-      description: description?.trim() || task.description,
+      description: sanitizeStep(description?.trim() || task.description, task.description),
       updatedAt: Date.now(),
       context: JSON.stringify(context),
-    })
+    }),
   };
 }
 
 export function completeTask(
   taskId: string,
-  contextEntry: ContextStepInput
+  contextEntry: ContextStepInput,
 ): CompleteResult {
   init();
   const task = getTaskRow(taskId);
@@ -356,7 +426,7 @@ export function completeTask(
       lastExecutor: task.executor ?? task.lastExecutor,
       updatedAt: Date.now(),
       context: JSON.stringify(context),
-    })
+    }),
   };
 }
 
@@ -369,7 +439,7 @@ export interface FailResult {
 export function failTask(
   taskId: string,
   reason: string,
-  contextEntry: ContextStepInput
+  contextEntry: ContextStepInput,
 ): FailResult {
   init();
   const task = getTaskRow(taskId);
@@ -389,7 +459,7 @@ export function failTask(
       lastExecutor: task.executor ?? task.lastExecutor,
       updatedAt: Date.now(),
       context: JSON.stringify(context),
-    })
+    }),
   };
 }
 
@@ -411,6 +481,6 @@ export function closeTask(taskId: string, publisher?: string): CloseResult {
     task: setTaskState(taskId, {
       status: TaskStatus.CLOSED,
       updatedAt: Date.now(),
-    })
+    }),
   };
 }

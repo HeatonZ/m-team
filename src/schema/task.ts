@@ -1,4 +1,4 @@
-/**
+﻿/**
  * M-Team task domain model.
  */
 
@@ -36,12 +36,75 @@ export const TaskType = {
 export type TaskType = typeof TaskType[keyof typeof TaskType];
 export const VALID_TASK_TYPES: TaskType[] = Object.values(TaskType);
 
+const STEP_MAX_LENGTH = 120;
+const SUMMARY_MAX_LENGTH = 500;
+const ISSUE_MAX_LENGTH = 180;
+const FILE_PATH_MAX_LENGTH = 240;
+const MAX_FILES = 20;
+const MAX_ISSUES = 10;
+
+function normalizeText(value: string): string {
+  return value.replace(/\s+/g, ' ').trim();
+}
+
+function clipText(value: string, maxLength: number): string {
+  if (value.length <= maxLength) return value;
+  return value.slice(0, maxLength).trim();
+}
+
+function sanitizeStepText(raw: string): string {
+  const normalized = normalizeText(raw);
+  return clipText(normalized, STEP_MAX_LENGTH);
+}
+
+function uniqStrings(items: string[], maxItems: number, maxLength: number): string[] {
+  const seen = new Set<string>();
+  const output: string[] = [];
+
+  for (const item of items) {
+    const normalized = clipText(normalizeText(item), maxLength);
+    if (!normalized || seen.has(normalized)) continue;
+    seen.add(normalized);
+    output.push(normalized);
+    if (output.length >= maxItems) break;
+  }
+
+  return output;
+}
+
 export interface ContextStepOutput {
   summary?: string;
   files?: string[];
   unresolvedIssues?: string[];
   error?: string;
   [key: string]: unknown;
+}
+
+function normalizeContextStepOutput(raw: unknown): ContextStepOutput {
+  const output = (raw && typeof raw === 'object' ? raw : {}) as ContextStepOutput;
+
+  const summary = typeof output.summary === 'string'
+    ? clipText(normalizeText(output.summary), SUMMARY_MAX_LENGTH)
+    : undefined;
+
+  const files = Array.isArray(output.files)
+    ? uniqStrings(output.files.filter((item): item is string => typeof item === 'string'), MAX_FILES, FILE_PATH_MAX_LENGTH)
+    : [];
+
+  const unresolvedIssues = Array.isArray(output.unresolvedIssues)
+    ? uniqStrings(output.unresolvedIssues.filter((item): item is string => typeof item === 'string'), MAX_ISSUES, ISSUE_MAX_LENGTH)
+    : [];
+
+  const error = typeof output.error === 'string'
+    ? clipText(normalizeText(output.error), ISSUE_MAX_LENGTH)
+    : undefined;
+
+  return {
+    ...(summary ? { summary } : {}),
+    ...(files.length ? { files } : {}),
+    ...(unresolvedIssues.length ? { unresolvedIssues } : {}),
+    ...(error ? { error } : {}),
+  };
 }
 
 export interface ContextStepEntry {
@@ -83,13 +146,16 @@ export function normalizeTask(task: Task): Task {
         && typeof entry.step === 'string'
         && typeof entry.completedAt === 'number';
     })
-    .map(entry => ({
+    .map((entry) => ({
       ...entry,
-      output: entry.output ?? {},
-    }));
+      step: sanitizeStepText(entry.step),
+      output: normalizeContextStepOutput(entry.output),
+    }))
+    .filter((entry) => entry.step.length > 0);
 
   return {
     ...task,
+    description: sanitizeStepText(String(task.description ?? '')),
     context: normalizedContext,
   };
 }
@@ -122,7 +188,7 @@ export function validateTask(task: unknown): ValidationResult {
         errors.push(`context[${i}] must be an object`);
         continue;
       }
-      if (entry.type != 'step') errors.push(`context[${i}].type must be step`);
+      if (entry.type !== 'step') errors.push(`context[${i}].type must be step`);
       if (!entry.executor || typeof entry.executor !== 'string') errors.push(`context[${i}].executor must be a string`);
       if (!entry.step || typeof entry.step !== 'string') errors.push(`context[${i}].step must be a string`);
     }
@@ -207,39 +273,6 @@ export const TASK_TYPE_LABELS: Record<TaskType, string> = {
   [TaskType.CONTENT]: 'Content',
 };
 
-export function getTaskTypeLabel(taskType: TaskType): string {
-  return TASK_TYPE_LABELS[taskType] ?? taskType;
-}
-
 export function getStatusLabel(status: TaskStatus): string {
   return STATUS_LABELS[status] ?? status;
-}
-
-export function formatTaskForHuman(input: Task): string {
-  const task = normalizeTask(input);
-  const lines: string[] = [
-    `Goal: ${task.goal}`,
-    `Type: ${getTaskTypeLabel(task.taskType)}`,
-    `Current step: ${task.description}`,
-    `ID: ${task.taskId}`,
-    `Priority: ${PRIORITY_LABELS[task.priority] ?? 'Normal'}`,
-    `Status: ${getStatusLabel(task.status)}`,
-  ];
-
-  const stepCount = task.context.length;
-  lines.push(stepCount === 0 ? 'No step completed yet' : `Completed ${stepCount} step(s)`);
-  if (task.executor) lines.push(`Executor: ${task.executor}`);
-  if (task.lastExecutor) lines.push(`Last executor: ${task.lastExecutor}`);
-
-  return lines.join('\n');
-}
-
-export function getTaskSummary(input: Task): string {
-  const task = normalizeTask(input);
-  if (!task.context || task.context.length === 0) return '(no context)';
-
-  const last = task.context[task.context.length - 1];
-  if (last.output?.summary) return last.output.summary;
-  if (last.output?.files?.length) return `[files] ${last.output.files.join(', ')}`;
-  return '(no summary)';
 }

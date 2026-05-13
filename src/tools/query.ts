@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Read-only query tools.
  */
 
@@ -35,10 +35,13 @@ export function registerGetPending(api: OpenClawPluginApi): void {
         return textResult('No claimable tasks', { pending: [] });
       }
 
-      const lines = pending.map((t, i) => formatTaskLine({ ...t, context: t.context } as Omit<typeof t, 'goal'>, i + 1));
-      const text = `Pending tasks: ${sanitized.length}\n${lines.join('\n')}\n\nChoose a task by taskType and current step, then call mteam_claim_task(taskId=...)`;
+      const lines = pending.map((task, i) => formatTaskLine(task, i + 1));
+      const text = `Pending tasks: ${sanitized.length}\n${lines.join('\n')}\n\nChoose by taskType and current step, then call mteam_claim_task(taskId=...)`;
 
-      return { content: [{ type: 'text' as const, text }], details: { success: true, pending: sanitized } };
+      return {
+        content: [{ type: 'text' as const, text }],
+        details: { success: true, pending: sanitized },
+      };
     },
   });
 }
@@ -66,7 +69,7 @@ export function registerGetTask(api: OpenClawPluginApi): void {
   api.registerTool({
     name: 'mteam_get_task',
     label: 'Get task detail',
-    description: 'Show the executor-safe task view including current step, contract, and recent history',
+    description: 'Show executor-safe task view: current step and recent context only',
     parameters: GetTaskParams,
     async execute(_toolCallId: string, rawParams: GetTaskParamsInterface) {
       const { taskId } = rawParams;

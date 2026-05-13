@@ -1,5 +1,5 @@
-/**
- * mteam_close_task 工具定义
+﻿/**
+ * mteam_close_task tool definition.
  */
 
 import type { OpenClawPluginApi } from 'openclaw/plugin-sdk';
@@ -14,31 +14,36 @@ import type { CloseTaskParamsInterface } from '../types/tools.js';
 
 export function register(
   api: OpenClawPluginApi,
-  config: MTeamPluginConfig
+  config: MTeamPluginConfig,
 ): void {
   api.logger?.info('[m-team] registering mteam_close_task');
   api.registerTool({
     name: 'mteam_close_task',
-    label: '验收关闭',
-    description: 'Publisher 验收通过，关闭任务（终态）',
+    label: 'Close task',
+    description: 'Publisher accepts and closes a completed task',
     parameters: CloseTaskParams,
     async execute(_toolCallId: string, rawParams: CloseTaskParamsInterface) {
       const taskId = readTaskId(rawParams, 'taskId', { required: true })!;
       const { publisher } = rawParams;
 
       const result = closeTask(taskId, publisher);
-      if (!result.success) return failedTextResult(result.reason || '操作失败', { success: result.success, reason: result.reason });
+      if (!result.success) {
+        return failedTextResult(result.reason || 'Operation failed', { success: result.success, reason: result.reason });
+      }
 
       if (result.task && config.notifications?.length) {
         try {
           const notifications = formatCloseNotifications(result.task, config.notifications);
           await sendNotifications(notifications, api.logger ?? null);
-        } catch (e) {
-          api.logger?.warn('[m-team] 通知发送失败');
+        } catch {
+          api.logger?.warn('[m-team] close notifications failed');
         }
       }
 
-      return textResult(`🔒 任务已关闭\n${result.task ? formatTaskAsText(result.task, { includeGoal: true }) : taskId}`, { success: result.success, task: result.task });
+      return textResult(`Task closed\n${result.task ? formatTaskAsText(result.task, { includeGoal: true }) : taskId}`, {
+        success: result.success,
+        task: result.task,
+      });
     },
   });
 }

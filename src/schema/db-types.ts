@@ -1,5 +1,5 @@
-/**
- * DB row ? task conversions.
+﻿/**
+ * DB row <-> task conversions.
  */
 
 import {

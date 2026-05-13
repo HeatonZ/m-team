@@ -1,6 +1,7 @@
-/**
+﻿/**
  * mteam_claim_task tool definition.
  */
+
 import type { OpenClawPluginApi } from 'openclaw/plugin-sdk';
 import type { MTeamPluginConfig } from '../config.js';
 import { textResult, failedTextResult, readTaskId } from './shared.js';

@@ -1,5 +1,5 @@
-/**
- * mteam_next_task 工具定义
+﻿/**
+ * mteam_next_task tool definition.
  */
 
 import type { OpenClawPluginApi } from 'openclaw/plugin-sdk';
@@ -40,13 +40,13 @@ function normalizeTaskType(raw: string | undefined): TaskType | undefined {
 
 export function register(
   api: OpenClawPluginApi,
-  config: MTeamPluginConfig
+  config: MTeamPluginConfig,
 ): void {
   api.logger?.info('[m-team] registering mteam_next_task');
   api.registerTool({
     name: 'mteam_next_task',
-    label: '推进到下一步',
-    description: '结束当前一棒并生成下一步 description，任务回到 pending 池子',
+    label: 'Move to next step',
+    description: 'Finish current step, set next step description, and return task to pending',
     parameters: NextTaskParams,
     async execute(_toolCallId: string, rawParams: NextTaskParamsInterface) {
       const taskId = readTaskId(rawParams, 'taskId', { required: true })!;
@@ -54,19 +54,27 @@ export function register(
       const normalizedContextOutput = normalizeContextOutput(contextOutput) ?? {};
       const normalizedNextTaskType = normalizeTaskType(nextTaskType);
 
-      const result = nextTask(taskId, agentId, { step: contextStep, output: normalizedContextOutput }, description, normalizedNextTaskType);
-      if (!result.success) return failedTextResult(result.reason || '操作失败', { success: result.success, reason: result.reason });
+      const result = nextTask(
+        taskId,
+        agentId,
+        { step: contextStep, output: normalizedContextOutput },
+        description,
+        normalizedNextTaskType,
+      );
+      if (!result.success) {
+        return failedTextResult(result.reason || 'Operation failed', { success: result.success, reason: result.reason });
+      }
 
       if (result.task && config.notifications?.length) {
         try {
           const notifications = formatNextNotifications(result.task, config.notifications);
           await sendNotifications(notifications, api.logger ?? null);
         } catch {
-          api.logger?.warn('[m-team] 通知发送失败');
+          api.logger?.warn('[m-team] next notifications failed');
         }
       }
 
-      return textResult(`🔄 已生成下一步并放回任务池\n${result.task ? formatTaskAsText(result.task) : taskId}`, {
+      return textResult(`Next step created and task returned to pending\n${result.task ? formatTaskAsText(result.task) : taskId}`, {
         success: result.success,
         task: result.task,
       });

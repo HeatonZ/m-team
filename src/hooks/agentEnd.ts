@@ -1,4 +1,4 @@
-import type {
+﻿import type {
   OpenClawConfig,
   OpenClawPluginApi,
   PluginRuntime,
@@ -22,6 +22,7 @@ import {
 import { TaskStatus, type ContextStepOutput, type Task } from '../schema/task.js';
 
 const DEFAULT_AGENT_END_JUDGE_TIMEOUT_MS = 90_000;
+const STEP_MAX_LENGTH = 120;
 
 type RuntimeWithTaskStorage = PluginRuntime & {
   storage?: {
@@ -49,12 +50,12 @@ function parseTaskId(sessionKey: string): string | null {
 
 function isExecutorSessionForTask(sessionKey: string | undefined, agentId: string | undefined, taskId: string): boolean {
   if (!sessionKey || !agentId) return false;
-  const prefix = `agent:${agentId}:m-team:${taskId}:`;
-  return sessionKey.startsWith(prefix);
+  return sessionKey.startsWith(`agent:${agentId}:m-team:${taskId}:`);
 }
 
 function extractText(content: unknown): string {
   if (typeof content === 'string') return content;
+
   if (Array.isArray(content)) {
     return content
       .map((part: unknown) => {
@@ -63,20 +64,22 @@ function extractText(content: unknown): string {
       })
       .join('');
   }
+
   if (typeof content === 'object' && content !== null) {
     const c = content as Record<string, unknown>;
     return String(c.text ?? c.content ?? '');
   }
+
   return '';
 }
 
 function assistantTexts(messages: unknown[]): string[] {
   return messages
-    .map(msg => msg as Record<string, unknown>)
-    .filter(msg => msg.role === 'assistant')
-    .map(msg => extractText(msg.content).trim())
+    .map((msg) => msg as Record<string, unknown>)
+    .filter((msg) => msg.role === 'assistant')
+    .map((msg) => extractText(msg.content).trim())
     .filter(Boolean)
-    .filter(text => text !== 'NO_REPLY');
+    .filter((text) => text !== 'NO_REPLY');
 }
 
 function lastAssistantText(messages: unknown[]): string {
@@ -95,42 +98,51 @@ function normalizeIssueLine(issue: string | undefined): string {
 function isNonIssueLine(issue: string | undefined): boolean {
   const normalized = normalizeIssueLine(issue);
   if (!normalized) return true;
-  if (/^[.:,;!?()[\]{}'"“”‘’\s-]+$/.test(normalized)) return true;
-  if (/^(none|n\/a|无|无未解决问题)$/iu.test(normalized)) return true;
-  if (/^(unresolved issues?|issues?)[:：]?\s*(none|n\/a|无)$/iu.test(normalized)) return true;
-  if (/^(未解决问题|问题|阻塞问题)[:：]?\s*(无|none|n\/a)$/iu.test(normalized)) return true;
-  if (/^no (blocking |unresolved )?issues?$/i.test(normalized)) return true;
+
+  if (/^[.:,;!?()[\]{}'"\s-]+$/.test(normalized)) return true;
+
+  if (/^(none|n\/a|无|暂无|无未解决问题|无阻塞问题|no issues?|no unresolved issues?)$/iu.test(normalized)) return true;
+
+  if (/^(unresolved issues?|issues?)[:：]?\s*(none|n\/a|无|暂无)?$/iu.test(normalized)) return true;
+
+  if (/^(未解决问题|问题|阻塞问题)[:：]?\s*(无|暂无|none|n\/a)$/iu.test(normalized)) return true;
+
   if (/(等待|wait(?:ing)? for).*(agent_end|publisher|manager)/iu.test(normalized)) return true;
+
   if (/(当前步骤已完成|step completed|execution finished).*(等待|wait(?:ing)?)/iu.test(normalized)) return true;
+
   if (/^issue\b/i.test(normalized) && /\b(no|none)\b/i.test(normalized)) return true;
+
   return false;
 }
 
 function inferOutput(text: string): ContextStepOutput {
   const normalizedText = text.trim();
-  const files = [...normalizedText.matchAll(/(?:\/mnt\/[^\s,;:!?，。；：\]]+|[a-zA-Z]:\\[^\s,;:!?，。；：\]]+|[\w./-]+\.(?:json|md|csv|txt|png|jpg|jpeg|webp|log))/g)]
-    .map(m => m[0].trim());
+
+  const filePattern = /(?:\/mnt\/[^\s,;:!?，。；：)\]]+|[a-zA-Z]:\\[^\s,;:!?，。；：)\]]+|[\w./-]+\.(?:json|md|csv|txt|png|jpg|jpeg|webp|log))/g;
+  const files = [...normalizedText.matchAll(filePattern)]
+    .map((m) => m[0].trim());
 
   const lines = normalizedText
     .split('\n')
-    .map(line => line.trim())
+    .map((line) => line.trim())
     .filter(Boolean);
 
   const issueFromHeader = lines.flatMap((line) => {
     const match = line.match(/^(?:未解决问题|阻塞问题|问题|Unresolved issues?|Issues?)\s*[:：]\s*(.+)$/iu);
     if (!match?.[1]) return [];
     return match[1]
-      .split(/[；;、，,|]/)
-      .map(item => item.trim())
+      .split(/[、，,|]/)
+      .map((item) => item.trim())
       .filter(Boolean);
   });
 
   const issueFromSignals = lines
-    .filter(line => /(阻塞|无法|失败|错误|异常|缺少|待补|missing|failed|error|blocked|blocker|permission)/iu.test(line))
-    .map(line => line.replace(/^[-*•]+\s*/, '').trim());
+    .filter((line) => /(阻塞|无法|失败|错误|异常|缺少|待补|missing|failed|error|blocked|blocker|permission)/iu.test(line))
+    .map((line) => line.replace(/^[-*•+\s]+/u, '').trim());
 
   const issueMatches = [...issueFromHeader, ...issueFromSignals]
-    .filter(item => !isNonIssueLine(item));
+    .filter((item) => !isNonIssueLine(item));
 
   const cleanFiles = Array.from(new Set(files)).slice(0, 20);
   const cleanIssues = Array.from(new Set(issueMatches)).slice(0, 10);
@@ -140,33 +152,41 @@ function inferOutput(text: string): ContextStepOutput {
     summary: hasNonTrivialSummary ? normalizedText.slice(0, 500) : undefined,
     files: cleanFiles,
     unresolvedIssues: cleanIssues,
-    error: cleanIssues.find(issue => /(blocked|blocker|permission|failed|error|阻塞|无法|失败|错误|异常)/iu.test(issue)),
+    error: cleanIssues.find((issue) => /(blocked|blocker|permission|failed|error|阻塞|无法|失败|错误|异常)/iu.test(issue)),
   };
 }
 
 function stripGoalLevelLines(text: string | undefined): string | undefined {
   if (!text) return undefined;
+
   const cleaned = text
     .split('\n')
-    .map(line => line.trim())
+    .map((line) => line.trim())
     .filter(Boolean)
-    .filter(line => !/(goal.*(reached|completed)|整体任务(已)?完成|任务(已)?完成|等待\s*(publisher|agent_end)|close_task|only\s+publisher|仅由\s*publisher|只有\s*publisher)/iu.test(line))
+    .filter((line) => !/(goal.*(reached|completed)|整体任务已完成|任务已完成|等待\s*(publisher|agent_end)|close_task|only\s+publisher|仅由\s*publisher|只有\s*publisher)/iu.test(line))
     .join('\n')
     .trim();
+
   return cleaned || undefined;
 }
 
 function sanitizeStoredOutput(output: ContextStepOutput): ContextStepOutput {
   const summary = stripGoalLevelLines(output.summary);
+
   const unresolvedIssues = Array.from(new Set(
     (output.unresolvedIssues ?? [])
-      .map(issue => stripGoalLevelLines(issue))
+      .map((issue) => stripGoalLevelLines(issue))
       .filter((issue): issue is string => Boolean(issue))
-      .filter(issue => !isNonIssueLine(issue))
-      .map(issue => normalizeIssueLine(issue))
-      .filter(Boolean)
+      .filter((issue) => !isNonIssueLine(issue))
+      .map((issue) => normalizeIssueLine(issue))
+      .filter(Boolean),
   )).slice(0, 10);
-  const error = output.error && unresolvedIssues.some(issue => normalizeIssueLine(issue) === normalizeIssueLine(output.error)) ? output.error : undefined;
+
+  const errorCandidate = stripGoalLevelLines(output.error);
+  const error = errorCandidate && !isNonIssueLine(errorCandidate)
+    ? normalizeIssueLine(errorCandidate)
+    : undefined;
+
   return {
     ...output,
     summary,
@@ -176,13 +196,22 @@ function sanitizeStoredOutput(output: ContextStepOutput): ContextStepOutput {
 }
 
 function hasNoRealIssues(output: ContextStepOutput): boolean {
-  const issues = (output.unresolvedIssues ?? []).filter(issue => !isNonIssueLine(issue));
+  const issues = (output.unresolvedIssues ?? []).filter((issue) => !isNonIssueLine(issue));
   return issues.length === 0 && !output.error;
 }
 
 function hasProblemReportSignal(text: string, output: ContextStepOutput): boolean {
   const combined = [text, ...(output.unresolvedIssues ?? [])].join('\n');
   return /(补齐|修复|重试|校对|检查|校验|重新生成|重新运行|补充|完善|排查|缺少|待补|阻塞|fix|retry|verify|missing|blocked|blocker)/iu.test(combined);
+}
+
+function sanitizeStepInstruction(raw: string): string {
+  let text = raw.trim();
+  text = text.replace(/^问题[:：]\s*/u, '').trim();
+  text = text.replace(/^next step[:：]?\s*/iu, '').trim();
+  text = text.replace(/[。；;]\s*继续如实汇报.*$/u, '').trim();
+  text = text.replace(/^[-—–•+\s]+/u, '').trim();
+  return text.length > STEP_MAX_LENGTH ? text.slice(0, STEP_MAX_LENGTH) : text;
 }
 
 function buildConservativeNextDescription(task: Task): string {
@@ -201,36 +230,29 @@ function parseExplicitNextStep(text: string): string | null {
     /继续到下一步[:：]\s*([^\n]+)/iu,
     /next step[:：]?\s*([^\n]+)/iu,
   ];
+
   for (const pattern of patterns) {
     const match = text.match(pattern);
-    if (match?.[1]) {
-      const next = match[1].trim().replace(/^[-—–•\s]+/u, '');
-      if (next && !/^(无未解决问题|none)$/iu.test(next)) return next;
-    }
+    if (!match?.[1]) continue;
+
+    const next = match[1].trim().replace(/^[-—–•+\s]+/u, '');
+    if (next && !/^(无未解决问题|none)$/iu.test(next)) return next;
   }
+
   return null;
 }
 
 function isConciseCurrentStepDescription(text: string): boolean {
   const normalized = text.trim();
   if (!normalized) return false;
-  if (normalized.length > 120) return false;
-  if (/(当前任务|本轮报告|继续围绕|问题[:：]|结果摘要|产出文件|未解决问题|agent_end)/iu.test(normalized)) return false;
+  if (normalized.length > STEP_MAX_LENGTH) return false;
+  if (/(当前任务|本轮报告|问题[:：]|结果摘要|产出文件|未解决问题|agent_end)/iu.test(normalized)) return false;
   return true;
-}
-
-function sanitizeStepInstruction(raw: string): string {
-  let text = raw.trim();
-  text = text.replace(/^继续围绕当前任务["“”'].*?["“”']/u, '').trim();
-  text = text.replace(/^问题[:：]\s*/u, '').trim();
-  text = text.replace(/[。；;，,]\s*问题[:：].*$/u, '').trim();
-  text = text.replace(/[。；;，,]\s*继续如实汇报.*$/u, '').trim();
-  text = text.replace(/^[-—–•\s]+/u, '').trim();
-  return text.length > 120 ? text.slice(0, 120) : text;
 }
 
 function buildLlmLogData(llmDecision: AgentEndJudgeResult | null): Record<string, unknown> | null {
   if (!llmDecision) return null;
+
   if (!llmDecision.ok) {
     return {
       source: 'llm',
@@ -239,6 +261,7 @@ function buildLlmLogData(llmDecision: AgentEndJudgeResult | null): Record<string
       raw: llmDecision.raw ?? null,
     };
   }
+
   return {
     source: 'llm',
     status: 'ok',
@@ -262,11 +285,15 @@ export function registerAgentEndHook(api: OpenClawPluginApi): void {
     if (!taskId || !isExecutorSessionForTask(sessionKey, agentId, taskId)) return;
 
     const runtime = api.runtime as RuntimeWithTaskStorage;
-    const task = await runtime.storage?.get?.<Task>(`mteam:task:${taskId}`).catch(() => null) ?? getTask(taskId) ?? null;
+    const task = await runtime.storage?.get?.<Task>(`mteam:task:${taskId}`).catch(() => null)
+      ?? getTask(taskId)
+      ?? null;
+
     if (!task) {
       api.logger?.warn?.(`[m-team] agent_end task lookup miss taskId=${taskId} sessionKey=${sessionKey ?? 'missing-session-key'} agentId=${agentId ?? 'missing-agent-id'}`);
       return;
     }
+
     if (task.status !== TaskStatus.RUNNING) return;
 
     const nonSystemMessages = (event.messages ?? []).filter((msg: unknown) => (msg as Record<string, unknown>).role !== 'system');
@@ -279,16 +306,45 @@ export function registerAgentEndHook(api: OpenClawPluginApi): void {
           unresolvedIssues: ['AGENT_END_MESSAGES_EMPTY'],
         },
       });
-      writeTaskLog({ taskId, action: 'fail', sessionKey: sessionKey ?? undefined, agentId: agentId ?? undefined, result: { success: result.success, decision: 'fail' }, error: 'AGENT_END_MESSAGES_EMPTY' });
-      if (result.task) await sendNotifications(formatFailNotifications(result.task, getNotifications()), api.logger ?? null).catch(() => null);
+
+      writeTaskLog({
+        taskId,
+        action: 'fail',
+        sessionKey: sessionKey ?? undefined,
+        agentId: agentId ?? undefined,
+        result: { success: result.success, decision: 'fail' },
+        error: 'AGENT_END_MESSAGES_EMPTY',
+      });
+
+      if (result.task) {
+        await sendNotifications(formatFailNotifications(result.task, getNotifications()), api.logger ?? null).catch(() => null);
+      }
       return;
     }
 
     if (!event.success) {
       const errorMsg = event.error ?? 'unknown_error';
-      const result = failTask(taskId, errorMsg, { step: '执行失败', output: { summary: errorMsg, error: errorMsg, unresolvedIssues: [errorMsg] } });
-      writeTaskLog({ taskId, action: 'fail', sessionKey: sessionKey ?? undefined, agentId: agentId ?? undefined, result: { success: result.success, decision: 'fail' }, error: errorMsg });
-      if (result.task) await sendNotifications(formatFailNotifications(result.task, getNotifications()), api.logger ?? null).catch(() => null);
+      const result = failTask(taskId, errorMsg, {
+        step: 'Execution failed',
+        output: {
+          summary: errorMsg,
+          error: errorMsg,
+          unresolvedIssues: [errorMsg],
+        },
+      });
+
+      writeTaskLog({
+        taskId,
+        action: 'fail',
+        sessionKey: sessionKey ?? undefined,
+        agentId: agentId ?? undefined,
+        result: { success: result.success, decision: 'fail' },
+        error: errorMsg,
+      });
+
+      if (result.task) {
+        await sendNotifications(formatFailNotifications(result.task, getNotifications()), api.logger ?? null).catch(() => null);
+      }
       return;
     }
 
@@ -300,8 +356,8 @@ export function registerAgentEndHook(api: OpenClawPluginApi): void {
       unresolvedIssues: output.unresolvedIssues ?? [],
       error: output.error,
     };
+
     const storedOutput = sanitizeStoredOutput(normalizedOutput);
-    const step = task.description;
 
     let llmDecision: AgentEndJudgeResult | null = null;
     try {
@@ -324,13 +380,14 @@ export function registerAgentEndHook(api: OpenClawPluginApi): void {
 
       if (judged.decision === 'complete') {
         const result = completeTask(taskId, {
-          step,
+          step: task.description,
           output: sanitizeStoredOutput({
             ...storedOutput,
             summary: stripGoalLevelLines(judged.summary) ?? storedOutput.summary,
             unresolvedIssues: judged.unresolvedIssues ?? storedOutput.unresolvedIssues,
           }),
         });
+
         writeTaskLog({
           taskId,
           action: 'complete',
@@ -352,7 +409,10 @@ export function registerAgentEndHook(api: OpenClawPluginApi): void {
             },
           },
         });
-        if (result.task) await sendNotifications(formatTaskNotifications(result.task, getNotifications()), api.logger ?? null).catch(() => null);
+
+        if (result.task) {
+          await sendNotifications(formatTaskNotifications(result.task, getNotifications()), api.logger ?? null).catch(() => null);
+        }
         return;
       }
 
@@ -373,6 +433,7 @@ export function registerAgentEndHook(api: OpenClawPluginApi): void {
               unresolvedIssues: [failReason],
             }),
           });
+
           writeTaskLog({
             taskId,
             action: 'fail',
@@ -395,18 +456,28 @@ export function registerAgentEndHook(api: OpenClawPluginApi): void {
             },
             error: failReason,
           });
-          if (result.task) await sendNotifications(formatFailNotifications(result.task, getNotifications()), api.logger ?? null).catch(() => null);
+
+          if (result.task) {
+            await sendNotifications(formatFailNotifications(result.task, getNotifications()), api.logger ?? null).catch(() => null);
+          }
           return;
         }
 
-        const result = nextTask(taskId, agentId ?? task.executor ?? 'unknown', {
-          step,
-          output: sanitizeStoredOutput({
-            ...storedOutput,
-            summary: stripGoalLevelLines(judged.summary) ?? storedOutput.summary,
-            unresolvedIssues: judged.unresolvedIssues ?? storedOutput.unresolvedIssues,
-          }),
-        }, nextDescription, judged.nextTaskType);
+        const result = nextTask(
+          taskId,
+          agentId ?? task.executor ?? 'unknown',
+          {
+            step: task.description,
+            output: sanitizeStoredOutput({
+              ...storedOutput,
+              summary: stripGoalLevelLines(judged.summary) ?? storedOutput.summary,
+              unresolvedIssues: judged.unresolvedIssues ?? storedOutput.unresolvedIssues,
+            }),
+          },
+          nextDescription,
+          judged.nextTaskType,
+        );
+
         writeTaskLog({
           taskId,
           action: 'next',
@@ -430,10 +501,14 @@ export function registerAgentEndHook(api: OpenClawPluginApi): void {
             },
           },
         });
+
         if (judged.nextTaskType && judged.nextTaskType !== task.taskType) {
           api.logger?.info?.(`[m-team] agent_end taskType transition taskId=${taskId} ${task.taskType} -> ${judged.nextTaskType}`);
         }
-        if (result.task) await sendNotifications(formatNextNotifications(result.task, getNotifications()), api.logger ?? null).catch(() => null);
+
+        if (result.task) {
+          await sendNotifications(formatNextNotifications(result.task, getNotifications()), api.logger ?? null).catch(() => null);
+        }
         return;
       }
 
@@ -450,6 +525,7 @@ export function registerAgentEndHook(api: OpenClawPluginApi): void {
               : (storedOutput.unresolvedIssues?.length ? storedOutput.unresolvedIssues : [failReason]),
           }),
         });
+
         writeTaskLog({
           taskId,
           action: 'fail',
@@ -472,7 +548,10 @@ export function registerAgentEndHook(api: OpenClawPluginApi): void {
           },
           error: failReason,
         });
-        if (result.task) await sendNotifications(formatFailNotifications(result.task, getNotifications()), api.logger ?? null).catch(() => null);
+
+        if (result.task) {
+          await sendNotifications(formatFailNotifications(result.task, getNotifications()), api.logger ?? null).catch(() => null);
+        }
         return;
       }
     }
@@ -494,6 +573,7 @@ export function registerAgentEndHook(api: OpenClawPluginApi): void {
         unresolvedIssues: storedOutput.unresolvedIssues?.length ? storedOutput.unresolvedIssues : [failReason],
       }),
     });
+
     writeTaskLog({
       taskId,
       action: 'fail',
@@ -515,6 +595,9 @@ export function registerAgentEndHook(api: OpenClawPluginApi): void {
       },
       error: failReason,
     });
-    if (result.task) await sendNotifications(formatFailNotifications(result.task, getNotifications()), api.logger ?? null).catch(() => null);
+
+    if (result.task) {
+      await sendNotifications(formatFailNotifications(result.task, getNotifications()), api.logger ?? null).catch(() => null);
+    }
   });
 }
