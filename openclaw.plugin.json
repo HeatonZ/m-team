@@ -1,7 +1,7 @@
 {
   "id": "m-team",
   "name": "M-Team Natural Language Collaboration",
-  "version": "2026.5.12-3",
+  "version": "2026.5.13-1",
   "description": "Natural-language closed-loop task collaboration plugin for OpenClaw",
   "activation": {
     "onStartup": true
@@ -108,7 +108,8 @@
   },
   "skills": [
     "./skills/m-team-publisher",
-    "./skills/m-team-executor"
+    "./skills/m-team-executor",
+    "./skills/m-team-runtime-map"
   ],
   "contracts": {
     "tools": [

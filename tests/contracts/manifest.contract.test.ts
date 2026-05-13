@@ -24,6 +24,7 @@ describe('m-team manifest contract', () => {
     expect(pluginManifest.skills).toEqual([
       './skills/m-team-publisher',
       './skills/m-team-executor',
+      './skills/m-team-runtime-map',
     ]);
     expect(pluginManifest.contracts?.tools).toEqual(EXPECTED_TOOL_NAMES);
   });

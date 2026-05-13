@@ -1,6 +1,6 @@
 {
   "name": "m-team",
-  "version": "2026.5.12-3",
+  "version": "2026.5.13-1",
   "description": "Natural-language closed-loop task collaboration plugin for OpenClaw",
   "type": "module",
   "main": "dist/index.js",
