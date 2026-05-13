@@ -1,9 +1,10 @@
 /**
  * M-Team Hooks — sessionGuard
  *
- * 限制心跳 session 调用危险工具（complete/fail）。
- * 限制 executor 调用只有 publisher 才能成功执行的 close。
- * 心跳 session 的 sessionKey 格式：agent:${agentId}:${channel}:heartbeat
+ * Guardrails:
+ * - Block risky tool calls in heartbeat sessions.
+ * - Block executor task sessions from manually forcing next/relinquish.
+ * - Restrict publish and publisher-terminal actions to authorized agents.
  */
 
 import type {
@@ -33,63 +34,68 @@ export function registerSessionGuardHook(
     ): PluginHookBeforeToolCallResult => {
       const { toolName, params } = event;
       const { sessionKey, agentId } = ctx;
-  const isExecutorTaskSession = Boolean(sessionKey?.startsWith(`agent:${agentId}:m-team:task_`));
+      const isExecutorTaskSession = Boolean(sessionKey?.startsWith(`agent:${agentId}:m-team:task_`));
+      const isHeartbeatSession = Boolean(sessionKey?.endsWith(':heartbeat'));
 
-      // 心跳 session 禁止调用 complete / fail（这两种由 agent_end hook 统一处理）
-      // 额外禁止 sessions_spawn / sessions_send：heartbeat 只负责认领，不允许派生执行链或转发未经校验的子结果。
+      // Heartbeat session: do not execute steps or spawn/send side sessions.
       if (
-        (toolName === 'mteam_complete_task' || toolName === 'mteam_fail_task' || toolName === 'mteam_next_task' || toolName === 'sessions_spawn' || toolName === 'sessions_send')
-        && sessionKey?.endsWith(':heartbeat')
+        isHeartbeatSession
+        && (
+          toolName === 'mteam_complete_task'
+          || toolName === 'mteam_fail_task'
+          || toolName === 'mteam_next_task'
+          || toolName === 'sessions_spawn'
+          || toolName === 'sessions_send'
+        )
       ) {
         return {
           block: true,
-          blockReason: `心跳 session（${sessionKey}）禁止调用 ${toolName}。heartbeat 只负责认领或 publisher 验收，不负责执行链式步骤、spawn 子 agent 或转发未经校验的执行结果。`,
+          blockReason: `Heartbeat session (${sessionKey}) cannot call ${toolName}. Heartbeat only handles claim/publisher acceptance, not execution flow or subagent forwarding.`,
         };
       }
 
-      // 心跳 session 禁止发布新任务（publish 应由 executor 主动完成后触发，或 manager 主动发布）
-      if (toolName === 'mteam_publish_task' && sessionKey?.endsWith(':heartbeat')) {
+      // Heartbeat session cannot publish new tasks.
+      if (toolName === 'mteam_publish_task' && isHeartbeatSession) {
         return {
           block: true,
-          blockReason: `心跳 session（${sessionKey}）禁止发布新任务`,
+          blockReason: `Heartbeat session (${sessionKey}) cannot publish new tasks.`,
         };
       }
 
-      // executor task session 禁止主动 relinquish 当前任务。
-      // 正常推进应由 agent_end hook 在 executor 结束后统一判断 next/complete；
-      // executor 提前 relinquish 会把任务改成 pending，导致 agent_end 后续收口失败（TASK_NOT_RUNNING_pending）。
+      // Executor task session should end naturally and let agent_end decide.
       if (toolName === 'mteam_relinquish_task' && isExecutorTaskSession) {
         return {
           block: true,
-          blockReason: `executor session（${sessionKey}）禁止主动调用 mteam_relinquish_task。请完成当前步骤后直接结束 session，由 agent_end hook 自动 next/complete。`,
+          blockReason: `Executor session (${sessionKey}) cannot call mteam_relinquish_task. Finish the current step and end the session, then let agent_end decide next/complete/fail.`,
         };
       }
 
       if (toolName === 'mteam_next_task' && isExecutorTaskSession) {
         return {
           block: true,
-          blockReason: `executor session（${sessionKey}）禁止主动调用 mteam_next_task。请完成当前步骤后直接结束 session，由 agent_end hook 统一判断下一步。`,
+          blockReason: `Executor session (${sessionKey}) cannot call mteam_next_task. Finish the current step and end the session, then let agent_end decide the next step.`,
         };
       }
 
-      // publish：只有配置中的 publishers 才能发布任务
+      // Only configured publishers can publish.
       if (toolName === 'mteam_publish_task' && (!agentId || !publishers.has(agentId))) {
         return {
           block: true,
-          blockReason: `mteam_publish_task 只能由 publishers 配置中的 agent 调用，你（${agentId}）不在 publishers 列表中`,
+          blockReason: `mteam_publish_task is restricted to configured publishers. agent=${agentId ?? 'unknown'} is not allowed.`,
         };
       }
 
-      // close / reject / cancel：只有 publisher 才能成功执行
-      // 拦截非 publisher 的调用（参数中 publisher 与调用者 agentId 不一致）
+      // close/reject/cancel can only be performed by the declared publisher.
       if (
-        (toolName === 'mteam_close_task' || toolName === 'mteam_reject_task' || toolName === 'mteam_cancel_task')
+        toolName === 'mteam_close_task'
+        || toolName === 'mteam_reject_task'
+        || toolName === 'mteam_cancel_task'
       ) {
         const callPublisher = (params as Record<string, unknown>).publisher as string | undefined;
         if (callPublisher && callPublisher !== agentId) {
           return {
             block: true,
-            blockReason: `${toolName} 只能由任务发布者（publisher=${callPublisher}）调用，你（${agentId}）无权操作`,
+            blockReason: `${toolName} 无权操作: only task publisher can call this tool. publisher=${callPublisher}, agent=${agentId ?? 'unknown'}.`,
           };
         }
       }
