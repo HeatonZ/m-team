@@ -30,8 +30,8 @@ export { setWorkspaceRoot, DB_PATH };
 export { publishTask, claimTask, updateTask, relinquishTask, nextTask, cancelTask, completeTask, failTask, closeTask };
 export { rejectTask };
 export type { ClaimResult, CancelResult, RelinquishResult, CompleteResult, CloseResult, ContextStepInput };
-export { getTaskLogs } from './db';
-export type { TaskLog, TaskLogInput } from './db';
+export { getTaskLogs, countTaskLogs } from './db';
+export type { TaskLog, TaskLogInput, TaskLogDecisionSummary, TaskLogQuery } from './db';
 
 function init(): void {
   if (DB_PATH) openDb(DB_PATH);

@@ -3,6 +3,16 @@
  */
 
 declare module '../notifications' {
+  export interface NotificationDeliveryTrace {
+    provider: string;
+    target: string;
+    attempted: boolean;
+    delivered: boolean;
+    skippedReason?: string;
+    error?: string;
+    latencyMs?: number;
+  }
+
   export interface Notification {
     provider: string;
     channelId?: string;
@@ -17,7 +27,7 @@ declare module '../notifications' {
   export function formatPublishNotifications(task: unknown, notifications: Notification[]): Notification[];
   export function formatClaimNotifications(task: unknown, notifications: Notification[]): Notification[];
   export function formatCancelNotifications(task: unknown, notifications: Notification[]): Notification[];
-  export async function sendNotifications(notifications: Notification[], logger?: unknown): Promise<void>;
+  export async function sendNotifications(notifications: Notification[], logger?: unknown): Promise<NotificationDeliveryTrace[]>;
 }
 
 declare module '../hooks/subagentEnded.js' {

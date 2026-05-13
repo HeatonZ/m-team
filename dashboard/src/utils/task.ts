@@ -10,6 +10,11 @@ const BLOCK_KEYWORDS = [
   'external',
   'dependency',
   'failed',
+  'timeout',
+  'rate limit',
+  'ratelimit',
+  'network',
+  'unavailable',
   'cannot continue',
   '无法继续',
   '阻塞',
@@ -48,4 +53,19 @@ export function isBlockedTask(task: Task): boolean {
     const lower = issue.toLowerCase();
     return BLOCK_KEYWORDS.some((token) => lower.includes(token.toLowerCase()));
   });
+}
+
+export function getTaskRiskLevel(task: Task): 'normal' | 'warning' | 'danger' {
+  const age = getHeatBucket(task.updatedAt);
+  const blocked = isBlockedTask(task);
+
+  if (task.status === 'failed' || blocked || age === 'stale') {
+    return 'danger';
+  }
+
+  if (age === 'aging' || (task.status === 'pending' && task.context.length > 0)) {
+    return 'warning';
+  }
+
+  return 'normal';
 }

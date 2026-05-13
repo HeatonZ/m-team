@@ -16,8 +16,8 @@ import {
   getCancelledTasks,
   getClosedTasks,
   getTask as getTaskById,
-  getTaskLogs,
-  countTaskLogs,
+  getDashboardLogs,
+  countDashboardLogs,
 } from './src/db.ts';
 
 const _scriptPath = import.meta.url
@@ -46,6 +46,10 @@ const MIME: Record<string, string> = {
   '.png': 'image/png',
   '.svg': 'image/svg+xml',
 };
+
+const LOG_DECISIONS = new Set(['next', 'complete', 'fail']);
+const LOG_VIA = new Set(['llm', 'llm_fail_fast', 'llm_repeat_guard']);
+const LOG_LLM_STATUS = new Set(['ok', 'error']);
 
 function send(res: http.ServerResponse, status: number, body: string, contentType = 'application/json') {
   res.writeHead(status, { 'Content-Type': contentType });
@@ -117,14 +121,35 @@ async function handle(req: http.IncomingMessage, res: http.ServerResponse) {
 
       // GET /api/logs?taskId=...&action=...&page=1&pageSize=20
       if (seg === '/logs' && req.method === 'GET') {
-        const taskId = url.searchParams.get('taskId') || undefined;
-        const action = url.searchParams.get('action') || undefined;
+        const taskId = (url.searchParams.get('taskId') || '').trim() || undefined;
+        const action = (url.searchParams.get('action') || '').trim() || undefined;
+        const agentId = (url.searchParams.get('agentId') || '').trim() || undefined;
+        const sessionKey = (url.searchParams.get('sessionKey') || '').trim() || undefined;
+        const decision = (url.searchParams.get('decision') || '').trim();
+        const via = (url.searchParams.get('via') || '').trim();
+        const llmStatus = (url.searchParams.get('llmStatus') || '').trim();
+        const keyword = (url.searchParams.get('keyword') || '').trim() || undefined;
+        const hasErrorRaw = (url.searchParams.get('hasError') || '').trim().toLowerCase();
+        const hasError = hasErrorRaw === 'true' ? true : hasErrorRaw === 'false' ? false : undefined;
         const page = Math.max(1, parseInt(url.searchParams.get('page') || '1', 10));
         const fallbackLimit = parseInt(url.searchParams.get('limit') || '20', 10);
         const pageSize = Math.min(100, Math.max(1, parseInt(url.searchParams.get('pageSize') || String(fallbackLimit), 10)));
         const offset = (page - 1) * pageSize;
-        const total = countTaskLogs(taskId, action);
-        const logs = getTaskLogs(taskId, action, pageSize, offset);
+
+        const query = {
+          taskId,
+          action,
+          agentId,
+          sessionKey,
+          decision: LOG_DECISIONS.has(decision) ? decision as 'next' | 'complete' | 'fail' : undefined,
+          via: LOG_VIA.has(via) ? via as 'llm' | 'llm_fail_fast' | 'llm_repeat_guard' : undefined,
+          llmStatus: LOG_LLM_STATUS.has(llmStatus) ? llmStatus as 'ok' | 'error' : undefined,
+          hasError,
+          keyword,
+        };
+
+        const total = countDashboardLogs(query);
+        const logs = getDashboardLogs(query, pageSize, offset);
         const totalPages = Math.max(1, Math.ceil(total / pageSize));
         return json(res, 200, { logs, total, page, pageSize, totalPages });
       }

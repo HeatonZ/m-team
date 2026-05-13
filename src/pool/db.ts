@@ -132,6 +132,7 @@ export function updateTaskRow(taskId: string, patch: TaskPatch): Task | null {
   const snakePatch: Record<string, unknown> = {};
   const fieldMap: Record<string, string> = {
     taskId: 'task_id',
+    taskType: 'task_type',
     completedAt: 'completed_at',
     lastExecutor: 'last_executor',
     updatedAt: 'updated_at',
@@ -162,6 +163,239 @@ export interface TaskLogInput {
   error?: string;
 }
 
+export interface TaskLogDecisionSummary {
+  decision: 'next' | 'complete' | 'fail' | null;
+  via: string | null;
+  reason: string | null;
+  nextDescription: string | null;
+  nextTaskType: string | null;
+  confidence: string | null;
+  llmStatus: 'ok' | 'error' | null;
+  llmError: string | null;
+  llmAttempts: number | null;
+  hasFallback: boolean;
+}
+
+export interface TaskLog {
+  id: number;
+  taskId: string;
+  action: string;
+  sessionKey: string | null;
+  agentId: string | null;
+  params: Record<string, unknown> | null;
+  result: Record<string, unknown> | null;
+  error: string | null;
+  createdAt: number;
+  decision: TaskLogDecisionSummary | null;
+}
+
+export interface TaskLogQuery {
+  taskId?: string;
+  action?: string;
+  agentId?: string;
+  sessionKey?: string;
+  decision?: 'next' | 'complete' | 'fail';
+  via?: string;
+  llmStatus?: 'ok' | 'error';
+  hasError?: boolean;
+  keyword?: string;
+}
+
+interface RawTaskLogRow {
+  id: number;
+  task_id: string;
+  action: string;
+  session_key: string | null;
+  agent_id: string | null;
+  params: string | null;
+  result: string | null;
+  error: string | null;
+  created_at: number;
+}
+
+type TaskLogCompatQuery = Omit<TaskLogQuery, 'taskId' | 'action'>;
+
+function toRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
+}
+
+function toStringOrNull(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
+}
+
+function toNumberOrNull(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function parseJsonRecord(raw: string | null): Record<string, unknown> | null {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    return toRecord(parsed);
+  } catch {
+    return null;
+  }
+}
+
+function getResultDetails(result: Record<string, unknown> | null): Record<string, unknown> | null {
+  if (!result) return null;
+  const details = toRecord(result.details);
+  return details ?? result;
+}
+
+function extractDecisionSummary(action: string, result: Record<string, unknown> | null, error: string | null): TaskLogDecisionSummary | null {
+  const details = getResultDetails(result);
+  if (!details) return null;
+
+  const decisionRaw = toStringOrNull(details.decision) ?? (['next', 'complete', 'fail'].includes(action) ? action : null);
+  const decision = decisionRaw && ['next', 'complete', 'fail'].includes(decisionRaw)
+    ? (decisionRaw as TaskLogDecisionSummary['decision'])
+    : null;
+
+  const llm = toRecord(details.llm);
+  const fallback = details.fallback;
+  const hasFallback = fallback !== undefined && fallback !== null;
+
+  const llmStatusRaw = toStringOrNull(llm?.status);
+  const llmStatus = llmStatusRaw === 'ok' || llmStatusRaw === 'error'
+    ? llmStatusRaw
+    : null;
+
+  return {
+    decision,
+    via: toStringOrNull(details.via),
+    reason: toStringOrNull(details.reason) ?? toStringOrNull(details.error) ?? error,
+    nextDescription: toStringOrNull(details.nextDescription),
+    nextTaskType: toStringOrNull(details.nextTaskType),
+    confidence: toStringOrNull(details.confidence),
+    llmStatus,
+    llmError: toStringOrNull(llm?.error),
+    llmAttempts: toNumberOrNull(llm?.attempts),
+    hasFallback,
+  };
+}
+
+function stringifyForSearch(value: unknown): string {
+  if (value === null || value === undefined) return '';
+  if (typeof value === 'string') return value;
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return '';
+  }
+}
+
+function toTaskLog(row: RawTaskLogRow): TaskLog {
+  const params = parseJsonRecord(row.params);
+  const result = parseJsonRecord(row.result);
+
+  return {
+    id: row.id,
+    taskId: row.task_id,
+    action: row.action,
+    sessionKey: row.session_key,
+    agentId: row.agent_id,
+    params,
+    result,
+    error: row.error,
+    createdAt: row.created_at,
+    decision: extractDecisionSummary(row.action, result, row.error),
+  };
+}
+
+function buildBaseTaskLogSelect(query: TaskLogQuery): { sql: string; args: unknown[] } {
+  let sql = 'SELECT * FROM task_logs';
+  const conditions: string[] = [];
+  const args: unknown[] = [];
+
+  if (query.taskId) {
+    conditions.push('task_id = ?');
+    args.push(query.taskId);
+  }
+
+  if (query.action) {
+    conditions.push('action = ?');
+    args.push(query.action);
+  }
+
+  if (query.agentId) {
+    conditions.push('agent_id = ?');
+    args.push(query.agentId);
+  }
+
+  if (query.sessionKey) {
+    conditions.push('session_key = ?');
+    args.push(query.sessionKey);
+  }
+
+  if (query.hasError === true) {
+    conditions.push("error IS NOT NULL AND trim(error) <> ''");
+  } else if (query.hasError === false) {
+    conditions.push("(error IS NULL OR trim(error) = '')");
+  }
+
+  if (conditions.length > 0) {
+    sql += ' WHERE ' + conditions.join(' AND ');
+  }
+
+  sql += ' ORDER BY created_at DESC';
+
+  return { sql, args };
+}
+
+function matchesAdvancedQuery(log: TaskLog, query: TaskLogQuery): boolean {
+  if (query.decision && log.decision?.decision !== query.decision) {
+    return false;
+  }
+
+  if (query.via && (log.decision?.via ?? '') !== query.via) {
+    return false;
+  }
+
+  if (query.llmStatus && (log.decision?.llmStatus ?? '') !== query.llmStatus) {
+    return false;
+  }
+
+  const keyword = query.keyword?.trim().toLowerCase();
+  if (keyword) {
+    const text = [
+      log.taskId,
+      log.action,
+      log.agentId ?? '',
+      log.sessionKey ?? '',
+      log.error ?? '',
+      log.decision?.reason ?? '',
+      log.decision?.nextDescription ?? '',
+      log.decision?.llmError ?? '',
+      stringifyForSearch(log.params),
+      stringifyForSearch(log.result),
+    ].join('\n').toLowerCase();
+
+    if (!text.includes(keyword)) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function queryTaskLogs(query: TaskLogQuery): TaskLog[] {
+  const db = getDb();
+  const { sql, args } = buildBaseTaskLogSelect(query);
+  const rows = db.prepare(sql).all(...args) as RawTaskLogRow[];
+  return rows
+    .map(toTaskLog)
+    .filter((log) => matchesAdvancedQuery(log, query));
+}
+
 export function writeTaskLog(input: TaskLogInput): void {
   const db = getDb();
   const now = Date.now();
@@ -185,77 +419,19 @@ export function writeTaskLog(input: TaskLogInput): void {
   db.prepare('DELETE FROM task_logs WHERE created_at < ?').run(cutoff);
 }
 
-export interface TaskLog {
-  id: number;
-  taskId: string;
-  action: string;
-  sessionKey: string | null;
-  agentId: string | null;
-  params: Record<string, unknown> | null;
-  result: Record<string, unknown> | null;
-  error: string | null;
-  createdAt: number;
+export function countTaskLogs(taskId?: string, action?: string, query: TaskLogCompatQuery = {}): number {
+  return queryTaskLogs({
+    ...query,
+    taskId,
+    action,
+  }).length;
 }
 
-export function countTaskLogs(taskId?: string, action?: string): number {
-  const db = getDb();
-  let sql = 'SELECT COUNT(*) AS count FROM task_logs';
-  const conditions: string[] = [];
-  const args: unknown[] = [];
-
-  if (taskId) {
-    conditions.push('task_id = ?');
-    args.push(taskId);
-  }
-  if (action) {
-    conditions.push('action = ?');
-    args.push(action);
-  }
-  if (conditions.length > 0) sql += ' WHERE ' + conditions.join(' AND ');
-
-  const row = db.prepare(sql).get(...args) as { count: number };
-  return row.count;
-}
-
-export function getTaskLogs(taskId?: string, action?: string, limit = 200, offset = 0): TaskLog[] {
-  const db = getDb();
-  let sql = 'SELECT * FROM task_logs';
-  const conditions: string[] = [];
-  const args: unknown[] = [];
-
-  if (taskId) {
-    conditions.push('task_id = ?');
-    args.push(taskId);
-  }
-  if (action) {
-    conditions.push('action = ?');
-    args.push(action);
-  }
-  if (conditions.length > 0) sql += ' WHERE ' + conditions.join(' AND ');
-  sql += ' ORDER BY created_at DESC LIMIT ? OFFSET ?';
-  args.push(limit, offset);
-
-  const rows = db.prepare(sql).all(...args) as Array<{
-    id: number;
-    task_id: string;
-    action: string;
-    session_key: string | null;
-    agent_id: string | null;
-    params: string | null;
-    result: string | null;
-    error: string | null;
-    created_at: number;
-  }>;
-
-  return rows.map(r => ({
-    id: r.id,
-    taskId: r.task_id,
-    action: r.action,
-    sessionKey: r.session_key,
-    agentId: r.agent_id,
-    params: r.params ? JSON.parse(r.params) : null,
-    result: r.result ? JSON.parse(r.result) : null,
-    error: r.error,
-    createdAt: r.created_at,
-  }));
+export function getTaskLogs(taskId?: string, action?: string, limit = 200, offset = 0, query: TaskLogCompatQuery = {}): TaskLog[] {
+  const logs = queryTaskLogs({
+    ...query,
+    taskId,
+    action,
+  });
+  return logs.slice(Math.max(0, offset), Math.max(0, offset) + Math.max(0, limit));
 }

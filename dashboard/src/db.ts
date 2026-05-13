@@ -12,11 +12,27 @@ import {
   getTaskRowByExecutor,
   getTaskLogs,
   countTaskLogs,
-} from 'm-team/pool/db';
+} from 'm-team/pool';
 import { TaskStatus } from 'm-team/schema/task';
 
 import type { Task, TaskPriority } from './types/task.ts';
 import { STATUS_LABELS, PRIORITY_LABELS } from './types/task.ts';
+
+export type DashboardLogDecision = 'next' | 'complete' | 'fail';
+export type DashboardLogVia = 'llm' | 'llm_fail_fast' | 'llm_repeat_guard';
+export type DashboardLogLlmStatus = 'ok' | 'error';
+
+export interface DashboardLogQuery {
+  taskId?: string;
+  action?: string;
+  agentId?: string;
+  sessionKey?: string;
+  decision?: DashboardLogDecision;
+  via?: DashboardLogVia;
+  llmStatus?: DashboardLogLlmStatus;
+  hasError?: boolean;
+  keyword?: string;
+}
 
 export { TaskStatus, STATUS_LABELS, PRIORITY_LABELS };
 export type { Task, TaskPriority };
@@ -77,4 +93,14 @@ export function getAgentActiveTask(agentId: string) {
   return getTaskRowByExecutor(agentId);
 }
 
-export { getTaskLogs, countTaskLogs };
+export function getDashboardLogs(query: DashboardLogQuery, limit: number, offset: number) {
+  ensureInit();
+  const { taskId, action, ...advanced } = query;
+  return getTaskLogs(taskId, action, limit, offset, advanced);
+}
+
+export function countDashboardLogs(query: DashboardLogQuery) {
+  ensureInit();
+  const { taskId, action, ...advanced } = query;
+  return countTaskLogs(taskId, action, advanced);
+}

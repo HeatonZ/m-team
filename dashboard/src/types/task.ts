@@ -1,6 +1,6 @@
 export type TaskStatus = 'pending' | 'running' | 'completed' | 'closed' | 'failed' | 'cancelled';
 export type TaskPriority = 'high' | 'normal' | 'low';
-export type TaskType = 'general' | 'coding' | 'research' | 'ops' | 'data' | 'design' | 'content';
+export type TaskType = 'general' | 'coding' | 'research' | 'ops' | 'data' | 'design' | 'content' | 'ecommerce';
 
 export interface ContextStepOutput {
   summary?: string;
@@ -58,6 +58,7 @@ export const TASK_TYPE_LABELS: Record<TaskType, string> = {
   data: 'Data',
   design: 'Design',
   content: 'Content',
+  ecommerce: 'Ecommerce',
 };
 
 export const HISTORY_STATUSES: TaskStatus[] = ['completed', 'closed', 'failed', 'cancelled'];

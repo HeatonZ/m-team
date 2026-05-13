@@ -106,7 +106,10 @@ export function register(api: OpenClawPluginApi, config: MTeamPluginConfig): voi
         try {
           const notifications = formatPublishNotifications(task, config.notifications);
           const traces = await sendNotifications(notifications, api.logger ?? null);
-          api.logger?.info?.(`[m-team] publish notifications prepared=${notifications.length} delivered=${traces.filter((trace) => trace.delivered).length} taskId=${taskId}`);
+          const delivered = traces.filter((trace) => trace.delivered).length;
+          const failed = traces.filter((trace) => trace.attempted && !trace.delivered).length;
+          const skipped = traces.filter((trace) => !trace.attempted).length;
+          api.logger?.info?.(`[m-team] publish notifications prepared=${notifications.length} delivered=${delivered} failed=${failed} skipped=${skipped} taskId=${taskId}`);
         } catch (e) {
           const message = e instanceof Error ? e.message : String(e);
           api.logger?.warn(`[m-team] publish notifications unexpected failure taskId=${taskId} error=${message}`);

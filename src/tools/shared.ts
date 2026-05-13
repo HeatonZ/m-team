@@ -20,7 +20,11 @@ export async function notifyIfNeeded(
 ): Promise<void> {
   if (!shouldNotify) return;
   try {
-    await sendNotifications(getNotifications(), logger ?? undefined);
+    const traces = await sendNotifications(getNotifications(), logger ?? undefined);
+    const delivered = traces.filter((trace) => trace.delivered).length;
+    const failed = traces.filter((trace) => trace.attempted && !trace.delivered).length;
+    const skipped = traces.filter((trace) => !trace.attempted).length;
+    logger?.info?.(`[m-team] notify summary prepared=${traces.length} delivered=${delivered} failed=${failed} skipped=${skipped}`);
   } catch {
     logger?.warn('[m-team] notification delivery failed');
   }

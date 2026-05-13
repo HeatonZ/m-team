@@ -25,8 +25,8 @@ describe('publish notification observability', () => {
 
     try {
       const result = await harness.exec('mteam_publish_task', {
-        goal: '验证通知成功日志',
-        description: '只发布并验证日志',
+        goal: 'Verify successful publish notification logging',
+        description: 'Publish one task and check notification traces',
         taskType: 'general',
         publisher: 'manager',
       }, { agentId: 'manager' });
@@ -37,7 +37,8 @@ describe('publish notification observability', () => {
 
       const logs = harness.readRuntimeLogs();
       expect(logs.some((entry) => entry.message.includes('notification delivered provider=feishu target=oc_test_group'))).toBe(true);
-      expect(logs.some((entry) => entry.message.includes('publish notifications prepared=1 delivered=1'))).toBe(true);
+      expect(logs.some((entry) => entry.message.includes('publish notifications prepared=1 delivered=1 failed=0 skipped=0'))).toBe(true);
+      expect(logs.some((entry) => entry.message.includes('notifications summary prepared=1 delivered=1 attempted=1 skipped=0'))).toBe(true);
     } finally {
       nock.cleanAll();
       await harness.cleanup();
@@ -55,8 +56,8 @@ describe('publish notification observability', () => {
 
     try {
       const result = await harness.exec('mteam_publish_task', {
-        goal: '验证通知跳过日志',
-        description: '只发布并验证缺凭证跳过',
+        goal: 'Verify skipped publish notification logging',
+        description: 'Publish one task and verify missing-credential skip trace',
         taskType: 'general',
         publisher: 'manager',
       }, { agentId: 'manager' });
@@ -65,9 +66,11 @@ describe('publish notification observability', () => {
 
       const logs = harness.readRuntimeLogs();
       expect(logs.some((entry) => entry.message.includes('notification skipped provider=feishu target=oc_test_group reason=missing-credentials'))).toBe(true);
-      expect(logs.some((entry) => entry.message.includes('publish notifications prepared=1 delivered=0'))).toBe(true);
+      expect(logs.some((entry) => entry.message.includes('publish notifications prepared=1 delivered=0 failed=0 skipped=1'))).toBe(true);
+      expect(logs.some((entry) => entry.message.includes('notifications summary prepared=1 delivered=0 attempted=0 skipped=1'))).toBe(true);
     } finally {
       await harness.cleanup();
     }
   });
 });
+

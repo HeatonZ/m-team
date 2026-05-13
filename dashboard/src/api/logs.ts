@@ -10,6 +10,18 @@ export interface TaskLog {
   result: Record<string, unknown> | null;
   error: string | null;
   createdAt: number;
+  decision: {
+    decision: 'next' | 'complete' | 'fail' | null;
+    via: string | null;
+    reason: string | null;
+    nextDescription: string | null;
+    nextTaskType: string | null;
+    confidence: string | null;
+    llmStatus: 'ok' | 'error' | null;
+    llmError: string | null;
+    llmAttempts: number | null;
+    hasFallback: boolean;
+  } | null;
 }
 
 export interface LogsResponse {
@@ -23,6 +35,13 @@ export interface LogsResponse {
 export interface FetchLogsOptions {
   taskId?: string;
   action?: string;
+  agentId?: string;
+  sessionKey?: string;
+  decision?: 'next' | 'complete' | 'fail';
+  via?: 'llm' | 'llm_fail_fast' | 'llm_repeat_guard';
+  llmStatus?: 'ok' | 'error';
+  hasError?: boolean;
+  keyword?: string;
   page?: number;
   pageSize?: number;
 }
@@ -31,6 +50,13 @@ export async function fetchLogs(options: FetchLogsOptions = {}): Promise<LogsRes
   const params = new URLSearchParams();
   if (options.taskId) params.set('taskId', options.taskId);
   if (options.action) params.set('action', options.action);
+  if (options.agentId) params.set('agentId', options.agentId);
+  if (options.sessionKey) params.set('sessionKey', options.sessionKey);
+  if (options.decision) params.set('decision', options.decision);
+  if (options.via) params.set('via', options.via);
+  if (options.llmStatus) params.set('llmStatus', options.llmStatus);
+  if (typeof options.hasError === 'boolean') params.set('hasError', String(options.hasError));
+  if (options.keyword) params.set('keyword', options.keyword);
   params.set('page', String(options.page ?? 1));
   params.set('pageSize', String(options.pageSize ?? 20));
 

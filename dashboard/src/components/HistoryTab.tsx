@@ -56,7 +56,7 @@ export const HistoryTab: FC<HistoryTabProps> = ({
             onClick={() => onPageChange(page - 1)}
             disabled={page <= 1}
           >
-            ← Prev
+            Prev
           </button>
           <span className="page-info">{page} / {totalPages}</span>
           <button
@@ -64,7 +64,7 @@ export const HistoryTab: FC<HistoryTabProps> = ({
             onClick={() => onPageChange(page + 1)}
             disabled={page >= totalPages}
           >
-            Next →
+            Next
           </button>
         </div>
       )}

@@ -2,7 +2,7 @@ import type { FC } from 'react';
 import type { Task, ContextStepEntry } from '../types/task';
 import { STATUS_LABELS, PRIORITY_LABELS, TASK_TYPE_LABELS } from '../types/task';
 import { formatRelativeTime, formatTime, escHtml } from '../utils/format';
-import { getLatestIssues, getLatestStep } from '../utils/task';
+import { getLatestIssues, getLatestStep, getTaskRiskLevel } from '../utils/task';
 
 interface TaskDetailModalProps {
   task: Task | null;
@@ -19,12 +19,23 @@ function getFlowSummary(task: Task) {
   return 'Task has been cancelled.';
 }
 
+function renderJson(value: unknown): string {
+  if (value === null || value === undefined) return '-';
+  if (typeof value === 'string') return value;
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return String(value);
+  }
+}
+
 export const TaskDetailModal: FC<TaskDetailModalProps> = ({ task, onClose }) => {
   if (!task) return null;
 
   const steps = task.context as ContextStepEntry[];
   const latest = getLatestStep(task);
   const latestIssues = getLatestIssues(task);
+  const risk = getTaskRiskLevel(task);
 
   return (
     <div className="modal-backdrop open" onClick={(e) => e.target === e.currentTarget && onClose()}>
@@ -42,6 +53,7 @@ export const TaskDetailModal: FC<TaskDetailModalProps> = ({ task, onClose }) => 
             <span className={`status-chip status-${task.status}`}>{STATUS_LABELS[task.status]}</span>
             <span className="status-chip neutral-chip">{PRIORITY_LABELS[task.priority]}</span>
             <span className="status-chip neutral-chip">{formatRelativeTime(task.updatedAt)}</span>
+            <span className={`risk-chip risk-chip-${risk}`}>{risk.toUpperCase()}</span>
           </div>
         </div>
 
@@ -90,6 +102,12 @@ export const TaskDetailModal: FC<TaskDetailModalProps> = ({ task, onClose }) => 
                   <span className="data-pill" key={`${file}-${idx}`}>{file}</span>
                 ))}
               </div>
+            ) : null}
+            {latest?.output ? (
+              <details className="log-details">
+                <summary>Raw latest output</summary>
+                <pre className="modal-pre">{renderJson(latest.output)}</pre>
+              </details>
             ) : null}
           </div>
 

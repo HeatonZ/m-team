@@ -1,6 +1,6 @@
 import { useMemo, useState, useCallback } from 'react';
-import type { Task, TaskStatus } from './types/task';
-import { STATUS_LABELS } from './types/task';
+import type { Task, TaskStatus, TaskType } from './types/task';
+import { STATUS_LABELS, TASK_TYPE_LABELS } from './types/task';
 import { Header } from './components/Header';
 import { TaskColumn } from './components/TaskColumn';
 import { HistoryTab } from './components/HistoryTab';
@@ -8,25 +8,52 @@ import { LogsTab } from './components/LogsTab';
 import { TaskDetailModal } from './components/TaskDetailModal';
 import { usePendingTasks, useRunningTasks, useHistoryTasks } from './hooks/useTasks';
 import { fetchTaskDetail } from './api/client';
-import { getHeatBucket, getLatestSummary, isBlockedTask } from './utils/task';
+import { getHeatBucket, getLatestSummary, getTaskRiskLevel, isBlockedTask } from './utils/task';
 
 type MainTab = 'board' | 'logs';
-type BoardFilter = 'all' | 'needs_next' | 'blocked' | 'fresh';
+type BoardFilter = 'all' | 'needs_next' | 'blocked' | 'fresh' | 'risky';
+type TypeFilter = 'all' | TaskType;
 
 const FILTER_LABELS: Record<BoardFilter, string> = {
   all: 'All',
   needs_next: 'Needs next step',
   blocked: 'Blocked only',
   fresh: 'Updated in 10m',
+  risky: 'Risky',
 };
 
-function filterTasks(tasks: Task[], filter: BoardFilter) {
+function filterByFlow(tasks: Task[], filter: BoardFilter) {
   return tasks.filter((task) => {
     if (filter === 'all') return true;
     if (filter === 'fresh') return getHeatBucket(task.updatedAt) === 'fresh';
     if (filter === 'blocked') return isBlockedTask(task);
     if (filter === 'needs_next') return task.status === 'pending' && task.context.length > 0;
+    if (filter === 'risky') return getTaskRiskLevel(task) !== 'normal';
     return true;
+  });
+}
+
+function filterByTaskType(tasks: Task[], taskType: TypeFilter) {
+  if (taskType === 'all') return tasks;
+  return tasks.filter((task) => (task.taskType || 'general') === taskType);
+}
+
+function filterByKeyword(tasks: Task[], keyword: string) {
+  const key = keyword.trim().toLowerCase();
+  if (!key) return tasks;
+
+  return tasks.filter((task) => {
+    const latest = getLatestSummary(task);
+    const text = [
+      task.taskId,
+      task.goal,
+      task.description,
+      task.publisher,
+      task.executor || '',
+      task.lastExecutor || '',
+      latest,
+    ].join('\n').toLowerCase();
+    return text.includes(key);
   });
 }
 
@@ -35,6 +62,9 @@ export function App() {
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [activeHistoryStatus, setActiveHistoryStatus] = useState<TaskStatus>('completed');
   const [boardFilter, setBoardFilter] = useState<BoardFilter>('all');
+  const [typeFilter, setTypeFilter] = useState<TypeFilter>('all');
+  const [keywordInput, setKeywordInput] = useState('');
+  const [keyword, setKeyword] = useState('');
 
   const { tasks: pendingTasks, reload: reloadPending } = usePendingTasks();
   const { tasks: runningTasks, reload: reloadRunning } = useRunningTasks();
@@ -62,18 +92,28 @@ export function App() {
     }
   }, []);
 
-  const board = useMemo(() => {
-    const filteredPending = filterTasks(pendingTasks, boardFilter);
-    const filteredRunning = filterTasks(runningTasks, boardFilter);
+  const handleApplyKeyword = useCallback((e: React.FormEvent) => {
+    e.preventDefault();
+    setKeyword(keywordInput.trim());
+  }, [keywordInput]);
 
-    const newTasks = filteredPending.filter((task) => task.context.length === 0);
-    const queuedNext = filteredPending.filter((task) => task.context.length > 0 && !isBlockedTask(task));
-    const blockedNext = filteredPending.filter((task) => task.context.length > 0 && isBlockedTask(task));
-    const activeWork = filteredRunning;
-    const risky = [...filteredPending, ...filteredRunning].filter((task) => isBlockedTask(task) || getHeatBucket(task.updatedAt) === 'stale');
+  const visiblePending = useMemo(() => {
+    return filterByKeyword(filterByTaskType(filterByFlow(pendingTasks, boardFilter), typeFilter), keyword);
+  }, [pendingTasks, boardFilter, typeFilter, keyword]);
+
+  const visibleRunning = useMemo(() => {
+    return filterByKeyword(filterByTaskType(filterByFlow(runningTasks, boardFilter), typeFilter), keyword);
+  }, [runningTasks, boardFilter, typeFilter, keyword]);
+
+  const board = useMemo(() => {
+    const newTasks = visiblePending.filter((task) => task.context.length === 0);
+    const queuedNext = visiblePending.filter((task) => task.context.length > 0 && !isBlockedTask(task));
+    const blockedNext = visiblePending.filter((task) => task.context.length > 0 && isBlockedTask(task));
+    const activeWork = visibleRunning;
+    const risky = [...visiblePending, ...visibleRunning].filter((task) => getTaskRiskLevel(task) !== 'normal');
 
     return { newTasks, queuedNext, blockedNext, activeWork, risky };
-  }, [pendingTasks, runningTasks, boardFilter]);
+  }, [visiblePending, visibleRunning]);
 
   const stats = useMemo(
     () => ({
@@ -93,8 +133,10 @@ export function App() {
       .map((task) => ({
         taskId: task.taskId,
         status: task.status,
+        taskType: task.taskType || 'general',
         summary: getLatestSummary(task),
         heat: getHeatBucket(task.updatedAt),
+        risk: getTaskRiskLevel(task),
       }));
   }, [pendingTasks, runningTasks]);
 
@@ -107,7 +149,7 @@ export function App() {
           <div className="hero-eyebrow">M-Team Task Loop</div>
           <h2 className="hero-title">Closed-loop Collaboration Board</h2>
           <p className="hero-subtitle">
-            Follow each task through next / complete / fail decisions with clear focus, blockers, and acceptance history.
+            Follow each task through next / complete / fail decisions with clearer task quality and runtime traces.
           </p>
         </div>
         <div className="hero-stats">
@@ -132,6 +174,28 @@ export function App() {
             </button>
           ))}
         </div>
+
+        <div className="toolbar-group">
+          <span className="toolbar-label">Task type</span>
+          <select className="log-select toolbar-select" value={typeFilter} onChange={(e) => setTypeFilter(e.target.value as TypeFilter)}>
+            <option value="all">All types</option>
+            {(Object.keys(TASK_TYPE_LABELS) as TaskType[]).map((type) => (
+              <option key={type} value={type}>{TASK_TYPE_LABELS[type]}</option>
+            ))}
+          </select>
+        </div>
+
+        <form className="toolbar-group toolbar-search" onSubmit={handleApplyKeyword}>
+          <span className="toolbar-label">Search</span>
+          <input
+            className="log-input toolbar-input"
+            placeholder="taskId / description / summary"
+            value={keywordInput}
+            onChange={(e) => setKeywordInput(e.target.value)}
+          />
+          <button type="submit" className="tab">Apply</button>
+          <button type="button" className="tab" onClick={() => { setKeywordInput(''); setKeyword(''); }}>Clear</button>
+        </form>
       </div>
 
       <div className="spotlight-panel">
@@ -144,8 +208,11 @@ export function App() {
         <div className="spotlight-grid">
           {spotlight.map((item) => (
             <button key={item.taskId} className={`spotlight-card heat-${item.heat}`} onClick={() => handleCardClick(item.taskId)}>
-              <span className={`status-chip status-${item.status}`}>{STATUS_LABELS[item.status]}</span>
-              <strong>{item.taskId.slice(-8)}</strong>
+              <div className="spotlight-top-row">
+                <span className={`status-chip status-${item.status}`}>{STATUS_LABELS[item.status]}</span>
+                <span className={`risk-chip risk-chip-${item.risk}`}>{item.risk}</span>
+              </div>
+              <strong>{item.taskId.slice(-8)} · {TASK_TYPE_LABELS[item.taskType]}</strong>
               <div>{item.summary}</div>
             </button>
           ))}
