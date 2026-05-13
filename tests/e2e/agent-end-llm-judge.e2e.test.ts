@@ -16,6 +16,7 @@ describe('agent_end llm judge e2e', () => {
       const publishResult = await harness.exec('mteam_publish_task', {
         goal: '形成最终选品结论',
         description: '整理最终结果并结束',
+        taskType: 'general',
         publisher: 'manager',
       }) as ToolResult<{ taskId: string }>;
       const taskId = extractDetails(publishResult)!.taskId;
@@ -48,6 +49,7 @@ describe('agent_end llm judge e2e', () => {
       const publishResult = await harness.exec('mteam_publish_task', {
         goal: '找够 5 个候选商品',
         description: '先整理首批候选',
+        taskType: 'general',
         publisher: 'manager',
       }) as ToolResult<{ taskId: string }>;
       const taskId = extractDetails(publishResult)!.taskId;
@@ -82,6 +84,7 @@ describe('agent_end llm judge e2e', () => {
       const publishResult = await harness.exec('mteam_publish_task', {
         goal: '形成最终结论',
         description: '先整理第 1 个候选商品',
+        taskType: 'general',
         publisher: 'manager',
       }) as ToolResult<{ taskId: string }>;
       const taskId = extractDetails(publishResult)!.taskId;
@@ -110,6 +113,7 @@ describe('agent_end llm judge e2e', () => {
       const publishResult = await harness.exec('mteam_publish_task', {
         goal: '形成最终选品结论',
         description: '先整理 3 个候选商品信息',
+        taskType: 'general',
         publisher: 'manager',
       }) as ToolResult<{ taskId: string }>;
       const taskId = extractDetails(publishResult)!.taskId;
@@ -146,6 +150,7 @@ describe('agent_end llm judge e2e', () => {
       const publishResult = await harness.exec('mteam_publish_task', {
         goal: '形成最终选品结论',
         description: '整理候选并补齐校验文件',
+        taskType: 'general',
         publisher: 'manager',
       }) as ToolResult<{ taskId: string }>;
       const taskId = extractDetails(publishResult)!.taskId;
@@ -181,6 +186,7 @@ describe('agent_end llm judge e2e', () => {
       const publishResult = await harness.exec('mteam_publish_task', {
         goal: '完成三步计算并最终汇总',
         description: '计算 1+1，结果写入 step1_result.md',
+        taskType: 'general',
         publisher: 'manager',
       }) as ToolResult<{ taskId: string }>;
       const taskId = extractDetails(publishResult)!.taskId;

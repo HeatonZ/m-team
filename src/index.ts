@@ -33,6 +33,7 @@ import {
   completeTask,
   failTask
 } from './pool/index.js';
+import { setClaimRoutingConfig } from './pool/claim-routing.js';
 import { TaskStatus, TaskPriority } from './schema/task.js';
 import type { NotificationConfig } from './notifications.js';
 import type { MTeamPluginConfig } from './config.js';
@@ -50,18 +51,6 @@ import type {
   OpenClawPluginApi,
 } from 'openclaw/plugin-sdk/core';
 
-interface PluginConfig {
-  workspaceRoot?: string;
-  executors?: string[];
-  publishers?: string[];
-  notifications?: NotificationConfig[];
-  dashboardEnabled?: boolean;
-  dashboardPort?: number;
-  agentEndJudgeAgentId?: string;
-  agentEndJudgeModel?: string;
-  agentEndJudgeTimeoutMs?: number;
-}
-
 const plugin = definePluginEntry({
   id: 'm-team',
   name: 'M-Team 去中心化任务池',
@@ -69,12 +58,13 @@ const plugin = definePluginEntry({
   configSchema: emptyPluginConfigSchema(),
 
   register(api: OpenClawPluginApi) {
-    const config = (api.pluginConfig ?? {}) as PluginConfig;
+    const config = (api.pluginConfig ?? {}) as MTeamPluginConfig;
     let workspaceRoot = config.workspaceRoot ?? '/mnt/d/code/m-team';
     if (workspaceRoot.startsWith('~')) {
       workspaceRoot = path.join(homedir(), workspaceRoot.slice(1));
     }
     setWorkspaceRoot(workspaceRoot);
+    setClaimRoutingConfig(config.claimRouting);
 
     setNotifications(config.notifications ?? []);
 

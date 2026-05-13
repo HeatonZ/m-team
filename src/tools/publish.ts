@@ -122,6 +122,9 @@ export function register(api: OpenClawPluginApi, config: MTeamPluginConfig): voi
       api.logger?.info?.(`[m-team] publish execute sessionKey=${toolContext?.sessionKey ?? 'missing-session-key'} agentId=${toolContext?.agentId?.trim() ?? 'missing-agent-id'} rawPublisher=${params.publisher?.trim() ?? 'missing'} effectivePublisher=${publisher}`);
 
       const { description, goal, taskType, priority } = params;
+      if (!taskType) {
+        throw new Error('mteam_publish_task invalid input:\n- taskType is required.');
+      }
       const stepContract = normalizeStepContract(params.stepContract) ?? buildDefaultStepContract(description);
       const validationErrors = validatePublishTaskInput({ ...params, publisher, stepContract });
       if (validationErrors.length) {

@@ -27,6 +27,7 @@ describe('publish notification observability', () => {
       const result = await harness.exec('mteam_publish_task', {
         goal: '验证通知成功日志',
         description: '只发布并验证日志',
+        taskType: 'general',
         publisher: 'manager',
       }, { agentId: 'manager' });
 
@@ -56,6 +57,7 @@ describe('publish notification observability', () => {
       const result = await harness.exec('mteam_publish_task', {
         goal: '验证通知跳过日志',
         description: '只发布并验证缺凭证跳过',
+        taskType: 'general',
         publisher: 'manager',
       }, { agentId: 'manager' });
 

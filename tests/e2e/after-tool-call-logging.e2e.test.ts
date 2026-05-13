@@ -9,6 +9,7 @@ describe('after_tool_call logging e2e', () => {
       const publishResult = await harness.exec('mteam_publish_task', {
         goal: '验证 task log 记录',
         description: '创建一个可取消的测试任务',
+        taskType: 'general',
         publisher: 'manager',
         priority: 'high',
       }, { agentId: 'manager', sessionKey: 'agent:manager:manual' }) as ToolResult<{ taskId: string }>;

@@ -21,6 +21,7 @@ describe('agent_end task-goal completion boundary', () => {
       const publishResult = await harness.exec('mteam_publish_task', {
         goal: '完成 1+1、1×1、2+3 三个计算，并输出三个结果',
         description: '计算 1+1，并写入 /mnt/d/code/hermes/step1.json',
+        taskType: 'general',
         publisher: 'manager',
       }) as ToolResult<PublishDetails>;
       const taskId = extractDetails(publishResult)!.taskId;
@@ -58,6 +59,7 @@ describe('agent_end task-goal completion boundary', () => {
       const publishResult = await harness.exec('mteam_publish_task', {
         goal: '完成 1+1、1×1、2+3 三个计算，并输出三个结果',
         description: '汇总三个计算结果并输出最终文件',
+        taskType: 'general',
         publisher: 'manager',
       }) as ToolResult<PublishDetails>;
       const taskId = extractDetails(publishResult)!.taskId;
@@ -94,6 +96,7 @@ describe('agent_end task-goal completion boundary', () => {
       const publishResult = await harness.exec('mteam_publish_task', {
         goal: '三个 agent 协作完成计算并输出最终结果 8',
         description: '汇总三个子任务结果并验证总和为 8',
+        taskType: 'general',
         publisher: 'manager',
       }) as ToolResult<PublishDetails>;
       const taskId = extractDetails(publishResult)!.taskId;

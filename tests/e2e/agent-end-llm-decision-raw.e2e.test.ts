@@ -57,6 +57,7 @@ describe('agent_end llm raw extraction and empty output handling', () => {
       const publishResult = await harness.exec('mteam_publish_task', {
         goal: '验证空输出失败路径',
         description: '执行一步并记录结果',
+        taskType: 'general',
         publisher: 'manager',
       }) as ToolResult<{ taskId: string }>;
       const taskId = extractDetails(publishResult)!.taskId;

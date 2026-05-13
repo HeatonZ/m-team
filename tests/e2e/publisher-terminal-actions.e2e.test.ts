@@ -16,6 +16,7 @@ describe('publisher terminal actions e2e', () => {
       const cancelPublish = await harness.exec('mteam_publish_task', {
         goal: 'Create a task that can be cancelled',
         description: 'Create a cancellable test task',
+        taskType: 'general',
         publisher: 'manager',
       }) as ToolResult<PublishDetails>;
       const cancelTaskId = extractDetails(cancelPublish)!.taskId;
@@ -31,6 +32,7 @@ describe('publisher terminal actions e2e', () => {
       const closePublish = await harness.exec('mteam_publish_task', {
         goal: 'Produce a final file that can be accepted',
         description: 'Generate the final result file',
+        taskType: 'general',
         publisher: 'manager',
       }) as ToolResult<PublishDetails>;
       const closeTaskId = extractDetails(closePublish)!.taskId;
@@ -52,6 +54,7 @@ describe('publisher terminal actions e2e', () => {
       const rejectPublish = await harness.exec('mteam_publish_task', {
         goal: 'Produce a report that can be revised after review',
         description: 'Generate a candidate report for review',
+        taskType: 'general',
         publisher: 'manager',
       }) as ToolResult<PublishDetails>;
       const rejectTaskId = extractDetails(rejectPublish)!.taskId;
@@ -64,7 +67,8 @@ describe('publisher terminal actions e2e', () => {
       });
       const rejectResult = await harness.exec('mteam_reject_task', {
         taskId: rejectTaskId,
-        reason: '验收驳回：输出不完整。下一步：补齐缺失字段并重新提交',
+        reason: '验收驳回：输出不完整',
+        description: '补齐缺失字段并重新提交',
       }) as ToolResult<{ task?: Record<string, unknown> }>;
       expect(extractText(rejectResult)).toContain('任务已驳回');
       const rejectedTask = harness.readTask(rejectTaskId);
@@ -82,6 +86,7 @@ describe('publisher terminal actions e2e', () => {
       const publishResult = await harness.exec('mteam_publish_task', {
         goal: 'Verify failed tasks cannot be revived by reject',
         description: 'Create a task that will fail before a mistaken reject attempt',
+        taskType: 'general',
         publisher: 'manager',
       }) as ToolResult<PublishDetails>;
       const taskId = extractDetails(publishResult)!.taskId;
@@ -97,7 +102,8 @@ describe('publisher terminal actions e2e', () => {
 
       const rejectResult = await harness.exec('mteam_reject_task', {
         taskId,
-        reason: '验收驳回：这条路径不应复活 failed 任务。下一步：不要执行这一步',
+        reason: '验收驳回：这条路径不应复活 failed 任务',
+        description: '不要执行这一步',
       }, {
         agentId: 'manager',
         sessionKey: 'agent:manager:main',
@@ -117,6 +123,7 @@ describe('publisher terminal actions e2e', () => {
       const publishResult = await harness.exec('mteam_publish_task', {
         goal: 'Verify terminal tasks are immutable to generic updates',
         description: 'Create a task to test terminal-state protection',
+        taskType: 'general',
         publisher: 'manager',
       }) as ToolResult<PublishDetails>;
       const taskId = extractDetails(publishResult)!.taskId;
@@ -140,9 +147,10 @@ describe('publisher terminal actions e2e', () => {
       const publishResult = await harness.exec('mteam_publish_task', {
         goal: 'Verify publisher permission boundaries',
         description: 'Create a task restricted to manager approval',
+        taskType: 'general',
       }, {
         agentId: 'manager',
-        sessionKey: 'agent:manager:main',
+        sessionKey: 'agent:manager:main'
       }) as ToolResult<PublishDetails>;
       const taskId = extractDetails(publishResult)!.taskId;
 
@@ -168,9 +176,10 @@ describe('publisher terminal actions e2e', () => {
       const blocked = await harness.exec('mteam_publish_task', {
         goal: 'Verify heartbeat cannot publish tasks',
         description: 'Record a heartbeat publish attempt',
+        taskType: 'general',
       }, {
         agentId: 'manager',
-        sessionKey: 'agent:manager:main:heartbeat',
+        sessionKey: 'agent:manager:main:heartbeat'
       }) as ToolResult<{ blocked?: boolean; reason?: string }>;
 
       expect(extractDetails(blocked)?.blocked).toBe(true);

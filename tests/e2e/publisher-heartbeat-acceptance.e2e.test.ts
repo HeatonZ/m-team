@@ -9,6 +9,7 @@ describe('publisher heartbeat acceptance e2e', () => {
       const runningResult = await harness.exec('mteam_publish_task', {
         goal: 'Verify timeout handling is prioritized',
         description: 'Record a step that becomes stale after claim',
+        taskType: 'general',
         publisher: 'manager',
       }) as ToolResult<{ taskId: string }>;
       const runningTaskId = extractDetails(runningResult)!.taskId;
@@ -21,6 +22,7 @@ describe('publisher heartbeat acceptance e2e', () => {
       const completedResult = await harness.exec('mteam_publish_task', {
         goal: 'Produce a finished result that remains completed',
         description: 'Generate a result file for later acceptance',
+        taskType: 'general',
         publisher: 'manager',
       }) as ToolResult<{ taskId: string }>;
       const completedTaskId = extractDetails(completedResult)!.taskId;
@@ -64,6 +66,7 @@ describe('publisher heartbeat acceptance e2e', () => {
       const publishResult = await harness.exec('mteam_publish_task', {
         goal: 'Verify publisher heartbeat does not reclaim fresh running work',
         description: 'Create a fresh running task that is not stale yet',
+        taskType: 'general',
         publisher: 'manager',
       }) as ToolResult<{ taskId: string }>;
       const taskId = extractDetails(publishResult)!.taskId;

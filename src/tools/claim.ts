@@ -23,9 +23,14 @@ export function register(api: OpenClawPluginApi, config: MTeamPluginConfig): voi
 
       const result = claimTask(taskId, agentId);
       if (!result.success) {
-        return failedTextResult(result.reason || 'Operation failed', {
+        const reasonText = result.reason === 'AGENT_TASKTYPE_ROUTE_MISMATCH'
+          ? `AGENT_TASKTYPE_ROUTE_MISMATCH: agent ${agentId} is not allowed to claim taskType of this task`
+          : result.reason === 'TASKTYPE_UNROUTED'
+            ? 'TASKTYPE_UNROUTED: this taskType has no claim route and denyUnroutedTaskTypes is enabled'
+            : (result.reason || 'Operation failed');
+        return failedTextResult(reasonText, {
           success: result.success,
-          reason: result.reason,
+          reason: reasonText,
         });
       }
 

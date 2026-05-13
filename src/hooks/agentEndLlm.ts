@@ -6,12 +6,13 @@ import {
   extractAssistantText,
 } from 'openclaw/plugin-sdk/agent-runtime';
 import type { Context as PiContext } from '@mariozechner/pi-ai';
-import type { Task, ContextStepOutput } from '../schema/task.js';
+import { VALID_TASK_TYPES, type Task, type ContextStepOutput, type TaskType } from '../schema/task.js';
 
 export type AgentEndDecision = {
   decision: 'complete' | 'next' | 'fail';
   reason: string;
   nextDescription?: string;
+  nextTaskType?: Task['taskType'];
   nextStepContract?: {
     expectedOutcome?: string;
     doneWhen: string[];
@@ -31,6 +32,13 @@ type AssistantMessageLike = {
 };
 
 const AGENT_END_LLM_MAX_TOKENS = 1200;
+
+function normalizeDecisionTaskType(raw: unknown): TaskType | undefined {
+  if (typeof raw !== 'string') return undefined;
+  const value = raw.trim().toLowerCase();
+  if (!value) return undefined;
+  return VALID_TASK_TYPES.includes(value as TaskType) ? (value as TaskType) : undefined;
+}
 
 function extractTextBlocks(content: unknown): string {
   if (!Array.isArray(content)) return '';
@@ -140,7 +148,8 @@ function buildDecisionPrompt(params: {
     '1. complete: only when the current step is complete, the overall goal is satisfied, there are no unresolved issues, and there is no clear next step.',
     '2. next: use when there is valid progress but the overall goal is not finished, or the current step exposed a clear next action.',
     '2.1 When decision=next, provide nextDescription. It must be one step only, concise, and actionable.',
-    '2.2 Prefer to also provide nextStepContract with at least expectedOutcome and doneWhen.',
+    '2.2 You may provide nextTaskType when the next step belongs to another task category (general/coding/research/ops/data/design/content).',
+    '2.3 Prefer to also provide nextStepContract with at least expectedOutcome and doneWhen.',
     '3. fail: use only when the task is blocked or there is no safe executable next step.',
     '4. Avoid drift. Judge progress only against the current description, not unrelated side work.',
     '5. The executor reports facts and problems. agent_end decides the next action.',
@@ -158,6 +167,7 @@ function buildDecisionPrompt(params: {
     '  "decision": "complete|next|fail",',
     '  "reason": "string in Chinese",',
     '  "nextDescription": "string in Chinese (required when decision=next)",',
+    '  "nextTaskType": "general|coding|research|ops|data|design|content" (optional),',
     '  "nextStepContract": { "expectedOutcome": "string in Chinese", "doneWhen":["..."], "constraints":["..."], "inputHints":["..."] } (optional),',
     '  "summary": "string in Chinese (optional)",',
     '  "unresolvedIssues": ["string in Chinese", ...] (optional),',
@@ -223,6 +233,9 @@ function parseDecisionLoose(raw: string): AgentEndDecision | null {
     ? extractQuotedField(raw, 'nextDescription')
     : undefined;
   if (decision === 'next' && !nextDescription) return null;
+  const nextTaskType = decision === 'next'
+    ? normalizeDecisionTaskType(extractQuotedField(raw, 'nextTaskType'))
+    : undefined;
 
   const confidence = extractQuotedField(raw, 'confidence');
   const summary = extractQuotedField(raw, 'summary');
@@ -236,6 +249,7 @@ function parseDecisionLoose(raw: string): AgentEndDecision | null {
     decision,
     reason,
     nextDescription,
+    nextTaskType,
     nextStepContract: decision === 'next' && (expectedOutcome || doneWhen?.length || constraints?.length || inputHints?.length)
       ? {
         ...(expectedOutcome ? { expectedOutcome } : {}),
@@ -275,10 +289,12 @@ function parseDecision(raw: string): AgentEndDecision | null {
         continue;
       }
       const confidence = parsed.confidence;
+      const nextTaskType = decision === 'next' ? normalizeDecisionTaskType(parsed.nextTaskType) : undefined;
       return {
         decision: decision as AgentEndDecision['decision'],
         reason: reason.trim(),
         nextDescription,
+        nextTaskType,
         nextStepContract: parsed.nextStepContract && typeof parsed.nextStepContract === 'object'
           ? parsed.nextStepContract as AgentEndDecision['nextStepContract']
           : undefined,
@@ -334,10 +350,15 @@ export async function judgeAgentEndWithLlm(params: {
         return parsed ? { ok: true, decision: parsed, raw: judged } : { ok: false, error: 'RUNTIME_AGENT_END_JUDGE_PARSE_FAILED', raw: judged };
       }
       if (judged && typeof judged === 'object' && typeof judged.decision === 'string' && typeof judged.reason === 'string') {
+        const judgedRecord = judged as Record<string, unknown>;
         if (judged.decision === 'next' && !(typeof judged.nextDescription === 'string' && judged.nextDescription.trim())) {
           return { ok: false, error: 'RUNTIME_AGENT_END_JUDGE_NEXT_WITHOUT_NEXT_DESCRIPTION', raw: JSON.stringify(judged) };
         }
-        return { ok: true, decision: judged, raw: JSON.stringify(judged) };
+        const normalizedJudged: AgentEndDecision = {
+          ...judged,
+          nextTaskType: judged.decision === 'next' ? normalizeDecisionTaskType(judgedRecord.nextTaskType) : undefined,
+        };
+        return { ok: true, decision: normalizedJudged, raw: JSON.stringify(judged) };
       }
       return { ok: false, error: 'RUNTIME_AGENT_END_JUDGE_EMPTY' };
     } catch (err) {

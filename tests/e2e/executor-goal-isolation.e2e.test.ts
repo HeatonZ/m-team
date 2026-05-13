@@ -13,6 +13,7 @@ describe('executor goal isolation and completion discipline', () => {
       const publishResult = await harness.exec('mteam_publish_task', {
         goal: '完成 1+1、1×1、2+3 三个计算，输出三个结果',
         description: '计算 1+1',
+        taskType: 'general',
         publisher: 'manager',
       }) as ToolResult<PublishDetails>;
       const taskId = extractDetails(publishResult)!.taskId;
@@ -44,6 +45,7 @@ describe('executor goal isolation and completion discipline', () => {
       const publishResult = await harness.exec('mteam_publish_task', {
         goal: '完成 1+1、1×1、2+3 三个计算，输出三个结果',
         description: '计算 1+1',
+        taskType: 'general',
         publisher: 'manager',
       }) as ToolResult<PublishDetails>;
       const taskId = extractDetails(publishResult)!.taskId;

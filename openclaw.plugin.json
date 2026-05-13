@@ -82,6 +82,27 @@
         "items": {
           "type": "string"
         }
+      },
+      "claimRouting": {
+        "type": "object",
+        "description": "Deterministic claim routing by taskType",
+        "additionalProperties": false,
+        "properties": {
+          "taskTypeAgents": {
+            "type": "object",
+            "description": "taskType -> allowed agentId list",
+            "additionalProperties": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "denyUnroutedTaskTypes": {
+            "type": "boolean",
+            "description": "When true, task types without explicit route cannot be claimed (general is still allowed by default)"
+          }
+        }
       }
     }
   },

@@ -16,6 +16,7 @@ describe('hook runtime e2e', () => {
       const publishResult = await harness.exec('mteam_publish_task', {
         goal: '完成一轮链式交接',
         description: '整理候选商品的初步结果',
+        taskType: 'general',
         publisher: 'manager',
       }) as ToolResult<PublishDetails>;
       const taskId = extractDetails(publishResult)!.taskId;
@@ -60,6 +61,7 @@ describe('hook runtime e2e', () => {
       const task = await harness.exec('mteam_publish_task', {
         goal: '生成 executor 受限场景',
         description: '执行当前一步并记录结果',
+        taskType: 'general',
         publisher: 'manager',
       }) as ToolResult<PublishDetails>;
       const taskId = extractDetails(task)!.taskId;
@@ -102,6 +104,7 @@ describe('hook runtime e2e', () => {
       const publishResult = await harness.exec('mteam_publish_task', {
         goal: '形成最终候选结论',
         description: '整理 3 个候选商品信息',
+        taskType: 'general',
         publisher: 'manager',
       }) as ToolResult<PublishDetails>;
       const taskId = extractDetails(publishResult)!.taskId;
@@ -161,6 +164,7 @@ describe('hook runtime e2e', () => {
       const publishResult = await harness.exec('mteam_publish_task', {
         goal: '验证超时扫描兼容 storage.list',
         description: '整理 1 个候选商品信息',
+        taskType: 'general',
         publisher: 'manager',
       }) as ToolResult<PublishDetails>;
       const taskId = extractDetails(publishResult)!.taskId;

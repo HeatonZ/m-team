@@ -13,6 +13,7 @@ describe('executor prompt contract e2e', () => {
       const publishResult = await harness.exec('mteam_publish_task', {
         goal: 'form final candidate conclusion',
         description: 'collect 3 candidate items',
+        taskType: 'general',
         publisher: 'manager',
         stepContract: {
           expectedOutcome: 'produce a structured 3-item candidate result',

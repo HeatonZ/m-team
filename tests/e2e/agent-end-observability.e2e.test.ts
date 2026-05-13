@@ -16,6 +16,7 @@ describe('agent_end observability e2e', () => {
       const publishResult = await harness.exec('mteam_publish_task', {
         goal: '找到 5 个候选商品',
         description: '先整理首批候选商品',
+        taskType: 'general',
         publisher: 'manager',
       }) as ToolResult<{ taskId: string }>;
       const taskId = extractDetails(publishResult)!.taskId;
@@ -51,6 +52,7 @@ describe('agent_end observability e2e', () => {
       const publishResult = await harness.exec('mteam_publish_task', {
         goal: '完成接口验证',
         description: '先调用接口并记录结果',
+        taskType: 'general',
         publisher: 'manager',
       }) as ToolResult<{ taskId: string }>;
       const taskId = extractDetails(publishResult)!.taskId;

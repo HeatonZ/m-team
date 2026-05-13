@@ -14,24 +14,6 @@ import { sendNotifications } from '../notifications.js';
 import { RejectTaskParams } from '../types/tools.js';
 import type { RejectTaskParamsInterface, StepContractInterface } from '../types/tools.js';
 
-/**
- * 从驳回原因中解析出下一步描述。
- * 格式：验收驳回：{问题}。下一步：{描述}
- * 或：验收驳回：{问题}。下一步描述：{描述}
- */
-function parseNextDescription(reason: string): string | null {
-  // 匹配 "下一步：" 或 "下一步描述：" 后的内容
-  const patterns = [
-    /下一步描述[：:]\s*(.+)/i,
-    /下一步[：:]\s*(.+)/i,
-  ];
-  for (const pattern of patterns) {
-    const match = reason.match(pattern);
-    if (match) return match[1].trim();
-  }
-  return null;
-}
-
 function normalizeStepContract(raw: StepContractInterface | undefined): StepContractInterface | undefined {
   if (!raw) return undefined;
   return {
@@ -54,14 +36,14 @@ export function register(
     parameters: RejectTaskParams,
     async execute(_toolCallId: string, rawParams: RejectTaskParamsInterface) {
       const taskId = readTaskId(rawParams, 'taskId', { required: true })!;
-      const { reason } = rawParams;
+      const { reason, description } = rawParams;
       const toolContext = (rawParams as RejectTaskParamsInterface & { toolContext?: OpenClawPluginToolContext }).toolContext;
       const publisher = toolContext?.agentId?.trim();
       if (!publisher) {
         throw new Error('mteam_reject_task missing publisher identity from tool context');
       }
 
-      const nextDescription = parseNextDescription(reason);
+      const nextDescription = description.trim();
       const nextStepContract = normalizeStepContract(rawParams.stepContract);
       const result = rejectTask(taskId, publisher, reason, nextDescription, nextStepContract);
       if (!result.success) {

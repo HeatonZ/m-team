@@ -4,6 +4,10 @@ export interface TestPluginConfig {
   workspaceRoot: string;
   executors: string[];
   publishers: string[];
+  claimRouting?: {
+    taskTypeAgents?: Record<string, string[]>;
+    denyUnroutedTaskTypes?: boolean;
+  };
   notifications: NotificationConfig[];
   dashboardEnabled: boolean;
   dashboardPort?: number;

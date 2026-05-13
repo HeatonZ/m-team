@@ -13,6 +13,7 @@ describe('publisher goal visibility boundary', () => {
       const publishResult = await harness.exec('mteam_publish_task', {
         goal: '完成 3 个算式并汇总到最终结果',
         description: '计算第一个算式 1+1',
+        taskType: 'general',
         publisher: 'manager',
       }) as ToolResult<PublishDetails>;
       const taskId = extractDetails(publishResult)!.taskId;
@@ -33,13 +34,26 @@ describe('publisher goal visibility boundary', () => {
       const publishAgain = await harness.exec('mteam_publish_task', {
         goal: '完成 5 个候选商品复核并给出结论',
         description: '复核第 1 个候选商品',
+        taskType: 'general',
         publisher: 'manager',
       }) as ToolResult<PublishDetails>;
       const taskId2 = extractDetails(publishAgain)!.taskId;
 
+      harness.mutateTask(taskId2, (task) => {
+        task.status = 'completed';
+        task.completedAt = Date.now();
+        task.updatedAt = task.completedAt;
+        task.executor = null;
+        task.lastExecutor = 'maker';
+      });
+
       const rejectResult = await harness.exec(
         'mteam_reject_task',
-        { taskId: taskId2, reason: '验收驳回：证据不足。下一步：补齐价格对比和销量截图' },
+        {
+          taskId: taskId2,
+          reason: '验收驳回：证据不足',
+          description: '补齐价格对比和销量截图',
+        },
         { agentId: 'manager' },
       );
       const rejectText = extractText(rejectResult);

@@ -6,7 +6,7 @@ import { openDb, getTaskRow, getTaskRowByExecutor } from './db';
 import { getTaskRowsByStatus as _db_getTaskRowsByStatus, getAllTaskRows as _db_getAllTaskRows } from './db';
 import { TaskStatus, type Task } from '../schema/task';
 import { setWorkspaceRoot, DB_PATH } from './operations';
-import { canAgentClaimTask } from './eligibility.js';
+import { canAgentClaimTask } from './claim-routing.js';
 import {
   publishTask,
   claimTask,

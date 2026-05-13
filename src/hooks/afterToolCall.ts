@@ -48,6 +48,7 @@ export function registerAfterToolCallHook(api: OpenClawPluginApi): void {
             params: {
               description: params.description as string | undefined,
               goal: params.goal as string | undefined,
+              taskType: params.taskType as string | undefined,
               priority: params.priority as string | undefined,
               publisher: (params.publisher as string | undefined) ?? taskPublisher,
             },

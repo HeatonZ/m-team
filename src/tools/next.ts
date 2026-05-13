@@ -10,6 +10,7 @@ import { formatTaskAsText } from './helpers.js';
 import { formatNextNotifications, sendNotifications } from '../notifications.js';
 import { NextTaskParams } from '../types/tools.js';
 import type { NextTaskParamsInterface, StepContractInterface } from '../types/tools.js';
+import { VALID_TASK_TYPES, type TaskType } from '../schema/task.js';
 
 function normalizeContextOutput(raw: unknown): Record<string, unknown> | undefined {
   if (raw === null || raw === undefined) return undefined;
@@ -40,6 +41,13 @@ function normalizeStepContract(raw: StepContractInterface | undefined): StepCont
   };
 }
 
+function normalizeTaskType(raw: string | undefined): TaskType | undefined {
+  if (!raw) return undefined;
+  const value = raw.trim().toLowerCase();
+  if (!value) return undefined;
+  return VALID_TASK_TYPES.includes(value as TaskType) ? (value as TaskType) : undefined;
+}
+
 export function register(
   api: OpenClawPluginApi,
   config: MTeamPluginConfig
@@ -52,11 +60,12 @@ export function register(
     parameters: NextTaskParams,
     async execute(_toolCallId: string, rawParams: NextTaskParamsInterface) {
       const taskId = readTaskId(rawParams, 'taskId', { required: true })!;
-      const { agentId, contextStep, contextOutput, description } = rawParams;
+      const { agentId, contextStep, contextOutput, description, nextTaskType } = rawParams;
       const normalizedContextOutput = normalizeContextOutput(contextOutput) ?? {};
       const normalizedStepContract = normalizeStepContract(rawParams.stepContract);
+      const normalizedNextTaskType = normalizeTaskType(nextTaskType);
 
-      const result = nextTask(taskId, agentId, { step: contextStep, output: normalizedContextOutput }, description, normalizedStepContract);
+      const result = nextTask(taskId, agentId, { step: contextStep, output: normalizedContextOutput }, description, normalizedNextTaskType, normalizedStepContract);
       if (!result.success) return failedTextResult(result.reason || '操作失败', { success: result.success, reason: result.reason });
 
       if (result.task && config.notifications?.length) {

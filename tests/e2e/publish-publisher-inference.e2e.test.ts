@@ -9,6 +9,7 @@ describe('publish publisher inference', () => {
       const result = await harness.exec('mteam_publish_task', {
         goal: '验证 direct session 的 publisher 推断',
         description: '记录 direct session 的 publisher 推断结果',
+        taskType: 'general',
         priority: 'high',
       }, {
         agentId: 'manager',
@@ -36,6 +37,7 @@ describe('publish publisher inference', () => {
           {
             goal: '验证缺少 publisher 时阻止发布',
             description: '记录缺少 publisher 的发布尝试',
+            taskType: 'general',
             priority: 'high',
           },
           { sessionKey: 'agent:unknown:direct:ou_test_missing_agent' } as never,

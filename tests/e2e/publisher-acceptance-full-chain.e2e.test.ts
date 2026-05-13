@@ -9,6 +9,7 @@ describe('publisher acceptance full chain e2e', () => {
       const publishResult = await harness.exec('mteam_publish_task', {
         goal: 'Produce the final candidate conclusion',
         description: 'Generate the final result file',
+        taskType: 'general',
         publisher: 'manager',
       }) as ToolResult<{ taskId: string }>;
       const taskId = extractDetails(publishResult)!.taskId;
@@ -51,6 +52,7 @@ describe('publisher acceptance full chain e2e', () => {
       const publishResult = await harness.exec('mteam_publish_task', {
         goal: 'Produce a candidate report with enough evidence',
         description: 'Generate the candidate report',
+        taskType: 'general',
         publisher: 'manager',
       }) as ToolResult<{ taskId: string }>;
       const taskId = extractDetails(publishResult)!.taskId;
@@ -75,7 +77,11 @@ describe('publisher acceptance full chain e2e', () => {
 
       const rejectResult = await harness.exec(
         'mteam_reject_task',
-        { taskId, reason: '验收驳回：缺少价格对比证据。下一步：补齐价格对比截图并重新提交候选报告' },
+        {
+          taskId,
+          reason: '验收驳回：缺少价格对比证据',
+          description: '补齐价格对比截图并重新提交候选报告',
+        },
         { agentId: 'manager', sessionKey: 'agent:manager:discord:heartbeat' },
       ) as ToolResult<{ task?: Record<string, unknown> }>;
 
@@ -95,6 +101,7 @@ describe('publisher acceptance full chain e2e', () => {
       const publishResult = await harness.exec('mteam_publish_task', {
         goal: 'Recover stale executor work and return the task to the pool safely',
         description: 'Record a step that becomes stale after execution starts',
+        taskType: 'general',
         publisher: 'manager',
       }) as ToolResult<{ taskId: string }>;
       const taskId = extractDetails(publishResult)!.taskId;

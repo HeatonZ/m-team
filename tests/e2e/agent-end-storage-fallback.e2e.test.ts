@@ -16,6 +16,7 @@ describe('agent_end fallback lookup', () => {
       const publishResult = await harness.exec('mteam_publish_task', {
         goal: '验证 agent_end 兼容真实 runtime',
         description: '生成最终结果并结束',
+        taskType: 'general',
         publisher: 'manager',
       }, { agentId: 'manager' }) as ToolResult<{ taskId: string }>;
       const taskId = extractDetails(publishResult)!.taskId;

@@ -99,17 +99,9 @@ function normalizeStringList(input: unknown): string[] | undefined {
 function normalizeStepContract(stepContract: StepContract | undefined): StepContract | undefined {
   if (!stepContract) return undefined;
 
-  const legacyExpectedOutputs = (stepContract as StepContract & {
-    expectedOutputs?: Array<{ path?: string; name?: string; kind?: string }>;
-  }).expectedOutputs;
   const normalizedExpectedOutcome = typeof stepContract.expectedOutcome === 'string' && stepContract.expectedOutcome.trim()
     ? stepContract.expectedOutcome.trim()
-    : Array.isArray(legacyExpectedOutputs) && legacyExpectedOutputs.length > 0
-      ? legacyExpectedOutputs
-        .map(item => item.path ?? item.name ?? item.kind)
-        .filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
-        .join(', ')
-      : undefined;
+    : undefined;
 
   return {
     ...(normalizedExpectedOutcome ? { expectedOutcome: normalizedExpectedOutcome } : {}),

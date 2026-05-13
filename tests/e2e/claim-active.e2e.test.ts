@@ -13,6 +13,7 @@ describe('claim/active e2e', () => {
       const publishResult = await harness.exec('mteam_publish_task', {
         goal: '完成候选商品初筛',
         description: '先检查 5 个商品是否满足规格约束',
+        taskType: 'general',
         publisher: 'manager',
       }) as ToolResult<PublishDetails>;
       const taskId = extractDetails(publishResult)!.taskId;

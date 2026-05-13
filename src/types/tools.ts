@@ -65,13 +65,13 @@ export const PublishTaskParams = {
     publisher: { type: 'string', description: 'Publisher; defaults to current toolContext.agentId if omitted' },
     priority: { type: 'string', description: 'Priority: high / normal / low', enum: ['high', 'normal', 'low'] },
   },
-  required: ['goal', 'description'] as const,
+  required: ['goal', 'description', 'taskType'] as const,
 } as const;
 
 export interface PublishTaskParamsInterface {
   goal: string;
   description: string;
-  taskType?: 'general' | 'coding' | 'research' | 'ops' | 'data' | 'design' | 'content';
+  taskType: 'general' | 'coding' | 'research' | 'ops' | 'data' | 'design' | 'content';
   stepContract?: StepContractInterface;
   publisher?: string;
   priority?: 'high' | 'normal' | 'low';
@@ -125,9 +125,10 @@ export const RejectTaskParams = {
   properties: {
     taskId: { type: 'string', description: 'Task ID' },
     reason: { type: 'string', description: 'Rejection reason' },
+    description: { type: 'string', description: 'Next current-step description after rejection' },
     stepContract: StepContractSchema,
   },
-  required: ['taskId', 'reason'] as const,
+  required: ['taskId', 'reason', 'description'] as const,
 } as const;
 
 export const NextTaskParams = {
@@ -138,6 +139,11 @@ export const NextTaskParams = {
     contextStep: { type: 'string', description: 'Current step description' },
     contextOutput: ContextOutputSchema,
     description: { type: 'string', description: 'Next current-step description' },
+    nextTaskType: {
+      type: 'string',
+      description: 'Optional next taskType for routing the next step',
+      enum: ['general', 'coding', 'research', 'ops', 'data', 'design', 'content'],
+    },
     stepContract: StepContractSchema,
   },
   required: ['taskId', 'agentId', 'contextStep', 'description'] as const,
@@ -208,6 +214,7 @@ export interface CompleteTaskParamsInterface {
 export interface RejectTaskParamsInterface {
   taskId: string;
   reason: string;
+  description: string;
   stepContract?: StepContractInterface;
 }
 
@@ -217,6 +224,7 @@ export interface NextTaskParamsInterface {
   contextStep: string;
   contextOutput?: ContextStepOutputInterface;
   description: string;
+  nextTaskType?: 'general' | 'coding' | 'research' | 'ops' | 'data' | 'design' | 'content';
   stepContract?: StepContractInterface;
 }
 

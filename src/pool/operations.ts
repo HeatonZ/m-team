@@ -24,7 +24,7 @@ import {
   createTask,
   normalizeTask,
 } from '../schema/task';
-import { canAgentClaimTask } from './eligibility.js';
+import { canAgentClaimTask } from './claim-routing.js';
 
 let WORKSPACE_ROOT = '/mnt/d/code/m-team';
 export let DB_PATH: string | null = null;
@@ -270,6 +270,7 @@ export function nextTask(
   executorId: string,
   contextEntry: ContextStepInput | null,
   description?: string,
+  nextTaskType?: Task['taskType'],
   stepContract?: StepContract,
 ): NextResult {
   init();
@@ -289,6 +290,7 @@ export function nextTask(
       executor: null,
       lastExecutor: executorId,
       description: nextDescription,
+      ...(nextTaskType ? { taskType: nextTaskType } : {}),
       ...(stepContract ? { stepContract: JSON.stringify(stepContract) } : {}),
       updatedAt: Date.now(),
       context: JSON.stringify(context),
@@ -345,21 +347,14 @@ export function rejectTask(
 
 export function completeTask(
   taskId: string,
-  contextEntry: ContextStepInput | null,
-  fallbackEntry?: { outcome?: string; error?: string }
+  contextEntry: ContextStepInput
 ): CompleteResult {
   init();
   const task = getTaskRow(taskId);
   if (!task) return { success: false, reason: 'TASK_NOT_FOUND' };
   if (task.status !== TaskStatus.RUNNING) return { success: false, reason: `TASK_NOT_RUNNING_${task.status}` };
 
-  const context = appendContext(task, task.executor, contextEntry ?? (fallbackEntry ? {
-    step: '任务完成',
-    output: {
-      summary: fallbackEntry.outcome,
-      error: fallbackEntry.error,
-    }
-  } : null));
+  const context = appendContext(task, task.executor, contextEntry);
 
   return {
     success: true,
@@ -383,8 +378,7 @@ export interface FailResult {
 export function failTask(
   taskId: string,
   reason: string,
-  contextEntry: ContextStepInput | null,
-  fallbackEntry?: { outcome?: string; error?: string }
+  contextEntry: ContextStepInput
 ): FailResult {
   init();
   const task = getTaskRow(taskId);
@@ -393,14 +387,7 @@ export function failTask(
     return { success: false, reason: `TASK_NOT_MUTABLE_${task.status}` };
   }
 
-  const context = appendContext(task, task.executor, contextEntry ?? {
-    step: '任务失败',
-    output: {
-      summary: fallbackEntry?.outcome ?? reason,
-      error: fallbackEntry?.error ?? reason,
-      unresolvedIssues: [reason]
-    }
-  });
+  const context = appendContext(task, task.executor, contextEntry);
 
   return {
     success: true,

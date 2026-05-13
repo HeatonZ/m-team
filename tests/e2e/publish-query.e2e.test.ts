@@ -79,6 +79,7 @@ describe('publish/query e2e', () => {
       await expect(harness.exec('mteam_publish_task', {
         goal: 'do the task',
         description: 'continue handling and then see',
+        taskType: 'general',
         publisher: 'manager',
       })).rejects.toThrow(/invalid input|completion rule|stepContract/);
     } finally {

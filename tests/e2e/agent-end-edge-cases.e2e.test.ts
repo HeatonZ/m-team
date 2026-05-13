@@ -9,6 +9,7 @@ describe('agent_end edge cases e2e', () => {
       const publishResult = await harness.exec('mteam_publish_task', {
         goal: 'Verify runtime error handling for an executor step',
         description: 'Record a step that times out during execution',
+        taskType: 'general',
         publisher: 'manager',
       }) as ToolResult<{ taskId: string }>;
       const taskId = extractDetails(publishResult)!.taskId;
@@ -38,6 +39,7 @@ describe('agent_end edge cases e2e', () => {
       const publishResult = await harness.exec('mteam_publish_task', {
         goal: 'Verify fail-fast behavior when no usable progress is reported',
         description: 'Record a step with no usable output',
+        taskType: 'general',
         publisher: 'manager',
       }) as ToolResult<{ taskId: string }>;
       const taskId = extractDetails(publishResult)!.taskId;
@@ -73,6 +75,7 @@ describe('agent_end edge cases e2e', () => {
       const publishResult = await harness.exec('mteam_publish_task', {
         goal: 'Verify repeated next decisions do not fail immediately',
         description: 'Review the final output gap and record missing items',
+        taskType: 'general',
         publisher: 'manager',
       }) as ToolResult<{ taskId: string }>;
       const taskId = extractDetails(publishResult)!.taskId;

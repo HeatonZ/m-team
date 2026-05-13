@@ -9,6 +9,7 @@ describe('agent_end llm fail-fast e2e', () => {
       const publishResult = await harness.exec('mteam_publish_task', {
         goal: 'Produce a final report',
         description: 'Draft the first section',
+        taskType: 'general',
         publisher: 'manager',
       }) as ToolResult<{ taskId: string }>;
       const taskId = extractDetails(publishResult)!.taskId;
@@ -33,6 +34,7 @@ describe('agent_end llm fail-fast e2e', () => {
       const publishResult = await harness.exec('mteam_publish_task', {
         goal: 'Verify the API response',
         description: 'Record the API response and save the output',
+        taskType: 'general',
         publisher: 'manager',
       }) as ToolResult<{ taskId: string }>;
       const taskId = extractDetails(publishResult)!.taskId;
@@ -63,6 +65,7 @@ describe('agent_end llm fail-fast e2e', () => {
       const publishResult = await harness.exec('mteam_publish_task', {
         goal: 'Verify the API response',
         description: 'Record the API response and save the output',
+        taskType: 'general',
         publisher: 'manager',
       }) as ToolResult<{ taskId: string }>;
       const taskId = extractDetails(publishResult)!.taskId;
@@ -97,6 +100,7 @@ describe('agent_end llm fail-fast e2e', () => {
       const publishResult = await harness.exec('mteam_publish_task', {
         goal: 'Complete three calculation steps and summarize the final result',
         description: 'Calculate 1+1 and write the result to step1_result.md',
+        taskType: 'general',
         publisher: 'manager',
       }) as ToolResult<{ taskId: string }>;
       const taskId = extractDetails(publishResult)!.taskId;
@@ -129,6 +133,7 @@ describe('agent_end llm fail-fast e2e', () => {
       const publishResult = await harness.exec('mteam_publish_task', {
         goal: '完成三步计算并最终汇总',
         description: '计算 1+1，结果写入 step1_result.md',
+        taskType: 'general',
         publisher: 'manager',
       }) as ToolResult<{ taskId: string }>;
       const taskId = extractDetails(publishResult)!.taskId;
