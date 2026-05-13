@@ -15,7 +15,6 @@ A good reject does two things:
 - the concrete problem
 - the missing evidence, missing output, wrong result, or incomplete condition
 - a rewritten next description
-- a corrected stepContract when needed
 
 ## Reject writing rules
 
@@ -39,10 +38,9 @@ The rewritten next baton must be:
 - aligned with the gap you found
 
 If needed, update:
-- expectedOutcome
-- doneWhen
-- constraints
-- inputHints
+- the next description to be more specific
+- quantity and scope constraints inside description text
+- explicit deliverable hints (files/data/evidence) in description text
 
 ## Sanity check before reject
 

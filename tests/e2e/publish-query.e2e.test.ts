@@ -62,7 +62,7 @@ describe('publish/query e2e', () => {
     }
   });
 
-  test('accepts minimal publish input without stepContract', async () => {
+  test('accepts minimal publish input', async () => {
     const harness = await createPluginHarness();
     try {
       const publishResult = await harness.exec('mteam_publish_task', {

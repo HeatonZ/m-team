@@ -12,7 +12,6 @@ Use the current task view to confirm at least:
 
 - `taskType`
 - current `description`
-- current `stepContract`
 - recent context
 - any already-produced files or data you can reuse
 
@@ -21,10 +20,9 @@ Use the current task view to confirm at least:
 Confirm these points before acting:
 
 1. The exact action required by the current `description`.
-2. The result implied by `expectedOutcome`.
-3. The checks in `doneWhen` that define baton completion.
-4. The files, data, or intermediate results from recent context that can be reused.
-5. The work that is outside the scope of this baton.
+2. The concrete outcome this step is expected to reach.
+3. The files, data, or intermediate results from recent context that can be reused.
+4. The work that is outside the scope of this baton.
 
 ## Hard rules
 

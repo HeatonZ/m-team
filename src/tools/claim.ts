@@ -68,7 +68,7 @@ All file operations and terminal commands must stay inside the task workdir.
 
 [Execution flow]
 1. Call mteam_get_task first.
-2. Read the recent history and the current step contract.
+2. Read the recent history and the current step description.
 3. Execute only the current step.
 4. If you hit a problem, you may do minimal checking or one retry, but do not expand into a long recovery chain.
 5. Report facts clearly: what was completed, what files were produced, and what unresolved issues remain.

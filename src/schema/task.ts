@@ -79,15 +79,6 @@ export interface ValidationResult {
   errors: string[];
 }
 
-function normalizeStringList(input: unknown): string[] | undefined {
-  if (!Array.isArray(input)) return undefined;
-  const values = input
-    .filter((item): item is string => typeof item === 'string')
-    .map(item => item.trim())
-    .filter(Boolean);
-  return values.length ? values : undefined;
-}
-
 export function normalizeTask(task: Task): Task {
   const normalizedContext = (task.context ?? [])
     .filter((entry): entry is ContextStepEntry => {

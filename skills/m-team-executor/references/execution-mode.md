@@ -9,7 +9,7 @@ Perform only the current baton, produce verifiable results, and avoid drifting i
 ## Execution rules
 
 - Follow the current `description`, not the hidden whole-task goal.
-- Use `expectedOutcome` and `doneWhen` as the quality bar for this baton.
+- Use clear, verifiable completion evidence as the quality bar for this baton.
 - Reuse recent context and prior artifacts instead of redoing finished work.
 - Prefer direct, minimal actions that move the current baton to completion.
 - If you must create files, make them easy to reference in the final message.

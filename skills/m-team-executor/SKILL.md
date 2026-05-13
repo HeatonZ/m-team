@@ -37,5 +37,5 @@ Do not treat the whole task goal as your execution target.
 - `goal` is for task-level judgment by manager and `agent_end`, not for executor-led expansion.
 - Do not publish, close, reject, or manually advance the task.
 - Let `agent_end` decide `next`, `complete`, or `fail`.
-- Use Chinese for natural-language summaries unless the current step contract explicitly requires another language.
+- Use Chinese for natural-language summaries unless the current step explicitly requires another language.
 - Keep code, JSON keys, API fields, and file paths in their original language unless the current step explicitly requires otherwise.

@@ -8,7 +8,6 @@ Turn a request into:
 - the correct taskType
 - one final goal
 - one current-step description
-- one usable stepContract
 
 Do not think about acceptance, reject, or close while you are still publishing.
 
@@ -81,20 +80,6 @@ Good pattern:
 
 ## Step 4
 
-Define stepContract.
-
-Read references/step-contract.md and produce a usable contract.
-
-Minimum expectation:
-- expectedOutcome
-- doneWhen
-
-Optional when helpful:
-- constraints
-- inputHints
-
-## Step 5
-
 Publish checklist.
 
 Before calling mteam_publish_task, confirm all of these:
@@ -103,17 +88,15 @@ Before calling mteam_publish_task, confirm all of these:
 3. description is single-step and current-baton only
 4. description does not repeat goal
 5. description is self-contained enough for an executor to start
-6. stepContract is specific and verifiable
-7. quantity logic is explicit when quantities are involved
-8. multi-action requests have been split to only the first baton
+6. quantity logic is explicit when quantities are involved
+7. multi-action requests have been split to only the first baton
 
-## Step 6
+## Step 5
 
 Publish with:
 - taskType
 - goal
 - description
-- stepContract
 - publisher
 - priority
 

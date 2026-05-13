@@ -29,7 +29,6 @@ Do not preload later-stage rules into the current stage.
 
 ## Extra references
 
-- Step contract guidance -> references/step-contract.md
 - Good and bad examples -> references/examples.md
 
 ## Shared principles
@@ -38,4 +37,4 @@ Do not preload later-stage rules into the current stage.
 - description describes only the current baton, not the whole task chain
 - publisher manages task quality and closure; publisher does not replace executor work
 - use current M-Team runtime semantics: next, complete, fail
-- prefer explicit, verifiable task contracts over vague instructions
+- prefer explicit, verifiable next-step instructions over vague language

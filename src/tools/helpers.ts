@@ -46,7 +46,6 @@ function compactText(text: string | undefined, max = 120): string | undefined {
   return normalized.length > max ? `${normalized.slice(0, max)}...` : normalized;
 }
 
-
 function isDisplayIssue(issue: string | undefined): boolean {
   const normalized = String(issue ?? '')
     .replace(/```[\s\S]*?```/g, ' ')
@@ -54,10 +53,11 @@ function isDisplayIssue(issue: string | undefined): boolean {
     .replace(/\s+/g, ' ')
     .trim();
   if (!normalized) return false;
-  if (/^[:：\s-]*(无|none|n\/a)$/i.test(normalized)) return false;
-  if (/^(unresolved issues?|issues?)[:：]?\s*(none|无)$/i.test(normalized)) return false;
-  if (/(等待|wait(?:ing)? for).*(agent_end|publisher|manager)/i.test(normalized)) return false;
-  if (/(当前步骤执行完毕|step completed|execution finished)/i.test(normalized) && /(等待|wait(?:ing)?)/i.test(normalized)) return false;
+  if (/^(none|n\/a|无|无未解决问题)$/iu.test(normalized)) return false;
+  if (/^(unresolved issues?|issues?)[:：]?\s*(none|n\/a|无)$/iu.test(normalized)) return false;
+  if (/^(未解决问题|问题|阻塞问题)[:：]?\s*(无|none|n\/a)$/iu.test(normalized)) return false;
+  if (/(等待|wait(?:ing)? for).*(agent_end|publisher|manager)/iu.test(normalized)) return false;
+  if (/(当前步骤已完成|step completed|execution finished).*(等待|wait(?:ing)?)/iu.test(normalized)) return false;
   return true;
 }
 
@@ -73,7 +73,7 @@ function recentContextLines(task: Task): string[] {
     if (summary) parts.push(`summary: ${summary}`);
     if (fileCount > 0) parts.push(`files ${fileCount}`);
     if (issueCount > 0) parts.push(`issues ${issueCount}`);
-    return parts.filter(Boolean).join(' ? ');
+    return parts.filter(Boolean).join(' | ');
   });
 }
 
@@ -115,7 +115,7 @@ export function formatTaskLine(task: Omit<Task, 'goal'>, index: number): string 
   const priority = PRIORITY_LABELS[task.priority] ?? 'Normal';
   const stepCount = task.context.length;
   const taskType = TASK_TYPE_LABELS[task.taskType] ?? task.taskType;
-  return `${index}. [${priority}] [${taskType}] ${task.taskId} ? ${task.description}${stepCount > 0 ? ` (${stepCount} steps)` : ''}`;
+  return `${index}. [${priority}] [${taskType}] ${task.taskId} | ${task.description}${stepCount > 0 ? ` (${stepCount} steps)` : ''}`;
 }
 
 export function formatTaskAsText(task: Task, options?: { includeGoal?: boolean }): string {
