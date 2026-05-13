@@ -33,13 +33,3 @@ export async function fetchHistoryTasks(status: TaskStatus, page = 1): Promise<H
 export async function fetchTaskDetail(taskId: string): Promise<Task> {
   return get<Task>(`/tasks/${taskId}`);
 }
-
-export async function updateTask(taskId: string, patch: Record<string, unknown>): Promise<Task> {
-  const res = await fetch(`${BASE}/tasks/${taskId}`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(patch),
-  });
-  if (!res.ok) throw new Error(`PATCH /tasks/${taskId} -> ${res.status}`);
-  return res.json() as Promise<Task>;
-}

@@ -220,10 +220,6 @@ export function App() {
       <TaskDetailModal
         task={selectedTask}
         onClose={() => setSelectedTask(null)}
-        onUpdate={(updated) => {
-          handleRefresh();
-          setSelectedTask(updated);
-        }}
       />
     </div>
   );

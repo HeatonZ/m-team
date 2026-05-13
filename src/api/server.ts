@@ -247,23 +247,6 @@ async function handle(req: http.IncomingMessage, res: http.ServerResponse): Prom
     }
   }
 
-  if (req.method === 'PUT' && taskIdMatch) {
-    try {
-      const body = await parseBody(req);
-      const args = ['tasks', 'update', taskIdMatch[1]];
-      if (body.status) args.push('--status', String(body.status));
-      if (body.contextStep) args.push('--step', String(body.contextStep));
-      if (body.description) args.push('--description', String(body.description));
-      if (body.executorId) args.push('--executor-id', String(body.executorId));
-
-      const result = await cli(args);
-      if (result.code !== 0) return error(res, 400, result.stderr);
-      return json(res, 200, JSON.parse(result.stdout));
-    } catch (e: any) {
-      return error(res, 400, e.message);
-    }
-  }
-
   if (req.method === 'GET' && pathname === '/executors') {
     const result = await cli(['executors', 'list']);
     try {

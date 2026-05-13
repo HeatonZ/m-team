@@ -4,7 +4,6 @@
 
 import type { OpenClawPluginApi } from 'openclaw/plugin-sdk';
 import type { MTeamPluginConfig } from '../config.js';
-import { sanitizeTask, sanitizeTaskList } from './helpers.js';
 
 import { register as registerPublish } from './publish.js';
 import { register as registerClaim } from './claim.js';
@@ -15,7 +14,6 @@ import { register as registerCancel } from './cancel.js';
 import { register as registerClose } from './close.js';
 import { registerGetPending, registerGetAgentActive, registerGetTask, registerGetAllTasks } from './query.js';
 
-export { sanitizeTask, sanitizeTaskList };
 export { type MTeamPluginConfig };
 
 export function registerTools(api: OpenClawPluginApi, config: MTeamPluginConfig): void {

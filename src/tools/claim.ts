@@ -6,7 +6,7 @@ import type { OpenClawPluginApi } from 'openclaw/plugin-sdk';
 import type { MTeamPluginConfig } from '../config.js';
 import { textResult, failedTextResult, readTaskId } from './shared.js';
 import { claimTask, getTask, relinquishTask } from '../pool/index.js';
-import { sanitizeTask, formatTaskAsText } from './helpers.js';
+import { buildExecutorTaskView, formatTaskAsText } from './helpers.js';
 import { formatClaimNotifications, sendNotifications } from '../notifications.js';
 import type { ClaimTaskParamsInterface } from '../types/tools.js';
 import { ClaimTaskParams } from '../types/tools.js';
@@ -36,7 +36,7 @@ export function register(api: OpenClawPluginApi, config: MTeamPluginConfig): voi
       }
 
       const task = getTask(taskId) ?? result.task;
-      const sanitized = task ? sanitizeTask(task) : undefined;
+      const taskView = task ? buildExecutorTaskView(task) : undefined;
 
       if (task && config.notifications?.length) {
         try {
@@ -107,7 +107,7 @@ All file operations and terminal commands must stay inside the task workdir.
       return textResult(`OK claimed task\n${formatTaskAsText(task!)}`, {
         success: result.success,
         taskId: result.taskId,
-        task: sanitized,
+        task: taskView,
         runId: subagentResult?.runId,
         sessionKey,
       });

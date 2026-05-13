@@ -16,7 +16,6 @@ import {
   getCancelledTasks,
   getClosedTasks,
   getTask as getTaskById,
-  updateTaskRow,
   getTaskLogs,
   countTaskLogs,
 } from './src/db.ts';
@@ -57,22 +56,10 @@ function json(res: http.ServerResponse, status: number, data: unknown) {
   send(res, status, JSON.stringify(data), 'application/json');
 }
 
-async function readJsonBody(req: http.IncomingMessage): Promise<Record<string, unknown>> {
-  let body = '';
-  req.on('data', (chunk) => {
-    body += chunk;
-  });
-  await new Promise<void>((resolve) => {
-    req.on('end', resolve);
-  });
-  if (!body) return {};
-  return JSON.parse(body) as Record<string, unknown>;
-}
-
 async function handle(req: http.IncomingMessage, res: http.ServerResponse) {
   // CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, PATCH, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   if (req.method === 'OPTIONS') {
     res.writeHead(204);
@@ -124,15 +111,6 @@ async function handle(req: http.IncomingMessage, res: http.ServerResponse) {
       const taskMatch = seg.match(/^\/tasks\/(task_\w+)$/);
       if (taskMatch && req.method === 'GET') {
         const task = getTaskById(taskMatch[1]);
-        if (!task) return json(res, 404, { error: 'not found' });
-        return json(res, 200, task);
-      }
-
-      // PATCH /api/tasks/:id
-      if (taskMatch && req.method === 'PATCH') {
-        const taskId = taskMatch[1];
-        const patch = await readJsonBody(req);
-        const task = updateTaskRow(taskId, patch);
         if (!task) return json(res, 404, { error: 'not found' });
         return json(res, 200, task);
       }

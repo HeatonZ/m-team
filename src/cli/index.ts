@@ -53,14 +53,6 @@ function ok(data: unknown): void {
   console.log(JSON.stringify(data, null, 2));
 }
 
-function parseStatus(s: string | undefined): string | undefined {
-  if (!s) return undefined;
-  if (!Object.values(TaskStatus).includes(s as TaskStatus)) {
-    fatal(`invalid status: ${s}; allowed: ${Object.values(TaskStatus).join(', ')}`);
-  }
-  return s;
-}
-
 function parseTaskType(value: string | undefined): TaskType | undefined {
   if (!value) return undefined;
   const normalized = value.trim().toLowerCase();
@@ -250,38 +242,8 @@ async function cmdTasks(argv: string[]) {
       break;
     }
 
-    case 'update': {
-      const taskId = args[0];
-      const status = parseStatus(extract(args, '--status', '-s'));
-      const step = extract(args, '--step');
-      const description = extract(args, '--description', '-d');
-      const updatedAtRaw = extract(args, '--updated-at');
-      const executorId = extract(args, '--executor-id');
-
-      if (!taskId) fatal('taskId is required');
-      if (!status && !step && !description) fatal('at least one of --status / --step / --description is required');
-
-      const contextEntry = step ? { step, output: {} } : null;
-      let task = null;
-      try {
-        task = updateTask(
-          taskId,
-          status ?? null,
-          contextEntry,
-          description ?? null,
-          updatedAtRaw ? parseInt(updatedAtRaw, 10) : null,
-          executorId ?? null,
-        );
-      } catch (err) {
-        fatal(err instanceof Error ? err.message : String(err));
-      }
-      if (!task) fatal(`task not found: ${taskId}`);
-      ok({ task });
-      break;
-    }
-
     default:
-      fatal(`unknown tasks command: ${sub}; available: create, list, get, claim, complete, next, cancel, close, relinquish, touch, update`);
+      fatal(`unknown tasks command: ${sub}; available: create, list, get, claim, complete, next, cancel, close, relinquish, touch`);
   }
 }
 
@@ -364,7 +326,7 @@ Usage:
   mteam heartbeat --agent-id <agentId>
 
 Subcommands:
-  tasks       create|list|get|claim|complete|next|cancel|close|relinquish|touch|update
+  tasks       create|list|get|claim|complete|next|cancel|close|relinquish|touch
   executors   list|active
   heartbeat   refresh active-task heartbeat
 `);

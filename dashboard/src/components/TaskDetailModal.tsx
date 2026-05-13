@@ -1,15 +1,12 @@
-import { useState } from 'react';
 import type { FC } from 'react';
 import type { Task, ContextStepEntry } from '../types/task';
 import { STATUS_LABELS, PRIORITY_LABELS, TASK_TYPE_LABELS } from '../types/task';
 import { formatRelativeTime, formatTime, escHtml } from '../utils/format';
-import { TaskEditModal } from './TaskEditModal';
 import { getLatestIssues, getLatestStep } from '../utils/task';
 
 interface TaskDetailModalProps {
   task: Task | null;
   onClose: () => void;
-  onUpdate: (updated: Task) => void;
 }
 
 function getFlowSummary(task: Task) {
@@ -22,8 +19,7 @@ function getFlowSummary(task: Task) {
   return 'Task has been cancelled.';
 }
 
-export const TaskDetailModal: FC<TaskDetailModalProps> = ({ task, onClose, onUpdate }) => {
-  const [showEdit, setShowEdit] = useState(false);
+export const TaskDetailModal: FC<TaskDetailModalProps> = ({ task, onClose }) => {
   if (!task) return null;
 
   const steps = task.context as ContextStepEntry[];
@@ -120,13 +116,6 @@ export const TaskDetailModal: FC<TaskDetailModalProps> = ({ task, onClose, onUpd
           </div>
         </div>
 
-        <div className="modal-actions">
-          <button className="btn-edit" onClick={() => setShowEdit(true)}>Edit</button>
-        </div>
-
-        {showEdit && (
-          <TaskEditModal task={task} onClose={() => setShowEdit(false)} onSave={onUpdate} />
-        )}
       </div>
     </div>
   );

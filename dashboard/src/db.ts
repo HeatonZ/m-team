@@ -10,7 +10,6 @@ import {
   getAllTaskRows,
   getTaskRowsByStatus,
   getTaskRowByExecutor,
-  updateTaskRow,
   getTaskLogs,
   countTaskLogs,
 } from 'm-team/pool/db';
@@ -78,4 +77,4 @@ export function getAgentActiveTask(agentId: string) {
   return getTaskRowByExecutor(agentId);
 }
 
-export { updateTaskRow, getTaskLogs, countTaskLogs };
+export { getTaskLogs, countTaskLogs };

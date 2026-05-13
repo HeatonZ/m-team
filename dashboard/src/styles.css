@@ -52,10 +52,7 @@ h2 {
 
 .refresh-btn,
 .tab,
-.filter-chip,
-.btn-edit,
-.btn-save,
-.btn-cancel {
+.filter-chip {
   cursor: pointer;
   border: none;
   font-family: inherit;
@@ -540,33 +537,6 @@ h2 {
   margin-bottom: 6px;
 }
 
-.modal-actions {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: 16px;
-}
-
-.btn-edit,
-.btn-save,
-.btn-cancel {
-  padding: 9px 18px;
-  border-radius: 12px;
-}
-
-.btn-edit,
-.btn-cancel {
-  background: rgba(51, 65, 85, 0.92);
-  color: var(--text-primary);
-  border: 1px solid var(--border);
-}
-
-.btn-save {
-  background: linear-gradient(135deg, #0ea5e9, #2563eb);
-  color: #fff;
-}
-
-.edit-textarea,
-.edit-select,
 .log-input,
 .log-select {
   width: 100%;
@@ -577,15 +547,6 @@ h2 {
   padding: 10px 12px;
   font-size: 14px;
   font-family: inherit;
-}
-
-.edit-textarea {
-  resize: vertical;
-}
-
-.error-msg {
-  color: #fca5a5;
-  margin-top: 8px;
 }
 
 .log-toolbar {

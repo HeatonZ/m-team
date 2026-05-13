@@ -1,5 +1,5 @@
-/**
- * M-Team 任务池 — 对外 API（读操作 + 写操作导出）
+﻿/**
+ * M-Team task pool public API.
  */
 
 import { openDb, getTaskRow, getTaskRowByExecutor } from './db';
@@ -57,7 +57,7 @@ export function getPendingTasks(agentId?: string | null): Task[] {
   if (agentId && getAgentActiveTask(agentId)) return [];
   const pending = getTaskRowsByStatus(TaskStatus.PENDING);
   if (!agentId) return pending;
-  return pending.filter(task => canAgentClaimTask(task, agentId).ok);
+  return pending.filter((task) => canAgentClaimTask(task, agentId).ok);
 }
 
 export function getAgentActiveTask(agentId: string): Task | null {
@@ -92,8 +92,8 @@ export function getClosedTasks(): Task[] {
 
 export function getTasksByExecutor(agentId: string): Task[] {
   init();
-  return _db_getAllTaskRows().filter(t => {
-    if (t.executor === agentId || t.lastExecutor === agentId) return true;
-    return t.context.some((e) => e.executor === agentId);
+  return _db_getAllTaskRows().filter((task) => {
+    if (task.executor === agentId || task.lastExecutor === agentId) return true;
+    return task.context.some((entry) => entry.executor === agentId);
   });
 }

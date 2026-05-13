@@ -3,7 +3,7 @@
  */
 
 import type { OpenClawPluginApi } from 'openclaw/plugin-sdk';
-import { textResult } from './shared.js';
+import { textResult, readTaskId } from './shared.js';
 import { getPendingTasks, getAgentActiveTask, getTask, getAllTasks, getTaskRowsByStatus } from '../pool/index.js';
 import { buildExecutorTaskView, buildExecutorTaskViewList, formatTaskAsText, formatTaskLine, formatTaskListAsText } from './helpers.js';
 import {
@@ -72,7 +72,7 @@ export function registerGetTask(api: OpenClawPluginApi): void {
     description: 'Show executor-safe task view: current step and recent context only',
     parameters: GetTaskParams,
     async execute(_toolCallId: string, rawParams: GetTaskParamsInterface) {
-      const { taskId } = rawParams;
+      const taskId = readTaskId(rawParams, 'taskId', { required: true })!;
       const task = getTask(taskId);
       if (!task) {
         return textResult(`Task ${taskId} not found`, { task: null });

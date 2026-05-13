@@ -7,15 +7,6 @@ import { PRIORITY_LABELS, TASK_TYPE_LABELS, getStatusLabel } from '../schema/tas
 
 const RECENT_CONTEXT_LIMIT = 3;
 
-export function sanitizeTask(task: Task): Omit<Task, 'goal'> {
-  const { goal: _goal, ...sanitized } = task;
-  return sanitized;
-}
-
-export function sanitizeTaskList(tasks: Task[]): Array<Omit<Task, 'goal'>> {
-  return tasks.map(sanitizeTask);
-}
-
 export interface ExecutorTaskView {
   taskId: string;
   taskType: Task['taskType'];
