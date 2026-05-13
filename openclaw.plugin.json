@@ -1,8 +1,8 @@
 {
   "id": "m-team",
-  "name": "M-Team 去中心化任务池",
+  "name": "M-Team Natural Language Collaboration",
   "version": "2026.5.12-3",
-  "description": "去中心化任务池协作插件 — 多Agent任务分发与执行",
+  "description": "Natural-language closed-loop task collaboration plugin for OpenClaw",
   "activation": {
     "onStartup": true
   },
@@ -12,11 +12,11 @@
     "properties": {
       "workspaceRoot": {
         "type": "string",
-        "description": "工作空间根目录"
+        "description": "Workspace root directory"
       },
       "executors": {
         "type": "array",
-        "description": "Executor agent 列表（会收到心跳注入的 mteam 指令）",
+        "description": "Executor agent IDs that receive heartbeat claim guidance",
         "items": {
           "type": "string"
         },
@@ -29,7 +29,7 @@
       },
       "notifications": {
         "type": "array",
-        "description": "任务完成通知配置",
+        "description": "Notification routing configuration",
         "items": {
           "type": "object",
           "additionalProperties": false,
@@ -40,34 +40,34 @@
                 "feishu",
                 "discord"
               ],
-              "description": "通知渠道"
+              "description": "Notification provider"
             },
             "appId": {
               "type": "string",
-              "description": "飞书机器人的 app_id（provider=feishu 时使用）"
+              "description": "Feishu bot app_id (provider=feishu)"
             },
             "appSecret": {
               "type": "string",
-              "description": "飞书机器人的 app_secret（provider=feishu 时使用）"
+              "description": "Feishu bot app_secret (provider=feishu)"
             },
             "groupId": {
               "type": "string",
-              "description": "飞书群 ID (chat_id)"
+              "description": "Feishu group chat_id"
             },
             "channelId": {
               "type": "string",
-              "description": "Discord 频道 ID (provider=discord 时使用)"
+              "description": "Discord channel ID (provider=discord)"
             },
             "discordToken": {
               "type": "string",
-              "description": "Discord bot token (provider=discord 时使用)"
+              "description": "Discord bot token (provider=discord)"
             },
             "agents": {
               "type": "array",
               "items": {
                 "type": "string"
               },
-              "description": "需要通知的 agentId 列表"
+              "description": "agent IDs to notify"
             }
           },
           "required": [
@@ -78,7 +78,7 @@
       },
       "publishers": {
         "type": "array",
-        "description": "Publisher agent 列表（会收到心跳注入的验收指令）",
+        "description": "Publisher agent IDs that receive acceptance guidance",
         "items": {
           "type": "string"
         }
@@ -100,7 +100,7 @@
           },
           "denyUnroutedTaskTypes": {
             "type": "boolean",
-            "description": "When true, task types without explicit route cannot be claimed (general is still allowed by default)"
+            "description": "When true, task types without explicit route cannot be claimed (general remains allowed by default)"
           }
         }
       }

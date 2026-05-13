@@ -7,9 +7,9 @@ interface HeaderProps {
 export const Header: FC<HeaderProps> = ({ onRefresh }) => {
   return (
     <div className="header-row">
-      <h1>📊 m-team 任务看板</h1>
+      <h1>m-team task dashboard</h1>
       <button className="refresh-btn" onClick={onRefresh}>
-        🔄 刷新
+        Refresh
       </button>
     </div>
   );

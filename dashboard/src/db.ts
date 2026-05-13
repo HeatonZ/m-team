@@ -1,12 +1,21 @@
 /**
- * Dashboard DB Layer
+ * Dashboard DB layer
  * Wraps m-team/pool with WORKSPACE_ROOT setup.
  */
 
-import { openDb, getDb, getTaskRow, getAllTaskRows, getTaskRowsByStatus, getTaskRowByExecutor, updateTaskRow, getTaskLogs, countTaskLogs } from 'm-team/pool/db';
+import {
+  openDb,
+  getDb,
+  getTaskRow,
+  getAllTaskRows,
+  getTaskRowsByStatus,
+  getTaskRowByExecutor,
+  updateTaskRow,
+  getTaskLogs,
+  countTaskLogs,
+} from 'm-team/pool/db';
 import { TaskStatus } from 'm-team/schema/task';
 
-// Dashboard types (relative import — must work from any cwd when spawned)
 import type { Task, TaskPriority } from './types/task.ts';
 import { STATUS_LABELS, PRIORITY_LABELS } from './types/task.ts';
 
@@ -21,7 +30,7 @@ export function setWorkspaceRoot(root: string): void {
 }
 
 function ensureInit(): void {
-  if (!getDb()) throw new Error('[dashboard] DB not initialized — call setWorkspaceRoot first');
+  if (!getDb()) throw new Error('[dashboard] DB not initialized; call setWorkspaceRoot first');
 }
 
 export function getAllTasks() {

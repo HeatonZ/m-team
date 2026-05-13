@@ -35,35 +35,35 @@ export const TaskEditModal: FC<TaskEditModalProps> = ({ task, onClose, onSave })
   return (
     <div className="modal-backdrop open" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className="modal">
-        <button className="modal-close" onClick={onClose}>✕</button>
-        <h3>编辑任务</h3>
+        <button className="modal-close" onClick={onClose}>×</button>
+        <h3>Edit task</h3>
 
         <div className="field">
-          <div className="field-label">Goal（目标）</div>
+          <div className="field-label">Goal (overall final objective)</div>
           <textarea
             className="edit-textarea"
             value={goal}
-            onChange={e => setGoal(e.target.value)}
+            onChange={(e) => setGoal(e.target.value)}
             rows={3}
           />
         </div>
 
         <div className="field">
-          <div className="field-label">Description（描述）</div>
+          <div className="field-label">Description (current step only)</div>
           <textarea
             className="edit-textarea"
             value={description}
-            onChange={e => setDescription(e.target.value)}
+            onChange={(e) => setDescription(e.target.value)}
             rows={4}
           />
         </div>
 
         <div className="field">
-          <div className="field-label">Status（状态）</div>
+          <div className="field-label">Status</div>
           <select
             className="edit-select"
             value={status}
-            onChange={e => setStatus(e.target.value as TaskStatus)}
+            onChange={(e) => setStatus(e.target.value as TaskStatus)}
           >
             {Object.entries(STATUS_LABELS).map(([value, label]) => (
               <option key={value} value={value}>{label}</option>
@@ -72,11 +72,11 @@ export const TaskEditModal: FC<TaskEditModalProps> = ({ task, onClose, onSave })
         </div>
 
         <div className="field">
-          <div className="field-label">Priority（优先级）</div>
+          <div className="field-label">Priority</div>
           <select
             className="edit-select"
             value={priority}
-            onChange={e => setPriority(e.target.value as TaskPriority)}
+            onChange={(e) => setPriority(e.target.value as TaskPriority)}
           >
             {Object.entries(PRIORITY_LABELS).map(([value, label]) => (
               <option key={value} value={value}>{label}</option>
@@ -87,9 +87,9 @@ export const TaskEditModal: FC<TaskEditModalProps> = ({ task, onClose, onSave })
         {error && <div className="error-msg">{error}</div>}
 
         <div className="modal-actions">
-          <button className="btn-cancel" onClick={onClose} disabled={saving}>取消</button>
+          <button className="btn-cancel" onClick={onClose} disabled={saving}>Cancel</button>
           <button className="btn-save" onClick={handleSave} disabled={saving}>
-            {saving ? '保存中…' : '保存'}
+            {saving ? 'Saving…' : 'Save'}
           </button>
         </div>
       </div>

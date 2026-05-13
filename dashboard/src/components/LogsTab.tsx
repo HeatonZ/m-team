@@ -14,19 +14,19 @@ const ACTION_COLORS: Record<string, string> = {
 };
 
 const ACTION_LABELS: Record<string, string> = {
-  publish: '发布',
-  claim: '认领',
-  next: '下一步',
-  complete: '完成',
-  fail: '失败',
-  cancel: '取消',
-  close: '验收关闭',
-  relinquish: '放弃',
+  publish: 'Publish',
+  claim: 'Claim',
+  next: 'Next',
+  complete: 'Complete',
+  fail: 'Fail',
+  cancel: 'Cancel',
+  close: 'Close',
+  relinquish: 'Relinquish',
 };
 
 function formatTime(ts: number): string {
   const d = new Date(ts);
-  return d.toLocaleString('zh-CN', { hour12: false });
+  return d.toLocaleString('en-US', { hour12: false });
 }
 
 function asText(value: unknown): string {
@@ -66,12 +66,12 @@ function renderDecisionDetails(log: TaskLog) {
 
   return (
     <details className="log-details">
-      <summary>agent_end 判决详情</summary>
+      <summary>agent_end decision details</summary>
       <div className="log-detail-grid">
-        <div><strong>判决</strong><span>{asText(details.decision ?? log.action)}</span></div>
-        <div><strong>原因</strong><span>{asText(details.reason)}</span></div>
-        <div><strong>下一步</strong><span>{asText(details.nextDescription)}</span></div>
-        <div><strong>证据摘要</strong><pre>{asText(details.evidence)}</pre></div>
+        <div><strong>Decision</strong><span>{asText(details.decision ?? log.action)}</span></div>
+        <div><strong>Reason</strong><span>{asText(details.reason)}</span></div>
+        <div><strong>Next step</strong><span>{asText(details.nextDescription)}</span></div>
+        <div><strong>Evidence</strong><pre>{asText(details.evidence)}</pre></div>
       </div>
     </details>
   );
@@ -117,8 +117,8 @@ export const LogsTab: FC = () => {
     <div className="section section-card">
       <div className="section-header">
         <div>
-          <h2>📋 操作日志 <span className="section-count">{total}</span></h2>
-          <div className="section-subtitle">重点关注 claim / next / complete / fail 的连续轨迹。</div>
+          <h2>Operation logs <span className="section-count">{total}</span></h2>
+          <div className="section-subtitle">Inspect claim / next / complete / fail traces.</div>
         </div>
       </div>
 
@@ -126,12 +126,12 @@ export const LogsTab: FC = () => {
         <form onSubmit={handleSearch} className="log-search">
           <input
             type="text"
-            placeholder="按任务ID过滤"
+            placeholder="Filter by taskId"
             value={inputTaskId}
             onChange={(e) => setInputTaskId(e.target.value)}
             className="log-input"
           />
-          <button type="submit" className="tab">搜索</button>
+          <button type="submit" className="tab">Search</button>
         </form>
 
         <select
@@ -139,35 +139,35 @@ export const LogsTab: FC = () => {
           onChange={(e) => { setPage(1); setFilterAction(e.target.value); }}
           className="log-select"
         >
-          <option value="">全部操作</option>
+          <option value="">All actions</option>
           {Object.entries(ACTION_LABELS).map(([key, label]) => (
             <option key={key} value={key}>{label}</option>
           ))}
         </select>
 
         <button onClick={() => { setInputTaskId(''); setFilterTaskId(''); setFilterAction(''); setPage(1); }} className="tab">
-          重置
+          Reset
         </button>
 
         <button onClick={load} className="tab" style={{ marginLeft: 'auto' }}>
-          刷新
+          Refresh
         </button>
       </div>
 
-      {loading && <div className="empty">加载中...</div>}
-      {!loading && logs.length === 0 && <div className="empty">暂无日志</div>}
+      {loading && <div className="empty">Loading...</div>}
+      {!loading && logs.length === 0 && <div className="empty">No logs</div>}
 
       {!loading && logs.length > 0 && (
         <div className="log-table-wrap">
           <table className="log-table">
             <thead>
               <tr>
-                <th>时间</th>
-                <th>操作</th>
-                <th>任务ID</th>
+                <th>Time</th>
+                <th>Action</th>
+                <th>Task ID</th>
                 <th>agentId</th>
                 <th>sessionKey</th>
-                <th>结果</th>
+                <th>Result</th>
               </tr>
             </thead>
             <tbody>
@@ -195,9 +195,9 @@ export const LogsTab: FC = () => {
           </table>
 
           <div className="pagination">
-            <button className="tab" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1 || loading}>上一页</button>
-            <span className="page-info">第 {page} 页 / 共 {Math.max(1, totalPages)} 页 · 本页 {logs.length} 条</span>
-            <button className="tab" onClick={() => setPage((p) => Math.min(Math.max(1, totalPages), p + 1))} disabled={page >= Math.max(1, totalPages) || loading}>下一页</button>
+            <button className="tab" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1 || loading}>Prev</button>
+            <span className="page-info">Page {page} / {Math.max(1, totalPages)} · {logs.length} rows</span>
+            <button className="tab" onClick={() => setPage((p) => Math.min(Math.max(1, totalPages), p + 1))} disabled={page >= Math.max(1, totalPages) || loading}>Next</button>
           </div>
         </div>
       )}

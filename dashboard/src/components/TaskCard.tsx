@@ -2,6 +2,7 @@ import type { FC, ReactNode } from 'react';
 import type { Task } from '../types/task';
 import { PRIORITY_LABELS, STATUS_LABELS, TASK_TYPE_LABELS } from '../types/task';
 import { formatRelativeTime, formatTime, escHtml } from '../utils/format';
+import { getLatestFiles, getLatestIssues, getLatestStep, getLatestSummary } from '../utils/task';
 
 interface TaskCardProps {
   task: Task;
@@ -9,33 +10,20 @@ interface TaskCardProps {
   decorator?: ReactNode;
 }
 
-function getLatestStep(task: Task) {
-  return [...task.context].reverse().find((entry) => entry.type === 'step');
-}
-
 function getNextKind(task: Task): 'new' | 'next' | 'blocked' | 'running' | 'terminal' {
   if (task.status === 'running') return 'running';
   if (task.status !== 'pending') return 'terminal';
   if (task.context.length === 0) return 'new';
-  const issues = getLatestStep(task)?.output?.unresolvedIssues ?? [];
-  if (issues.some((issue) => ['blocked', 'permission', 'external', '阻塞', '权限', '外部'].some((token) => issue.toLowerCase().includes(token.toLowerCase())))) return 'blocked';
+  const issues = getLatestIssues(task);
+  if (issues.some((issue) => ['blocked', 'permission', 'external', '无法继续', '阻塞', '权限'].some((token) => issue.toLowerCase().includes(token.toLowerCase())))) return 'blocked';
   return 'next';
-}
-
-function getLatestSummary(task: Task): string {
-  const latest = getLatestStep(task);
-  return latest?.output?.summary || latest?.step || 'No latest summary';
-}
-
-function getLatestIssues(task: Task): string[] {
-  return getLatestStep(task)?.output?.unresolvedIssues ?? [];
 }
 
 export const TaskCard: FC<TaskCardProps> = ({ task, onClick, decorator }) => {
   const latest = getLatestStep(task);
   const nextKind = getNextKind(task);
   const latestIssues = getLatestIssues(task);
-  const latestFiles = latest?.output?.files ?? [];
+  const latestFiles = getLatestFiles(task);
 
   return (
     <div className={`task-card task-card-${nextKind}`} onClick={() => onClick(task.taskId)}>

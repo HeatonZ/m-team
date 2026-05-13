@@ -18,7 +18,7 @@ export const TaskColumn: FC<TaskColumnProps> = ({
   tasks,
   onCardClick,
   variant = 'new',
-  emptyText = '暂无任务',
+  emptyText = 'No tasks',
   cardDecorator,
 }) => {
   return (

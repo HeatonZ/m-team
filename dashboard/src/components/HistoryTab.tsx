@@ -26,7 +26,9 @@ export const HistoryTab: FC<HistoryTabProps> = ({
 }) => {
   return (
     <div className="section">
-      <h2>📜 历史记录 <span style={{ fontWeight: 'normal', fontSize: '0.8em' }}>({total}条)</span></h2>
+      <h2>
+        History <span style={{ fontWeight: 'normal', fontSize: '0.8em' }}>({total})</span>
+      </h2>
       <div className="tab-bar">
         {HISTORY_STATUSES.map((s) => (
           <button
@@ -40,7 +42,7 @@ export const HistoryTab: FC<HistoryTabProps> = ({
       </div>
       <div className="task-list">
         {tasks.length === 0 ? (
-          <div className="empty">暂无历史记录</div>
+          <div className="empty">No history records</div>
         ) : (
           tasks.map((t) => (
             <TaskCard key={t.taskId} task={t} onClick={onCardClick} />
@@ -54,7 +56,7 @@ export const HistoryTab: FC<HistoryTabProps> = ({
             onClick={() => onPageChange(page - 1)}
             disabled={page <= 1}
           >
-            ‹ 上一页
+            ← Prev
           </button>
           <span className="page-info">{page} / {totalPages}</span>
           <button
@@ -62,7 +64,7 @@ export const HistoryTab: FC<HistoryTabProps> = ({
             onClick={() => onPageChange(page + 1)}
             disabled={page >= totalPages}
           >
-            下一页 ›
+            Next →
           </button>
         </div>
       )}

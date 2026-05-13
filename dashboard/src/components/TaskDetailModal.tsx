@@ -4,19 +4,12 @@ import type { Task, ContextStepEntry } from '../types/task';
 import { STATUS_LABELS, PRIORITY_LABELS, TASK_TYPE_LABELS } from '../types/task';
 import { formatRelativeTime, formatTime, escHtml } from '../utils/format';
 import { TaskEditModal } from './TaskEditModal';
+import { getLatestIssues, getLatestStep } from '../utils/task';
 
 interface TaskDetailModalProps {
   task: Task | null;
   onClose: () => void;
   onUpdate: (updated: Task) => void;
-}
-
-function getLatestStep(task: Task) {
-  return [...task.context].reverse().find((entry) => entry.type === 'step');
-}
-
-function getLatestIssues(task: Task): string[] {
-  return getLatestStep(task)?.output?.unresolvedIssues ?? [];
 }
 
 function getFlowSummary(task: Task) {
