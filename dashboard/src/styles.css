@@ -362,8 +362,7 @@ h2 {
   color: var(--text-secondary);
 }
 
-.pill-row,
-.metrics-inline {
+.pill-row {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;

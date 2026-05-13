@@ -39,12 +39,8 @@ export const VALID_TASK_TYPES: TaskType[] = Object.values(TaskType);
 export interface ContextStepOutput {
   summary?: string;
   files?: string[];
-  dataRefs?: string[];
-  completionNote?: string;
-  handoffNote?: string;
   unresolvedIssues?: string[];
   error?: string;
-  metrics?: Record<string, number | string>;
   [key: string]: unknown;
 }
 
@@ -245,6 +241,5 @@ export function getTaskSummary(input: Task): string {
   const last = task.context[task.context.length - 1];
   if (last.output?.summary) return last.output.summary;
   if (last.output?.files?.length) return `[files] ${last.output.files.join(', ')}`;
-  if (last.output?.handoffNote) return last.output.handoffNote;
   return '(no summary)';
 }

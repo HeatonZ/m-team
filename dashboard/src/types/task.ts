@@ -5,12 +5,8 @@ export type TaskType = 'general' | 'coding' | 'research' | 'ops' | 'data' | 'des
 export interface ContextStepOutput {
   summary?: string;
   files?: string[];
-  dataRefs?: string[];
-  completionNote?: string;
-  handoffNote?: string;
   unresolvedIssues?: string[];
   error?: string;
-  metrics?: Record<string, number | string>;
 }
 
 export interface ContextStepEntry {

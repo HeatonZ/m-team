@@ -102,13 +102,6 @@ export const TaskDetailModal: FC<TaskDetailModalProps> = ({ task, onClose, onUpd
                 ))}
               </div>
             ) : null}
-            {latest?.output?.metrics ? (
-              <div className="metrics-inline">
-                {Object.entries(latest.output.metrics).map(([k, v]) => (
-                  <span key={k} className="data-pill">{k}={String(v)}</span>
-                ))}
-              </div>
-            ) : null}
           </div>
 
           <div className="detail-panel detail-panel-wide">
