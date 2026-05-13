@@ -21,11 +21,12 @@ import {
   formatTaskNotifications,
 } from '../notifications.js';
 import { TaskStatus, type ContextStepOutput, type Task } from '../schema/task.js';
+import { TASK_CONTRACT_LIMITS } from '../task-contract.js';
 
 const DEFAULT_AGENT_END_JUDGE_TIMEOUT_MS = 90_000;
 const RETRY_AGENT_END_JUDGE_TIMEOUT_MS = 30_000;
 const MAX_SAME_STEP_NEXT_WITHOUT_PROGRESS = 2;
-const STEP_MAX_LENGTH = 120;
+const STEP_MAX_LENGTH = TASK_CONTRACT_LIMITS.descriptionMaxLength;
 
 type RuntimeWithTaskStorage = PluginRuntime & {
   storage?: {
@@ -147,12 +148,12 @@ function inferOutput(text: string): ContextStepOutput {
   const issueMatches = [...issueFromHeader, ...issueFromSignals]
     .filter((item) => !isNonIssueLine(item));
 
-  const cleanFiles = Array.from(new Set(files)).slice(0, 20);
-  const cleanIssues = Array.from(new Set(issueMatches)).slice(0, 10);
+  const cleanFiles = Array.from(new Set(files)).slice(0, TASK_CONTRACT_LIMITS.maxFiles);
+  const cleanIssues = Array.from(new Set(issueMatches)).slice(0, TASK_CONTRACT_LIMITS.maxIssues);
   const hasNonTrivialSummary = normalizedText.length >= 12 && !/^NO_REPLY$/i.test(normalizedText);
 
   return {
-    summary: hasNonTrivialSummary ? normalizedText.slice(0, 500) : undefined,
+    summary: hasNonTrivialSummary ? normalizedText.slice(0, TASK_CONTRACT_LIMITS.summaryMaxLength) : undefined,
     files: cleanFiles,
     unresolvedIssues: cleanIssues,
     error: cleanIssues.find((issue) => /(blocked|blocker|permission|failed|error|阻塞|无法|失败|错误|异常)/iu.test(issue)),
@@ -183,7 +184,7 @@ function sanitizeStoredOutput(output: ContextStepOutput): ContextStepOutput {
       .filter((issue) => !isNonIssueLine(issue))
       .map((issue) => normalizeIssueLine(issue))
       .filter(Boolean),
-  )).slice(0, 10);
+  )).slice(0, TASK_CONTRACT_LIMITS.maxIssues);
 
   const errorCandidate = stripGoalLevelLines(output.error);
   const error = errorCandidate && !isNonIssueLine(errorCandidate)

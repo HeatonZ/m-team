@@ -24,18 +24,19 @@ import {
   normalizeTask,
 } from '../schema/task';
 import { canAgentClaimTask } from './claim-routing.js';
+import { TASK_CONTRACT_LIMITS } from '../task-contract.js';
 
 let WORKSPACE_ROOT = '/mnt/d/code/m-team';
 export let DB_PATH: string | null = null;
 
-const STEP_MAX_LENGTH = 120;
-const GOAL_MAX_LENGTH = 200;
-const SUMMARY_MAX_LENGTH = 500;
-const ISSUE_MAX_LENGTH = 180;
-const FILE_PATH_MAX_LENGTH = 240;
-const MAX_FILES = 20;
-const MAX_ISSUES = 10;
-const MAX_CONTEXT_STEPS = 40;
+const STEP_MAX_LENGTH = TASK_CONTRACT_LIMITS.descriptionMaxLength;
+const GOAL_MAX_LENGTH = TASK_CONTRACT_LIMITS.goalMaxLength;
+const SUMMARY_MAX_LENGTH = TASK_CONTRACT_LIMITS.summaryMaxLength;
+const ISSUE_MAX_LENGTH = TASK_CONTRACT_LIMITS.issueMaxLength;
+const FILE_PATH_MAX_LENGTH = TASK_CONTRACT_LIMITS.filePathMaxLength;
+const MAX_FILES = TASK_CONTRACT_LIMITS.maxFiles;
+const MAX_ISSUES = TASK_CONTRACT_LIMITS.maxIssues;
+const MAX_CONTEXT_STEPS = TASK_CONTRACT_LIMITS.maxContextSteps;
 
 function normalizeText(value: string): string {
   return value.replace(/\s+/g, ' ').trim();

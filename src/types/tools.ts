@@ -1,10 +1,17 @@
-﻿/**
+/**
  * Tool parameter schemas.
  */
 
+import {
+  GOAL_INLINE_HINT,
+  DESCRIPTION_INLINE_HINT,
+  CONTEXT_OUTPUT_INLINE_HINT,
+} from '../task-contract.js';
+import { TASK_TYPE_INLINE_HINT } from '../task-type.js';
+
 export const ContextOutputSchema = {
   type: 'object' as const,
-  description: 'Current step output payload',
+  description: CONTEXT_OUTPUT_INLINE_HINT,
   properties: {
     summary: { type: 'string', description: 'Current step summary' },
     files: { type: 'array', items: { type: 'string' }, description: 'Artifact file paths' },
@@ -23,11 +30,11 @@ export interface ContextStepOutputInterface {
 export const PublishTaskParams = {
   type: 'object' as const,
   properties: {
-    goal: { type: 'string', description: 'Overall final goal, only for adjudication and publisher acceptance' },
-    description: { type: 'string', description: 'Current step only (one step, one action)' },
+    goal: { type: 'string', description: GOAL_INLINE_HINT },
+    description: { type: 'string', description: DESCRIPTION_INLINE_HINT },
     taskType: {
       type: 'string',
-      description: 'Task category for routing',
+      description: `Task category for routing. ${TASK_TYPE_INLINE_HINT}`,
       enum: ['general', 'coding', 'research', 'ops', 'data', 'design', 'content', 'ecommerce'],
     },
     publisher: { type: 'string', description: 'Publisher; defaults to current toolContext.agentId if omitted' },
@@ -82,7 +89,7 @@ export const RejectTaskParams = {
   properties: {
     taskId: { type: 'string', description: 'Task ID' },
     reason: { type: 'string', description: 'Rejection reason' },
-    description: { type: 'string', description: 'Next current-step description after rejection' },
+    description: { type: 'string', description: DESCRIPTION_INLINE_HINT },
   },
   required: ['taskId', 'reason', 'description'] as const,
 } as const;
@@ -94,10 +101,10 @@ export const NextTaskParams = {
     agentId: { type: 'string', description: 'Current executor agentId' },
     contextStep: { type: 'string', description: 'Current step description' },
     contextOutput: ContextOutputSchema,
-    description: { type: 'string', description: 'Next current-step description' },
+    description: { type: 'string', description: DESCRIPTION_INLINE_HINT },
     nextTaskType: {
       type: 'string',
-      description: 'Optional next taskType for routing the next step',
+      description: `Optional next taskType for routing the next step. ${TASK_TYPE_INLINE_HINT}`,
       enum: ['general', 'coding', 'research', 'ops', 'data', 'design', 'content', 'ecommerce'],
     },
   },

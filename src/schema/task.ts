@@ -1,6 +1,8 @@
-﻿/**
+/**
  * M-Team task domain model.
  */
+
+import { TASK_CONTRACT_LIMITS } from '../task-contract.js';
 
 export const TaskStatus = {
   PENDING: 'pending',
@@ -37,12 +39,12 @@ export const TaskType = {
 export type TaskType = typeof TaskType[keyof typeof TaskType];
 export const VALID_TASK_TYPES: TaskType[] = Object.values(TaskType);
 
-const STEP_MAX_LENGTH = 120;
-const SUMMARY_MAX_LENGTH = 500;
-const ISSUE_MAX_LENGTH = 180;
-const FILE_PATH_MAX_LENGTH = 240;
-const MAX_FILES = 20;
-const MAX_ISSUES = 10;
+const STEP_MAX_LENGTH = TASK_CONTRACT_LIMITS.descriptionMaxLength;
+const SUMMARY_MAX_LENGTH = TASK_CONTRACT_LIMITS.summaryMaxLength;
+const ISSUE_MAX_LENGTH = TASK_CONTRACT_LIMITS.issueMaxLength;
+const FILE_PATH_MAX_LENGTH = TASK_CONTRACT_LIMITS.filePathMaxLength;
+const MAX_FILES = TASK_CONTRACT_LIMITS.maxFiles;
+const MAX_ISSUES = TASK_CONTRACT_LIMITS.maxIssues;
 
 function normalizeText(value: string): string {
   return value.replace(/\s+/g, ' ').trim();

@@ -13,6 +13,7 @@ import { formatRejectNotifications } from '../notifications.js';
 import { sendNotifications } from '../notifications.js';
 import { RejectTaskParams } from '../types/tools.js';
 import type { RejectTaskParamsInterface } from '../types/tools.js';
+import { hasDescriptionGoalDrift, hasMultiStepPattern, sanitizeSingleLine } from '../task-contract.js';
 
 export function register(
   api: OpenClawPluginApi,
@@ -33,7 +34,16 @@ export function register(
         throw new Error('mteam_reject_task missing publisher identity from tool context');
       }
 
-      const nextDescription = description.trim();
+      const nextDescription = sanitizeSingleLine(description);
+      if (!nextDescription) {
+        throw new Error('mteam_reject_task invalid input:\n- REJECT_DESCRIPTION_REQUIRED: description is required.');
+      }
+      if (hasMultiStepPattern(nextDescription)) {
+        throw new Error('mteam_reject_task invalid input:\n- REJECT_DESCRIPTION_MULTI_STEP: description must be one current baton.');
+      }
+      if (hasDescriptionGoalDrift(nextDescription)) {
+        throw new Error('mteam_reject_task invalid input:\n- REJECT_DESCRIPTION_GOAL_DRIFT: description must be current-step work only.');
+      }
       const result = rejectTask(taskId, publisher, reason, nextDescription);
       if (!result.success) {
         return textResult(`reject failed: ${result.reason}`, { success: false, reason: result.reason });

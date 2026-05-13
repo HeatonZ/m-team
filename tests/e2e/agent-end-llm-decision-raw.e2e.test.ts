@@ -3,6 +3,7 @@ import { createPluginHarness } from '../helpers/create-plugin-harness.ts';
 import { extractDetails, type ToolResult } from '../helpers/extract-tool-result.ts';
 import { judgeAgentEndWithLlm } from '../../src/hooks/agentEndLlm.ts';
 import type { Task, ContextStepOutput } from '../../src/schema/task.ts';
+import { TASK_CONTRACT_LIMITS } from '../../src/task-contract.ts';
 
 describe('agent_end llm raw extraction and empty output handling', () => {
   test('parses decision from final_answer text block via visible text extraction', async () => {
@@ -77,6 +78,54 @@ describe('agent_end llm raw extraction and empty output handling', () => {
     } finally {
       await harness.cleanup();
     }
+  });
+
+  test('build prompt includes unified goal/context-output/decision contract guidance', async () => {
+    let capturedPrompt = '';
+
+    const runtime = {
+      config: { current: () => ({}) },
+      agentEndJudge: async (input: { prompt: string }) => {
+        capturedPrompt = input.prompt;
+        return {
+          decision: 'fail',
+          reason: '缺少可验证证据',
+          confidence: 'high',
+        };
+      },
+    } as never;
+
+    const task: Task = {
+      taskId: 'task_test_prompt_contract',
+      taskType: 'general',
+      description: '执行当前步骤',
+      goal: '产出可验收的最终结果',
+      context: [],
+      priority: 'normal',
+      publisher: 'manager',
+      status: 'running',
+      executor: 'maker',
+      lastExecutor: null,
+      createdAt: Date.now(),
+      completedAt: null,
+      updatedAt: Date.now(),
+    };
+    const output: ContextStepOutput = { summary: 'ok', files: [], unresolvedIssues: [] };
+
+    await judgeAgentEndWithLlm({
+      runtime,
+      cfg: undefined,
+      agentId: 'maker',
+      task,
+      transcript: 'done',
+      output,
+    });
+
+    expect(capturedPrompt).toContain('Goal quality rules:');
+    expect(capturedPrompt).toContain('Context output contract (current baton only):');
+    expect(capturedPrompt).toContain('Agent-end decision contract:');
+    expect(capturedPrompt).toContain(`nextDescription <= ${TASK_CONTRACT_LIMITS.agentEndNextDescriptionMaxLength} Chinese characters.`);
+    expect(capturedPrompt).toContain(`unresolvedIssues up to ${TASK_CONTRACT_LIMITS.agentEndMaxUnresolvedIssues} items.`);
   });
 });
 

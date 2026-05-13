@@ -44,6 +44,17 @@ Rules:
 - use general only for truly generic lightweight actions
 - if this baton is searching, analyzing, or comparing, prefer research or data
 - if this baton is implementing, modifying, or fixing code, prefer coding
+- if this baton is cross-border ecommerce operation, prefer ecommerce
+
+TaskType quick semantics:
+- general: generic lightweight baton without strong specialist domain
+- coding: implementation, debug, refactor, test, code-level validation
+- research: search, compare, analyze, synthesize evidence
+- ops: environment, deployment, service runtime, incident operation
+- data: extraction, cleaning, transformation, metric calculation
+- design: UI/UX and visual interaction deliverables
+- content: writing/editing/publishing textual artifacts
+- ecommerce: cross-border ecommerce execution (listing, pricing, sourcing, channel operation)
 
 ## Step 2
 
@@ -75,6 +86,9 @@ Rules:
 - do not include whole-chain planning
 - do not include acceptance, close, or publisher language
 - keep it short and action-oriented
+- keep it single-line when possible
+- avoid multi-step connectors such as "then / 接着 / 然后"
+- include explicit target and constraint when needed
 
 Good pattern:
 - action plus target plus constraint

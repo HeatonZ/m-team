@@ -12,6 +12,8 @@ describe('hook runtime e2e', () => {
     try {
       const idleHeartbeat = harness.runHeartbeat('maker');
       expect(idleHeartbeat?.appendContext).toContain('mteam_get_pending');
+      expect(idleHeartbeat?.appendContext).toContain('TaskType definitions (choose by current baton)');
+      expect(idleHeartbeat?.appendContext).toContain('description is current baton only');
 
       const publishResult = await harness.exec('mteam_publish_task', {
         goal: '完成一轮链式交接',

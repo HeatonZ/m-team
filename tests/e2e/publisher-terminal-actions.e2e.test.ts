@@ -80,6 +80,35 @@ describe('publisher terminal actions e2e', () => {
     }
   });
 
+  test('reject tool enforces current-baton single-step description', async () => {
+    const harness = await createPluginHarness();
+    try {
+      const publishResult = await harness.exec('mteam_publish_task', {
+        goal: 'Produce a report that can be revised after review',
+        description: 'Generate a candidate report for review',
+        taskType: 'general',
+        publisher: 'manager',
+      }) as ToolResult<PublishDetails>;
+      const taskId = extractDetails(publishResult)!.taskId;
+
+      harness.mutateTask(taskId, (task) => {
+        task.status = 'completed';
+        task.completedAt = Date.now();
+        task.updatedAt = task.completedAt;
+        task.executor = null;
+        task.lastExecutor = 'maker';
+      });
+
+      await expect(harness.exec('mteam_reject_task', {
+        taskId,
+        reason: 'Need rework',
+        description: 'first fix fields; then republish',
+      }, { agentId: 'manager' })).rejects.toThrow('REJECT_DESCRIPTION_MULTI_STEP');
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   test('does not allow reject to revive a failed task back to pending', async () => {
     const harness = await createPluginHarness();
     try {

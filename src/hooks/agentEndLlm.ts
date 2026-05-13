@@ -7,6 +7,13 @@ import {
 } from 'openclaw/plugin-sdk/agent-runtime';
 import type { Context as PiContext } from '@mariozechner/pi-ai';
 import { VALID_TASK_TYPES, type Task, type ContextStepOutput, type TaskType } from '../schema/task.js';
+import { buildTaskDescriptionQualityRules, buildTaskTypeGuidanceBlock } from '../task-type.js';
+import {
+  buildAgentEndDecisionContractBlock,
+  buildContextOutputQualityRules,
+  buildGoalQualityRules,
+  TASK_CONTRACT_LIMITS,
+} from '../task-contract.js';
 
 export type AgentEndDecision = {
   decision: 'complete' | 'next' | 'fail';
@@ -116,9 +123,14 @@ function buildDecisionPrompt(params: {
   output: ContextStepOutput;
 }): string {
   const { task, transcript, output } = params;
+  const taskTypeGuidance = buildTaskTypeGuidanceBlock();
+  const descriptionRules = buildTaskDescriptionQualityRules();
+  const goalRules = buildGoalQualityRules();
+  const contextOutputRules = buildContextOutputQualityRules();
+  const decisionContractRules = buildAgentEndDecisionContractBlock();
   const contextLines = task.context
     .filter((entry) => entry.type === 'step')
-    .slice(-8)
+    .slice(-TASK_CONTRACT_LIMITS.agentEndRecentContextLimit)
     .map((entry, index) => {
       const files = entry.output?.files?.length ? ` | files=${entry.output.files.join(', ')}` : '';
       const issues = entry.output?.unresolvedIssues?.length ? ` | issues=${entry.output.unresolvedIssues.join(' ; ')}` : '';
@@ -150,8 +162,18 @@ function buildDecisionPrompt(params: {
     '7. If transcript lacks evidence, do not return complete.',
     '8. Keep JSON concise:',
     '8.1 reason <= 120 Chinese characters.',
-    '8.2 nextDescription <= 80 Chinese characters.',
-    '8.3 unresolvedIssues up to 3 items.',
+    `8.2 nextDescription <= ${TASK_CONTRACT_LIMITS.agentEndNextDescriptionMaxLength} Chinese characters.`,
+    `8.3 unresolvedIssues up to ${TASK_CONTRACT_LIMITS.agentEndMaxUnresolvedIssues} items.`,
+    '',
+    taskTypeGuidance,
+    '',
+    descriptionRules,
+    '',
+    goalRules,
+    '',
+    contextOutputRules,
+    '',
+    decisionContractRules,
     '',
     'Return JSON only. No markdown. No code fences.',
     'JSON schema:',

@@ -11,6 +11,13 @@ import { formatTaskAsText } from './helpers.js';
 import { formatPublishNotifications, sendNotifications } from '../notifications.js';
 import { PublishTaskParams } from '../types/tools.js';
 import type { PublishTaskParamsInterface } from '../types/tools.js';
+import {
+  TASK_CONTRACT_LIMITS,
+  hasDescriptionGoalDrift,
+  hasGoalProceduralPattern,
+  hasMultiStepPattern,
+  sanitizeSingleLine,
+} from '../task-contract.js';
 
 function inferPublisher(rawParams: PublishTaskParamsInterface, toolContext?: OpenClawPluginToolContext): string {
   const explicitPublisher = rawParams.publisher?.trim();
@@ -28,15 +35,15 @@ type PublishToolParams = PublishTaskParamsInterface & {
 
 function validatePublishTaskInput(input: PublishTaskParamsInterface & { publisher: string }): string[] {
   const errors: string[] = [];
-  const goal = input.goal.trim();
-  const description = input.description.trim();
+  const goal = sanitizeSingleLine(input.goal);
+  const description = sanitizeSingleLine(input.description);
 
   if (!goal) errors.push('PUBLISH_GOAL_REQUIRED: goal is required.');
   if (!description) errors.push('PUBLISH_DESCRIPTION_REQUIRED: description is required.');
-  if (description.length > 120) {
+  if (description.length > TASK_CONTRACT_LIMITS.descriptionMaxLength) {
     errors.push('PUBLISH_DESCRIPTION_TOO_LONG: keep description within 120 characters and only describe the current step.');
   }
-  if (goal.length > 200) {
+  if (goal.length > TASK_CONTRACT_LIMITS.goalMaxLength) {
     errors.push('PUBLISH_GOAL_TOO_LONG: keep goal within 200 characters and describe final success only.');
   }
   if (goal === description) {
@@ -47,12 +54,16 @@ function validatePublishTaskInput(input: PublishTaskParamsInterface & { publishe
     errors.push('PUBLISH_DESCRIPTION_MULTI_LINE: description must be a single current-step sentence.');
   }
 
-  if (/([;；]|然后|接着|最后|step\s+\d+|步骤\s*\d+|(?:^|\s)\d+\.\s+)/iu.test(description)) {
+  if (hasMultiStepPattern(description)) {
     errors.push('PUBLISH_DESCRIPTION_MULTI_STEP: description appears multi-step; publish only one baton.');
   }
 
-  if (/(整体任务|最终交付|全部完成|验收|close task)/iu.test(description)) {
+  if (hasDescriptionGoalDrift(description)) {
     errors.push('PUBLISH_DESCRIPTION_GOAL_DRIFT: description must be current-step work only, not acceptance/closure language.');
+  }
+
+  if (hasGoalProceduralPattern(goal)) {
+    errors.push('PUBLISH_GOAL_SHOULD_BE_FINAL_STATE: goal should describe final success state, not step-by-step process.');
   }
 
   return errors;

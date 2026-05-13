@@ -11,6 +11,7 @@ import type {
   PluginHeartbeatPromptContributionResult,
 } from '../types/openclaw-hooks.js';
 import { getAgentActiveTask } from '../pool/index.js';
+import { buildTaskTypeGuidanceBlock } from '../task-type.js';
 
 interface RegisterOptions {
   executors: string[];
@@ -61,6 +62,11 @@ Reject:
 Process only one task and stop.
 Reply only: HEARTBEAT_OK`;
 
+function buildClaimPrompt(): string {
+  const taskTypeGuidance = buildTaskTypeGuidanceBlock();
+  return `${CLAIM_PROMPT}\n\n${taskTypeGuidance}\n\nDescription rule:\n- description is current baton only.\n- pick tasks whose description clearly matches your capability and current baton scope.`;
+}
+
 export function registerHeartbeatPromptContributionHook(
   api: OpenClawPluginApi,
   options: RegisterOptions,
@@ -87,7 +93,7 @@ export function registerHeartbeatPromptContributionHook(
         if (activeTask) return undefined;
 
         api.logger?.info('[m-team] heartbeat inject claim prompt');
-        return { appendContext: CLAIM_PROMPT };
+        return { appendContext: buildClaimPrompt() };
       }
 
       return undefined;

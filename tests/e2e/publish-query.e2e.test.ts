@@ -93,6 +93,22 @@ describe('publish/query e2e', () => {
     }
   });
 
+  test('rejects publish when goal is procedural multi-step text', async () => {
+    const harness = await createPluginHarness();
+    try {
+      await expect(
+        harness.exec('mteam_publish_task', {
+          goal: 'first collect data then analyze and finally publish',
+          description: 'collect one data point',
+          taskType: 'general',
+          publisher: 'manager',
+        }),
+      ).rejects.toThrow('PUBLISH_GOAL_SHOULD_BE_FINAL_STATE');
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   test('accepts ecommerce taskType', async () => {
     const harness = await createPluginHarness();
     try {
