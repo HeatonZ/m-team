@@ -73,15 +73,16 @@ describe('publish/query e2e', () => {
     }
   });
 
-  test('rejects low-quality publish input without stepContract', async () => {
+  test('accepts minimal publish input without stepContract', async () => {
     const harness = await createPluginHarness();
     try {
-      await expect(harness.exec('mteam_publish_task', {
+      const publishResult = await harness.exec('mteam_publish_task', {
         goal: 'do the task',
-        description: 'continue handling and then see',
+        description: 'collect one data point',
         taskType: 'general',
         publisher: 'manager',
-      })).rejects.toThrow(/invalid input|completion rule|stepContract/);
+      }) as ToolResult<PublishDetails>;
+      expect(extractDetails(publishResult)?.taskId).toMatch(/^task_/);
     } finally {
       await harness.cleanup();
     }

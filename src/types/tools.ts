@@ -110,16 +110,6 @@ export const CloseTaskParams = {
   required: ['taskId', 'publisher'] as const,
 } as const;
 
-export const CompleteTaskParams = {
-  type: 'object' as const,
-  properties: {
-    taskId: { type: 'string', description: 'Task ID' },
-    contextStep: { type: 'string', description: 'Current step description' },
-    contextOutput: ContextOutputSchema,
-  },
-  required: ['taskId', 'contextStep'] as const,
-} as const;
-
 export const RejectTaskParams = {
   type: 'object' as const,
   properties: {
@@ -203,12 +193,6 @@ export interface CancelTaskParamsInterface {
 export interface CloseTaskParamsInterface {
   taskId: string;
   publisher: string;
-}
-
-export interface CompleteTaskParamsInterface {
-  taskId: string;
-  contextStep: string;
-  contextOutput?: ContextStepOutputInterface;
 }
 
 export interface RejectTaskParamsInterface {

@@ -46,7 +46,6 @@ function initSchema(db: Database.Database): void {
       goal           TEXT NOT NULL,
       step_contract  TEXT,
       context        TEXT NOT NULL DEFAULT '[]',
-      flow           TEXT,
       priority       TEXT NOT NULL DEFAULT 'normal',
       publisher      TEXT NOT NULL DEFAULT 'user',
       status         TEXT NOT NULL DEFAULT 'pending',
@@ -77,12 +76,10 @@ function initSchema(db: Database.Database): void {
   const columns = db.prepare('PRAGMA table_info(tasks)').all() as Array<{ name: string }>;
   const hasTaskType = columns.some(col => col.name === 'task_type');
   const hasStepContract = columns.some(col => col.name === 'step_contract');
-  const hasFlow = columns.some(col => col.name === 'flow');
   const hasUpdatedAt = columns.some(col => col.name === 'updated_at');
 
   if (!hasTaskType) db.exec("ALTER TABLE tasks ADD COLUMN task_type TEXT NOT NULL DEFAULT 'general';");
   if (!hasStepContract) db.exec('ALTER TABLE tasks ADD COLUMN step_contract TEXT');
-  if (!hasFlow) db.exec('ALTER TABLE tasks ADD COLUMN flow TEXT');
   if (!hasUpdatedAt) {
     db.exec("ALTER TABLE tasks ADD COLUMN updated_at INTEGER NOT NULL DEFAULT 0;");
     db.exec('UPDATE tasks SET updated_at = COALESCE(completed_at, created_at, 0) WHERE updated_at = 0');
@@ -124,10 +121,10 @@ export function insertTask(task: Task): void {
   const row = serializeTask(task);
   db.prepare(`
     INSERT INTO tasks
-      (task_id, task_type, description, goal, step_contract, context, flow, priority, publisher,
+      (task_id, task_type, description, goal, step_contract, context, priority, publisher,
        status, executor, last_executor, created_at, completed_at, updated_at)
     VALUES
-      (@task_id, @task_type, @description, @goal, @step_contract, @context, @flow, @priority, @publisher,
+      (@task_id, @task_type, @description, @goal, @step_contract, @context, @priority, @publisher,
        @status, @executor, @last_executor, @created_at, @completed_at, @updated_at)
   `).run(row);
 }

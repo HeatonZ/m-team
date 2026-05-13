@@ -17,7 +17,6 @@ export interface TaskRow {
   goal: string;
   step_contract: string | null;
   context: string;
-  flow: string | null;
   priority: string;
   publisher: string;
   status: string;
@@ -37,7 +36,6 @@ export function serializeTask(input: Task): TaskRow {
     goal: task.goal,
     step_contract: task.stepContract ? JSON.stringify(task.stepContract) : null,
     context: JSON.stringify(task.context),
-    flow: null,
     priority: task.priority,
     publisher: task.publisher,
     status: task.status,

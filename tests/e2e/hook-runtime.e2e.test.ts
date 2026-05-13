@@ -41,6 +41,7 @@ describe('hook runtime e2e', () => {
         {
           goal: '记录一次被 heartbeat 拦截的发布尝试',
           description: '记录 heartbeat 发布尝试',
+          taskType: 'general',
           publisher: 'manager',
         },
         { agentId: 'manager', sessionKey: 'agent:manager:discord:heartbeat' },

@@ -207,6 +207,7 @@ describe('publisher terminal actions e2e', () => {
               params: {
                 goal: 'Verify publish ownership mismatch auditing',
                 description: 'Record a publish with mismatched explicit publisher and hook context',
+                taskType: 'general',
                 publisher: 'manager',
               },
               result: { details: { taskId } },
