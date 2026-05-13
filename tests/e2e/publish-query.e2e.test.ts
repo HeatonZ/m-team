@@ -76,4 +76,20 @@ describe('publish/query e2e', () => {
       await harness.cleanup();
     }
   });
+
+  test('rejects publish when description is multi-step', async () => {
+    const harness = await createPluginHarness();
+    try {
+      await expect(
+        harness.exec('mteam_publish_task', {
+          goal: 'do the task',
+          description: 'first collect data; then analyze',
+          taskType: 'general',
+          publisher: 'manager',
+        }),
+      ).rejects.toThrow('PUBLISH_DESCRIPTION_MULTI_STEP');
+    } finally {
+      await harness.cleanup();
+    }
+  });
 });

@@ -4,6 +4,7 @@
   PluginRuntime,
 } from 'openclaw/plugin-sdk/core';
 import type { PluginHookAgentEndEvent, PluginHookAgentContext } from '../types/openclaw-hooks.js';
+import type { MTeamPluginConfig } from '../config.js';
 import {
   failTask,
   completeTask,
@@ -22,6 +23,8 @@ import {
 import { TaskStatus, type ContextStepOutput, type Task } from '../schema/task.js';
 
 const DEFAULT_AGENT_END_JUDGE_TIMEOUT_MS = 90_000;
+const RETRY_AGENT_END_JUDGE_TIMEOUT_MS = 30_000;
+const MAX_SAME_STEP_NEXT_WITHOUT_PROGRESS = 2;
 const STEP_MAX_LENGTH = 120;
 
 type RuntimeWithTaskStorage = PluginRuntime & {
@@ -205,6 +208,24 @@ function hasProblemReportSignal(text: string, output: ContextStepOutput): boolea
   return /(补齐|修复|重试|校对|检查|校验|重新生成|重新运行|补充|完善|排查|缺少|待补|阻塞|fix|retry|verify|missing|blocked|blocker)/iu.test(combined);
 }
 
+function countRecentSameStepWithoutIssues(task: Task, step: string): number {
+  const normalizedStep = sanitizeStepInstruction(step);
+  if (!normalizedStep) return 0;
+
+  const stepEntries = task.context.filter((entry): entry is Task['context'][number] & { type: 'step' } => entry.type === 'step');
+  let count = 0;
+
+  for (let i = stepEntries.length - 1; i >= 0; i--) {
+    const entry = stepEntries[i];
+    const entryStep = sanitizeStepInstruction(entry.step);
+    if (!entryStep || entryStep !== normalizedStep) break;
+    if (!hasNoRealIssues(entry.output ?? {})) break;
+    count++;
+  }
+
+  return count;
+}
+
 function sanitizeStepInstruction(raw: string): string {
   let text = raw.trim();
   text = text.replace(/^问题[:：]\s*/u, '').trim();
@@ -278,7 +299,27 @@ function buildLlmLogData(llmDecision: AgentEndJudgeResult | null): Record<string
   };
 }
 
-export function registerAgentEndHook(api: OpenClawPluginApi): void {
+function shouldRetryAgentEndJudge(error: string | undefined): boolean {
+  if (!error) return false;
+  return [
+    'LLM_DECISION_TIMEOUT',
+    'LLM_DECISION_EMPTY_OUTPUT',
+    'LLM_DECISION_TRUNCATED_EMPTY',
+    'LLM_DECISION_EMPTY_OUTPUT_LENGTH_LIMIT',
+    'LLM_DECISION_PROVIDER_ERROR',
+  ].includes(error);
+}
+
+function resolveJudgeTimeoutMs(config?: MTeamPluginConfig): number {
+  const envTimeout = Number(process.env.MTEAM_AGENT_END_TIMEOUT_MS);
+  if (Number.isFinite(envTimeout) && envTimeout > 0) return envTimeout;
+  if (typeof config?.agentEndJudgeTimeoutMs === 'number' && config.agentEndJudgeTimeoutMs > 0) {
+    return config.agentEndJudgeTimeoutMs;
+  }
+  return DEFAULT_AGENT_END_JUDGE_TIMEOUT_MS;
+}
+
+export function registerAgentEndHook(api: OpenClawPluginApi, config?: MTeamPluginConfig): void {
   api.on('agent_end', async (event: PluginHookAgentEndEvent, ctx: PluginHookAgentContext): Promise<void> => {
     const { sessionKey, agentId } = ctx;
     const taskId = parseTaskId(sessionKey ?? '');
@@ -360,7 +401,10 @@ export function registerAgentEndHook(api: OpenClawPluginApi): void {
     const storedOutput = sanitizeStoredOutput(normalizedOutput);
 
     let llmDecision: AgentEndJudgeResult | null = null;
+    let llmJudgeAttempts = 0;
+    const judgeTimeoutMs = resolveJudgeTimeoutMs(config);
     try {
+      llmJudgeAttempts = 1;
       llmDecision = await judgeAgentEndWithLlm({
         runtime: api.runtime as PluginRuntime,
         cfg: getRuntimeConfig(api.runtime as PluginRuntime),
@@ -369,8 +413,22 @@ export function registerAgentEndHook(api: OpenClawPluginApi): void {
         transcript: text,
         output: normalizedOutput,
         modelRef: process.env.MTEAM_AGENT_END_MODEL,
-        timeoutMs: Number(process.env.MTEAM_AGENT_END_TIMEOUT_MS || DEFAULT_AGENT_END_JUDGE_TIMEOUT_MS),
+        timeoutMs: judgeTimeoutMs,
       });
+      if (!llmDecision.ok && shouldRetryAgentEndJudge(llmDecision.error)) {
+        llmJudgeAttempts = 2;
+        api.logger?.warn?.(`[m-team] agent_end llm transient failure, retry once: ${llmDecision.error}`);
+        llmDecision = await judgeAgentEndWithLlm({
+          runtime: api.runtime as PluginRuntime,
+          cfg: getRuntimeConfig(api.runtime as PluginRuntime),
+          agentId: agentId ?? task.executor ?? 'manager',
+          task,
+          transcript: text,
+          output: normalizedOutput,
+          modelRef: process.env.MTEAM_AGENT_END_MODEL,
+          timeoutMs: Math.min(judgeTimeoutMs, RETRY_AGENT_END_JUDGE_TIMEOUT_MS),
+        });
+      }
     } catch (err) {
       api.logger?.warn?.(`[m-team] agent_end llm judge threw: ${err instanceof Error ? err.message : String(err)}`);
     }
@@ -399,7 +457,10 @@ export function registerAgentEndHook(api: OpenClawPluginApi): void {
             via: 'llm',
             confidence: judged.confidence,
             reason: judged.reason,
-            llm: buildLlmLogData(llmDecision),
+            llm: {
+              ...buildLlmLogData(llmDecision),
+              attempts: llmJudgeAttempts,
+            },
             fallback: null,
             evidence: {
               summary: normalizedOutput.summary ?? '',
@@ -423,44 +484,54 @@ export function registerAgentEndHook(api: OpenClawPluginApi): void {
           ?? (isConciseCurrentStepDescription(llmNext) ? llmNext : buildConservativeNextDescription(task));
 
         if (!explicitNext && isSameCurrentStepDescription(task, nextDescription) && hasNoRealIssues(storedOutput) && !hasProblemReportSignal(text, storedOutput)) {
-          const failReason = 'LLM_NEXT_REPEATS_CURRENT_STEP_WITHOUT_NEW_WORK';
-          const result = failTask(taskId, failReason, {
-            step: task.description,
-            output: sanitizeStoredOutput({
-              ...storedOutput,
-              summary: stripGoalLevelLines(judged.summary ?? storedOutput.summary ?? text),
-              error: failReason,
-              unresolvedIssues: [failReason],
-            }),
-          });
+          const sameStepRepeatCount = countRecentSameStepWithoutIssues(task, task.description) + 1;
+          if (sameStepRepeatCount >= MAX_SAME_STEP_NEXT_WITHOUT_PROGRESS) {
+            const failReason = 'LLM_NEXT_REPEATS_CURRENT_STEP_WITHOUT_NEW_WORK';
+            const result = failTask(taskId, failReason, {
+              step: task.description,
+              output: sanitizeStoredOutput({
+                ...storedOutput,
+                summary: stripGoalLevelLines(judged.summary ?? storedOutput.summary ?? text),
+                error: failReason,
+                unresolvedIssues: [failReason],
+              }),
+            });
 
-          writeTaskLog({
-            taskId,
-            action: 'fail',
-            sessionKey: sessionKey ?? undefined,
-            agentId: agentId ?? undefined,
-            result: {
-              success: result.success,
-              decision: 'fail',
-              via: 'llm_repeat_guard',
-              confidence: judged.confidence,
-              reason: judged.reason,
-              llm: buildLlmLogData(llmDecision),
-              fallback: null,
-              evidence: {
-                summary: normalizedOutput.summary ?? '',
-                files: normalizedOutput.files ?? [],
-                unresolvedIssues: normalizedOutput.unresolvedIssues ?? [],
-                error: normalizedOutput.error ?? null,
+            writeTaskLog({
+              taskId,
+              action: 'fail',
+              sessionKey: sessionKey ?? undefined,
+              agentId: agentId ?? undefined,
+              result: {
+                success: result.success,
+                decision: 'fail',
+                via: 'llm_repeat_guard',
+                confidence: judged.confidence,
+                reason: judged.reason,
+                llm: {
+                  ...buildLlmLogData(llmDecision),
+                  attempts: llmJudgeAttempts,
+                },
+                repeatCount: sameStepRepeatCount,
+                repeatLimit: MAX_SAME_STEP_NEXT_WITHOUT_PROGRESS,
+                fallback: null,
+                evidence: {
+                  summary: normalizedOutput.summary ?? '',
+                  files: normalizedOutput.files ?? [],
+                  unresolvedIssues: normalizedOutput.unresolvedIssues ?? [],
+                  error: normalizedOutput.error ?? null,
+                },
               },
-            },
-            error: failReason,
-          });
+              error: failReason,
+            });
 
-          if (result.task) {
-            await sendNotifications(formatFailNotifications(result.task, getNotifications()), api.logger ?? null).catch(() => null);
+            if (result.task) {
+              await sendNotifications(formatFailNotifications(result.task, getNotifications()), api.logger ?? null).catch(() => null);
+            }
+            return;
           }
-          return;
+
+          api.logger?.warn?.(`[m-team] agent_end repeat-guard soft pass taskId=${taskId} repeatCount=${sameStepRepeatCount}/${MAX_SAME_STEP_NEXT_WITHOUT_PROGRESS}`);
         }
 
         const result = nextTask(
@@ -491,7 +562,10 @@ export function registerAgentEndHook(api: OpenClawPluginApi): void {
             nextTaskType: judged.nextTaskType ?? null,
             confidence: judged.confidence,
             reason: judged.reason,
-            llm: buildLlmLogData(llmDecision),
+            llm: {
+              ...buildLlmLogData(llmDecision),
+              attempts: llmJudgeAttempts,
+            },
             fallback: null,
             evidence: {
               summary: normalizedOutput.summary ?? '',
@@ -537,7 +611,10 @@ export function registerAgentEndHook(api: OpenClawPluginApi): void {
             via: 'llm',
             confidence: judged.confidence,
             reason: judged.reason,
-            llm: buildLlmLogData(llmDecision),
+            llm: {
+              ...buildLlmLogData(llmDecision),
+              attempts: llmJudgeAttempts,
+            },
             fallback: null,
             evidence: {
               summary: normalizedOutput.summary ?? '',
@@ -584,7 +661,10 @@ export function registerAgentEndHook(api: OpenClawPluginApi): void {
         decision: 'fail',
         via: 'llm_fail_fast',
         reason: failReason,
-        llm: buildLlmLogData(llmDecision),
+        llm: {
+          ...buildLlmLogData(llmDecision),
+          attempts: llmJudgeAttempts,
+        },
         fallback: null,
         evidence: {
           summary: normalizedOutput.summary ?? '',

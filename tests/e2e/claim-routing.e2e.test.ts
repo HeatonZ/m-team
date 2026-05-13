@@ -80,6 +80,38 @@ describe('claim routing e2e', () => {
     }
   });
 
+  test('claim routing is case-insensitive for agentId', async () => {
+    const harness = await createPluginHarness({
+      dashboardEnabled: false,
+      claimRouting: {
+        taskTypeAgents: {
+          research: ['scholar'],
+        },
+      },
+    });
+    try {
+      const publishResult = await harness.exec('mteam_publish_task', {
+        goal: 'research goal',
+        description: 'collect references',
+        taskType: 'research',
+        publisher: 'manager',
+      }) as ToolResult<PublishDetails>;
+      const taskId = extractDetails(publishResult)!.taskId;
+
+      const claimResult = await harness.exec('mteam_claim_task', {
+        taskId,
+        agentId: 'Scholar',
+      }) as ToolResult<{ success?: boolean }>;
+
+      expect(extractDetails(claimResult)?.success).toBe(true);
+      const task = harness.readTask(taskId);
+      expect(task?.status).toBe('running');
+      expect(task?.executor).toBe('Scholar');
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   test('denyUnroutedTaskTypes blocks claim for unrouted non-general taskType', async () => {
     const harness = await createPluginHarness({
       dashboardEnabled: false,

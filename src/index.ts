@@ -78,7 +78,7 @@ const plugin = definePluginEntry({
 
     registerTools(api, config);
 
-    registerAgentEndHook(api);
+    registerAgentEndHook(api, config);
     registerAfterToolCallHook(api);
     registerHeartbeatPromptContributionHook(api, {
       executors: config.executors ?? ['maker', 'fixer', 'scholar', 'captain'],

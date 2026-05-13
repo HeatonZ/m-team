@@ -173,7 +173,7 @@ describe('agent_end llm judge e2e', () => {
     }
   });
 
-  test('ignores llm next when it repeats the current step and there is no real unresolved issue', async () => {
+  test('fails on repeated same-step next without progress after repeat threshold', async () => {
     const harness = await createPluginHarness({ dashboardEnabled: false });
     try {
       (harness.api as unknown as { runtime: { agentEndJudge: Function } }).runtime.agentEndJudge = async () => ({
@@ -197,10 +197,20 @@ describe('agent_end llm judge e2e', () => {
         messages: [{ role: 'assistant', content: '结果摘要：计算 1+1 = 2，已写入 step1_result.md。\n产出文件：step1_result.md\n未解决问题：无' }],
       } as never, { agentId: 'maker', sessionKey: `agent:maker:m-team:${taskId}:test-session` });
 
+      const firstTask = harness.readTask(taskId);
+      expect(firstTask?.status).toBe('pending');
+
+      await harness.exec('mteam_claim_task', { taskId, agentId: 'maker' }, { agentId: 'maker' });
+      await harness.runAgentEnd({
+        success: true,
+        messages: [{ role: 'assistant', content: '结果摘要：计算 1+1 = 2，已写入 step1_result.md。\n产出文件：step1_result.md\n未解决问题：无' }],
+      } as never, { agentId: 'maker', sessionKey: `agent:maker:m-team:${taskId}:test-session` });
+
       const task = harness.readTask(taskId);
       expect(task?.status).toBe('failed');
       const failLog = harness.readLogs(taskId, 'fail').at(-1);
       expect(failLog?.result?.via).toBe('llm_repeat_guard');
+      expect(failLog?.result?.repeatCount).toBe(2);
     } finally {
       await harness.cleanup();
     }

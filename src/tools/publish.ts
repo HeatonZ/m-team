@@ -31,11 +31,29 @@ function validatePublishTaskInput(input: PublishTaskParamsInterface & { publishe
   const goal = input.goal.trim();
   const description = input.description.trim();
 
-  if (!goal) errors.push('goal is required.');
-  if (!description) errors.push('description is required.');
-  if (description.length > 120) errors.push('description is too long; keep it within 120 characters and only describe the current step.');
-  if (goal.length > 200) errors.push('goal is too long; keep it within 200 characters and only describe final success.');
-  if (goal === description) errors.push('goal and description must not be identical.');
+  if (!goal) errors.push('PUBLISH_GOAL_REQUIRED: goal is required.');
+  if (!description) errors.push('PUBLISH_DESCRIPTION_REQUIRED: description is required.');
+  if (description.length > 120) {
+    errors.push('PUBLISH_DESCRIPTION_TOO_LONG: keep description within 120 characters and only describe the current step.');
+  }
+  if (goal.length > 200) {
+    errors.push('PUBLISH_GOAL_TOO_LONG: keep goal within 200 characters and describe final success only.');
+  }
+  if (goal === description) {
+    errors.push('PUBLISH_GOAL_DESCRIPTION_IDENTICAL: goal and description must not be identical.');
+  }
+
+  if (/\r?\n/.test(description)) {
+    errors.push('PUBLISH_DESCRIPTION_MULTI_LINE: description must be a single current-step sentence.');
+  }
+
+  if (/([;；]|然后|接着|最后|step\s+\d+|步骤\s*\d+|(?:^|\s)\d+\.\s+)/iu.test(description)) {
+    errors.push('PUBLISH_DESCRIPTION_MULTI_STEP: description appears multi-step; publish only one baton.');
+  }
+
+  if (/(整体任务|最终交付|全部完成|验收|close task)/iu.test(description)) {
+    errors.push('PUBLISH_DESCRIPTION_GOAL_DRIFT: description must be current-step work only, not acceptance/closure language.');
+  }
 
   return errors;
 }

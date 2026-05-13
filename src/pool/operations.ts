@@ -35,6 +35,7 @@ const ISSUE_MAX_LENGTH = 180;
 const FILE_PATH_MAX_LENGTH = 240;
 const MAX_FILES = 20;
 const MAX_ISSUES = 10;
+const MAX_CONTEXT_STEPS = 40;
 
 function normalizeText(value: string): string {
   return value.replace(/\s+/g, ' ').trim();
@@ -126,7 +127,7 @@ function init(): void {
 
 function appendContext(task: Task, executorId: string | null, contextEntry: ContextStepInput | null): ContextStepEntry[] {
   const current = task.context ?? [];
-  if (!contextEntry) return current;
+  if (!contextEntry) return current.slice(-MAX_CONTEXT_STEPS);
 
   return [
     ...current,
@@ -137,7 +138,7 @@ function appendContext(task: Task, executorId: string | null, contextEntry: Cont
       output: sanitizeContextOutput(contextEntry.output),
       completedAt: Date.now(),
     },
-  ];
+  ].slice(-MAX_CONTEXT_STEPS);
 }
 
 function setTaskState(

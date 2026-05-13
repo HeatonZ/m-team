@@ -28,6 +28,15 @@ function error(res: http.ServerResponse, status: number, message: string): void 
   json(res, status, { error: message });
 }
 
+function classifyCliStatus(stderr: string): number {
+  const text = stderr || '';
+  if (/PUBLISH_[A-Z_]+/.test(text)) return 422;
+  if (/TASK_NOT_FOUND|NOT_PENDING|TASK_NOT_RUNNING|TASK_NOT_COMPLETED|TASK_NOT_MUTABLE|TASK_CANCELLED/.test(text)) return 409;
+  if (/AGENT_TASKTYPE_ROUTE_MISMATCH|TASKTYPE_UNROUTED|ALREADY_HAS_ACTIVE_TASK|PUBLISHER_MISMATCH|NOT_CURRENT_EXECUTOR/.test(text)) return 409;
+  if (/--[a-z-]+\s+is required|required/i.test(text)) return 400;
+  return 400;
+}
+
 function parseBody(req: http.IncomingMessage): Promise<Record<string, unknown>> {
   return new Promise((resolve, reject) => {
     let body = '';
@@ -120,7 +129,7 @@ async function handle(req: http.IncomingMessage, res: http.ServerResponse): Prom
       if (body.priority) args.push('--priority', String(body.priority));
 
       const result = await cli(args);
-      if (result.code !== 0) return error(res, 400, result.stderr || 'CLI error');
+      if (result.code !== 0) return error(res, classifyCliStatus(result.stderr), result.stderr || 'CLI error');
       return json(res, 201, JSON.parse(result.stdout));
     } catch (e: any) {
       return error(res, 400, e.message);
@@ -155,7 +164,7 @@ async function handle(req: http.IncomingMessage, res: http.ServerResponse): Prom
       if (!body.agentId) return error(res, 400, 'agentId required');
 
       const result = await cli(['tasks', 'claim', claimMatch[1], '--agent-id', String(body.agentId)]);
-      if (result.code !== 0) return error(res, 400, result.stderr);
+      if (result.code !== 0) return error(res, classifyCliStatus(result.stderr), result.stderr);
       return json(res, 200, JSON.parse(result.stdout));
     } catch (e: any) {
       return error(res, 400, e.message);
@@ -172,7 +181,7 @@ async function handle(req: http.IncomingMessage, res: http.ServerResponse): Prom
       pushContextOutputArgs(args, body);
 
       const result = await cli(args);
-      if (result.code !== 0) return error(res, 400, result.stderr);
+      if (result.code !== 0) return error(res, classifyCliStatus(result.stderr), result.stderr);
       return json(res, 200, JSON.parse(result.stdout));
     } catch (e: any) {
       return error(res, 400, e.message);
@@ -192,7 +201,7 @@ async function handle(req: http.IncomingMessage, res: http.ServerResponse): Prom
       if (body.nextTaskType) args.push('--next-task-type', String(body.nextTaskType));
 
       const result = await cli(args);
-      if (result.code !== 0) return error(res, 400, result.stderr);
+      if (result.code !== 0) return error(res, classifyCliStatus(result.stderr), result.stderr);
       return json(res, 200, JSON.parse(result.stdout));
     } catch (e: any) {
       return error(res, 400, e.message);
@@ -209,7 +218,7 @@ async function handle(req: http.IncomingMessage, res: http.ServerResponse): Prom
       if (body.reason) args.push('--reason', String(body.reason));
 
       const result = await cli(args);
-      if (result.code !== 0) return error(res, 400, result.stderr);
+      if (result.code !== 0) return error(res, classifyCliStatus(result.stderr), result.stderr);
       return json(res, 200, JSON.parse(result.stdout));
     } catch (e: any) {
       return error(res, 400, e.message);
@@ -223,7 +232,7 @@ async function handle(req: http.IncomingMessage, res: http.ServerResponse): Prom
       if (!body.publisher) return error(res, 400, 'publisher required');
 
       const result = await cli(['tasks', 'close', closeMatch[1], '--publisher', String(body.publisher)]);
-      if (result.code !== 0) return error(res, 400, result.stderr);
+      if (result.code !== 0) return error(res, classifyCliStatus(result.stderr), result.stderr);
       return json(res, 200, JSON.parse(result.stdout));
     } catch (e: any) {
       return error(res, 400, e.message);
@@ -240,7 +249,7 @@ async function handle(req: http.IncomingMessage, res: http.ServerResponse): Prom
       if (body.reason) args.push('--reason', String(body.reason));
 
       const result = await cli(args);
-      if (result.code !== 0) return error(res, 400, result.stderr);
+      if (result.code !== 0) return error(res, classifyCliStatus(result.stderr), result.stderr);
       return json(res, 200, JSON.parse(result.stdout));
     } catch (e: any) {
       return error(res, 400, e.message);

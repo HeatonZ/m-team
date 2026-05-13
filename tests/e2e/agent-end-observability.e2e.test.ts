@@ -32,6 +32,7 @@ describe('agent_end observability e2e', () => {
       expect(nextLog?.result?.llm?.source).toBe('llm');
       expect(nextLog?.result?.llm?.status).toBe('ok');
       expect(nextLog?.result?.llm?.parsed?.decision).toBe('next');
+      expect(nextLog?.result?.llm?.attempts).toBe(1);
       expect(nextLog?.result?.reason).toBe('还需要下一步继续处理');
       expect(nextLog?.result?.evidence).toEqual({
         summary: '结果摘要：已整理 2 个候选商品，记录在 /mnt/d/code/hermes/candidates.md。',
@@ -69,6 +70,7 @@ describe('agent_end observability e2e', () => {
       expect(failLog?.result?.via).toBe('llm_fail_fast');
       expect(failLog?.result?.llm?.source).toBe('llm');
       expect(failLog?.result?.llm?.status).toBe('error');
+      expect(failLog?.result?.llm?.attempts).toBe(1);
       expect(failLog?.result?.fallback).toBeNull();
     } finally {
       await harness.cleanup();

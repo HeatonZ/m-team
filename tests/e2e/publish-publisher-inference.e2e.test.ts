@@ -7,8 +7,8 @@ describe('publish publisher inference', () => {
     const harness = await createPluginHarness({ dashboardEnabled: false });
     try {
       const result = await harness.exec('mteam_publish_task', {
-        goal: '验证 direct session 的 publisher 推断',
-        description: '记录 direct session 的 publisher 推断结果',
+        goal: 'verify direct session publisher inference',
+        description: 'capture publisher value from direct session context',
         taskType: 'general',
         priority: 'high',
       }, {
@@ -35,8 +35,8 @@ describe('publish publisher inference', () => {
         harness.getTool('mteam_publish_task').execute(
           'test-tool-call',
           {
-            goal: '验证缺少 publisher 时阻止发布',
-            description: '记录缺少 publisher 的发布尝试',
+            goal: 'verify publish is blocked without publisher identity',
+            description: 'attempt publish without toolContext agentId',
             taskType: 'general',
             priority: 'high',
           },
@@ -48,3 +48,4 @@ describe('publish publisher inference', () => {
     }
   });
 });
+

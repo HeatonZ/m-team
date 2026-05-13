@@ -16,7 +16,7 @@ function normalizeTaskType(raw: string | undefined | null): string {
 }
 
 function normalizeAgentId(raw: string | undefined | null): string {
-  return String(raw ?? '').trim();
+  return String(raw ?? '').trim().toLowerCase();
 }
 
 function buildTaskTypeAgentMap(rawMap: ClaimRoutingConfig['taskTypeAgents']): Map<string, Set<string>> {
@@ -91,4 +91,3 @@ export function getClaimRoutingConfigSnapshot(): {
     denyUnroutedTaskTypes: ROUTING_CONFIG.denyUnroutedTaskTypes,
   };
 }
-
