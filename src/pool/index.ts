@@ -6,6 +6,7 @@ import { openDb, getTaskRow, getTaskRowByExecutor } from './db';
 import { getTaskRowsByStatus as _db_getTaskRowsByStatus, getAllTaskRows as _db_getAllTaskRows } from './db';
 import { TaskStatus, type Task } from '../schema/task';
 import { setWorkspaceRoot, DB_PATH } from './operations';
+import { canAgentClaimTask } from './eligibility.js';
 import {
   publishTask,
   claimTask,
@@ -54,7 +55,9 @@ export function getRunningTasks(): Task[] {
 export function getPendingTasks(agentId?: string | null): Task[] {
   init();
   if (agentId && getAgentActiveTask(agentId)) return [];
-  return getTaskRowsByStatus(TaskStatus.PENDING);
+  const pending = getTaskRowsByStatus(TaskStatus.PENDING);
+  if (!agentId) return pending;
+  return pending.filter(task => canAgentClaimTask(task, agentId).ok);
 }
 
 export function getAgentActiveTask(agentId: string): Task | null {

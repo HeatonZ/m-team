@@ -24,6 +24,7 @@ import {
   createTask,
   normalizeTask,
 } from '../schema/task';
+import { canAgentClaimTask } from './eligibility.js';
 
 let WORKSPACE_ROOT = '/mnt/d/code/m-team';
 export let DB_PATH: string | null = null;
@@ -135,6 +136,8 @@ export function claimTask(taskId: string, agentId: string): ClaimResult {
     const task = getTaskRow(taskId);
     if (!task) return { success: false, taskId, reason: 'TASK_NOT_FOUND' };
     if (task.status !== TaskStatus.PENDING) return { success: false, taskId, reason: 'NOT_PENDING' };
+    const eligibility = canAgentClaimTask(task, agentId);
+    if (!eligibility.ok) return { success: false, taskId, reason: eligibility.reason };
 
     const existingActive = db.prepare(
       'SELECT task_id FROM tasks WHERE executor = ? AND status = ?'

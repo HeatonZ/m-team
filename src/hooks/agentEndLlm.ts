@@ -30,6 +30,8 @@ type AssistantMessageLike = {
   content?: unknown;
 };
 
+const AGENT_END_LLM_MAX_TOKENS = 1200;
+
 function extractTextBlocks(content: unknown): string {
   if (!Array.isArray(content)) return '';
   return content
@@ -50,6 +52,60 @@ function extractDecisionRaw(message: AssistantMessageLike): string {
   const plainText = extractAssistantText(message as never)?.trim() ?? '';
   if (plainText) return plainText;
   return extractTextBlocks(message.content);
+}
+
+function extractLatestJsonObject(raw: string): string | null {
+  const text = raw.trim();
+  if (!text) return null;
+
+  const starts: number[] = [];
+  for (let i = 0; i < text.length; i++) {
+    if (text[i] === '{') starts.push(i);
+  }
+  if (starts.length === 0) return null;
+
+  for (let s = starts.length - 1; s >= 0; s--) {
+    const start = starts[s];
+    let depth = 0;
+    let inString = false;
+    let escaping = false;
+
+    for (let i = start; i < text.length; i++) {
+      const ch = text[i];
+
+      if (inString) {
+        if (escaping) {
+          escaping = false;
+          continue;
+        }
+        if (ch === '\\') {
+          escaping = true;
+          continue;
+        }
+        if (ch === '"') {
+          inString = false;
+        }
+        continue;
+      }
+
+      if (ch === '"') {
+        inString = true;
+        continue;
+      }
+      if (ch === '{') {
+        depth++;
+        continue;
+      }
+      if (ch === '}') {
+        depth--;
+        if (depth === 0) {
+          return text.slice(start, i + 1).trim();
+        }
+      }
+    }
+  }
+
+  return null;
 }
 
 function buildDecisionPrompt(params: {
@@ -90,6 +146,11 @@ function buildDecisionPrompt(params: {
     '5. The executor reports facts and problems. agent_end decides the next action.',
     '6. nextDescription must describe only the next current step. Do not paste history, long problem text, or whole-task commentary into it.',
     '7. If the transcript is vague and lacks evidence, do not return complete.',
+    '8. Keep the JSON concise to avoid truncation:',
+    '8.1 reason <= 120 Chinese characters.',
+    '8.2 nextDescription <= 80 Chinese characters.',
+    '8.3 doneWhen up to 3 items, each <= 60 Chinese characters.',
+    '8.4 unresolvedIssues up to 3 items.',
     '',
     'Return JSON only. No markdown. No code fences.',
     'JSON schema:',
@@ -192,6 +253,8 @@ function parseDecisionLoose(raw: string): AgentEndDecision | null {
 function parseDecision(raw: string): AgentEndDecision | null {
   const trimmed = raw.trim();
   const candidates = [trimmed];
+  const latestJson = extractLatestJsonObject(trimmed);
+  if (latestJson) candidates.unshift(latestJson);
   const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i)?.[1]?.trim();
   if (fenced) candidates.push(fenced);
   const objectSlice = trimmed.match(/\{[\s\S]*\}/)?.[0];
@@ -319,7 +382,7 @@ export async function judgeAgentEndWithLlm(params: {
       context,
       cfg: params.cfg,
       options: {
-        maxTokens: 500,
+        maxTokens: AGENT_END_LLM_MAX_TOKENS,
         ...(controller ? { signal: controller.signal } : {}),
       },
     });

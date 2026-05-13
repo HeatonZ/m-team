@@ -44,7 +44,7 @@ function compactText(text: string | undefined, max = 120): string | undefined {
     .replace(/\s+/g, ' ')
     .trim();
   if (!normalized) return undefined;
-  return normalized.length > max ? `${normalized.slice(0, max)}?` : normalized;
+  return normalized.length > max ? `${normalized.slice(0, max)}...` : normalized;
 }
 
 
