@@ -92,4 +92,22 @@ describe('publish/query e2e', () => {
       await harness.cleanup();
     }
   });
+
+  test('accepts ecommerce taskType', async () => {
+    const harness = await createPluginHarness();
+    try {
+      const publishResult = await harness.exec('mteam_publish_task', {
+        goal: 'complete one cross-border listing task',
+        description: 'prepare one product listing draft',
+        taskType: 'ecommerce',
+        publisher: 'manager',
+      }) as ToolResult<PublishDetails>;
+
+      const taskId = extractDetails(publishResult)!.taskId;
+      const task = harness.readTask(taskId);
+      expect(task?.taskType).toBe('ecommerce');
+    } finally {
+      await harness.cleanup();
+    }
+  });
 });

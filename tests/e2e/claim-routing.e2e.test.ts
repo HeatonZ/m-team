@@ -142,4 +142,36 @@ describe('claim routing e2e', () => {
       await harness.cleanup();
     }
   });
+
+  test('supports ecommerce taskType routing', async () => {
+    const harness = await createPluginHarness({
+      dashboardEnabled: false,
+      claimRouting: {
+        taskTypeAgents: {
+          ecommerce: ['captain'],
+        },
+      },
+    });
+    try {
+      const publishResult = await harness.exec('mteam_publish_task', {
+        goal: 'run one ecommerce operation',
+        description: 'prepare one listing draft',
+        taskType: 'ecommerce',
+        publisher: 'manager',
+      }) as ToolResult<PublishDetails>;
+      const taskId = extractDetails(publishResult)!.taskId;
+
+      const captainPending = await harness.exec('mteam_get_pending', { agentId: 'captain' }) as ToolResult<{ pending?: Array<{ taskType?: string }> }>;
+      const scholarPending = await harness.exec('mteam_get_pending', { agentId: 'scholar' }) as ToolResult<{ pending?: Array<{ taskType?: string }> }>;
+
+      expect((extractDetails(captainPending)?.pending ?? []).length).toBe(1);
+      expect((extractDetails(captainPending)?.pending ?? [])[0]?.taskType).toBe('ecommerce');
+      expect((extractDetails(scholarPending)?.pending ?? []).length).toBe(0);
+
+      const claimResult = await harness.exec('mteam_claim_task', { taskId, agentId: 'captain' }) as ToolResult<{ success?: boolean }>;
+      expect(extractDetails(claimResult)?.success).toBe(true);
+    } finally {
+      await harness.cleanup();
+    }
+  });
 });

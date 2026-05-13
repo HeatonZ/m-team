@@ -31,6 +31,7 @@ export const TaskType = {
   DATA: 'data',
   DESIGN: 'design',
   CONTENT: 'content',
+  ECOMMERCE: 'ecommerce',
 } as const;
 
 export type TaskType = typeof TaskType[keyof typeof TaskType];
@@ -271,6 +272,7 @@ export const TASK_TYPE_LABELS: Record<TaskType, string> = {
   [TaskType.DATA]: 'Data',
   [TaskType.DESIGN]: 'Design',
   [TaskType.CONTENT]: 'Content',
+  [TaskType.ECOMMERCE]: 'Ecommerce',
 };
 
 export function getStatusLabel(status: TaskStatus): string {

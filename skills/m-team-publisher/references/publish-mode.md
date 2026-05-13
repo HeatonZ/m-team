@@ -37,6 +37,7 @@ Available values:
 - data
 - design
 - content
+- ecommerce
 
 Rules:
 - do not lazily default everything to general

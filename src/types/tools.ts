@@ -28,7 +28,7 @@ export const PublishTaskParams = {
     taskType: {
       type: 'string',
       description: 'Task category for routing',
-      enum: ['general', 'coding', 'research', 'ops', 'data', 'design', 'content'],
+      enum: ['general', 'coding', 'research', 'ops', 'data', 'design', 'content', 'ecommerce'],
     },
     publisher: { type: 'string', description: 'Publisher; defaults to current toolContext.agentId if omitted' },
     priority: { type: 'string', description: 'Priority', enum: ['high', 'normal', 'low'] },
@@ -39,7 +39,7 @@ export const PublishTaskParams = {
 export interface PublishTaskParamsInterface {
   goal: string;
   description: string;
-  taskType: 'general' | 'coding' | 'research' | 'ops' | 'data' | 'design' | 'content';
+  taskType: 'general' | 'coding' | 'research' | 'ops' | 'data' | 'design' | 'content' | 'ecommerce';
   publisher?: string;
   priority?: 'high' | 'normal' | 'low';
 }
@@ -98,7 +98,7 @@ export const NextTaskParams = {
     nextTaskType: {
       type: 'string',
       description: 'Optional next taskType for routing the next step',
-      enum: ['general', 'coding', 'research', 'ops', 'data', 'design', 'content'],
+      enum: ['general', 'coding', 'research', 'ops', 'data', 'design', 'content', 'ecommerce'],
     },
   },
   required: ['taskId', 'agentId', 'contextStep', 'description'] as const,
@@ -172,7 +172,7 @@ export interface NextTaskParamsInterface {
   contextStep: string;
   contextOutput?: ContextStepOutputInterface;
   description: string;
-  nextTaskType?: 'general' | 'coding' | 'research' | 'ops' | 'data' | 'design' | 'content';
+  nextTaskType?: 'general' | 'coding' | 'research' | 'ops' | 'data' | 'design' | 'content' | 'ecommerce';
 }
 
 export interface RelinquishTaskParamsInterface {
