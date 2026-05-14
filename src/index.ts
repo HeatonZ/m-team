@@ -86,6 +86,7 @@ const plugin = definePluginEntry({
     });
     registerSessionGuardHook(api, {
       publishers: config.publishers ?? [],
+      workspaceRoot,
     });
 
     api.logger?.info('[m-team] 插件加载完成');

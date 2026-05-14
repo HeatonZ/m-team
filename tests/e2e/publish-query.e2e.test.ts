@@ -43,6 +43,16 @@ describe('publish/query e2e', () => {
       expect(getTaskDetails?.task).not.toHaveProperty('goal');
       expect(getTaskDetails?.task).toHaveProperty('recentContext');
 
+      const publisherTaskResult = await harness.exec('mteam_get_task_for_publisher', { taskId }, { agentId: 'manager' }) as ToolResult<{ task?: Record<string, unknown>; blocked?: boolean; reason?: string }>;
+      const publisherTaskDetails = extractDetails(publisherTaskResult);
+      expect(publisherTaskDetails?.blocked).not.toBe(true);
+      expect(publisherTaskDetails?.task?.goal).toBe('finish one candidate collection task');
+
+      const nonPublisherTaskResult = await harness.exec('mteam_get_task_for_publisher', { taskId }, { agentId: 'maker' }) as ToolResult<{ blocked?: boolean; reason?: string }>;
+      const nonPublisherDetails = extractDetails(nonPublisherTaskResult);
+      expect(nonPublisherDetails?.blocked).toBe(true);
+      expect(nonPublisherDetails?.reason).toBe('PUBLISHER_IDENTITY_REQUIRED');
+
       const pendingResult = await harness.exec('mteam_get_pending', { agentId: 'maker' }) as ToolResult<TaskListDetails>;
       const pendingText = extractText(pendingResult);
       const pendingDetails = extractDetails(pendingResult);
@@ -72,6 +82,26 @@ describe('publish/query e2e', () => {
         publisher: 'manager',
       }) as ToolResult<PublishDetails>;
       expect(extractDetails(publishResult)?.taskId).toMatch(/^task_/);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  test('publisher task query enforces task ownership', async () => {
+    const harness = await createPluginHarness({ publishers: ['manager', 'manager2'] });
+    try {
+      const publishResult = await harness.exec('mteam_publish_task', {
+        goal: 'owner-only query visibility check',
+        description: 'prepare candidate report',
+        taskType: 'general',
+        publisher: 'manager',
+      }, { agentId: 'manager' }) as ToolResult<PublishDetails>;
+      const taskId = extractDetails(publishResult)!.taskId;
+
+      const otherPublisherResult = await harness.exec('mteam_get_task_for_publisher', { taskId }, { agentId: 'manager2' }) as ToolResult<{ blocked?: boolean; reason?: string }>;
+      const otherPublisherDetails = extractDetails(otherPublisherResult);
+      expect(otherPublisherDetails?.blocked).toBe(true);
+      expect(otherPublisherDetails?.reason).toBe('PUBLISHER_TASK_OWNERSHIP_REQUIRED');
     } finally {
       await harness.cleanup();
     }

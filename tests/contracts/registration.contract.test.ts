@@ -14,6 +14,7 @@ const EXPECTED_TOOL_NAMES = [
   'mteam_get_pending',
   'mteam_get_agent_active',
   'mteam_get_task',
+  'mteam_get_task_for_publisher',
   'mteam_get_all_tasks',
 ];
 

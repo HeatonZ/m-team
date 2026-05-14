@@ -12,6 +12,7 @@ import {
   getTaskRow,
   updateTaskRow,
   insertTask,
+  writeTaskLog,
 } from './db';
 import {
   TaskStatus,
@@ -119,6 +120,163 @@ function syncTaskJson(task: Task): void {
   fs.writeFileSync(p, JSON.stringify(normalizeTask(task), null, 2), 'utf8');
 }
 
+interface TaskPersistenceSnapshot {
+  taskId: string | null;
+  status: string | null;
+  description: string | null;
+  taskType: string | null;
+  updatedAt: number | null;
+  contextLength: number | null;
+  lastExecutor: string | null;
+  executor: string | null;
+  completedAt: number | null;
+}
+
+function toNullableString(value: unknown): string | null {
+  return typeof value === 'string' ? value : null;
+}
+
+function toNullableNumber(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return null;
+}
+
+function buildTaskSnapshot(task: Task): TaskPersistenceSnapshot {
+  return {
+    taskId: task.taskId ?? null,
+    status: task.status ?? null,
+    description: task.description ?? null,
+    taskType: task.taskType ?? null,
+    updatedAt: toNullableNumber(task.updatedAt),
+    contextLength: Array.isArray(task.context) ? task.context.length : 0,
+    lastExecutor: task.lastExecutor ?? null,
+    executor: task.executor ?? null,
+    completedAt: task.completedAt ?? null,
+  };
+}
+
+function buildTaskSnapshotFromJson(raw: unknown): TaskPersistenceSnapshot {
+  if (!raw || typeof raw !== 'object') {
+    return {
+      taskId: null,
+      status: null,
+      description: null,
+      taskType: null,
+      updatedAt: null,
+      contextLength: null,
+      lastExecutor: null,
+      executor: null,
+      completedAt: null,
+    };
+  }
+
+  const record = raw as Record<string, unknown>;
+  const contextValue = record.context;
+  return {
+    taskId: toNullableString(record.taskId),
+    status: toNullableString(record.status),
+    description: toNullableString(record.description),
+    taskType: toNullableString(record.taskType),
+    updatedAt: toNullableNumber(record.updatedAt),
+    contextLength: Array.isArray(contextValue) ? contextValue.length : null,
+    lastExecutor: toNullableString(record.lastExecutor),
+    executor: toNullableString(record.executor),
+    completedAt: record.completedAt === null ? null : toNullableNumber(record.completedAt),
+  };
+}
+
+function compareTaskSnapshots(dbSnapshot: TaskPersistenceSnapshot, jsonSnapshot: TaskPersistenceSnapshot): Array<{
+  field: keyof TaskPersistenceSnapshot;
+  db: unknown;
+  taskJson: unknown;
+}> {
+  const fields: Array<keyof TaskPersistenceSnapshot> = [
+    'taskId',
+    'status',
+    'description',
+    'taskType',
+    'updatedAt',
+    'contextLength',
+    'lastExecutor',
+    'executor',
+    'completedAt',
+  ];
+
+  const mismatches: Array<{ field: keyof TaskPersistenceSnapshot; db: unknown; taskJson: unknown }> = [];
+  for (const field of fields) {
+    if (dbSnapshot[field] !== jsonSnapshot[field]) {
+      mismatches.push({
+        field,
+        db: dbSnapshot[field],
+        taskJson: jsonSnapshot[field],
+      });
+    }
+  }
+  return mismatches;
+}
+
+function verifyTaskDbJsonConsistency(task: Task, surface: string, strict: boolean): void {
+  const taskPath = getTaskPath(task.taskId);
+  const dbSnapshot = buildTaskSnapshot(task);
+  let jsonSnapshot: TaskPersistenceSnapshot;
+  let parseError: string | null = null;
+
+  try {
+    const rawText = fs.readFileSync(taskPath, 'utf8');
+    const parsed = JSON.parse(rawText) as unknown;
+    jsonSnapshot = buildTaskSnapshotFromJson(parsed);
+  } catch (error) {
+    parseError = error instanceof Error ? error.message : String(error);
+    jsonSnapshot = {
+      taskId: null,
+      status: null,
+      description: null,
+      taskType: null,
+      updatedAt: null,
+      contextLength: null,
+      lastExecutor: null,
+      executor: null,
+      completedAt: null,
+    };
+  }
+
+  const mismatches = compareTaskSnapshots(dbSnapshot, jsonSnapshot);
+  if (!parseError && mismatches.length === 0) return;
+
+  const detail = {
+    surface,
+    taskPath,
+    parseError,
+    mismatches,
+    dbSnapshot,
+    taskJsonSnapshot: jsonSnapshot,
+  };
+
+  writeTaskLog({
+    taskId: task.taskId,
+    action: 'consistency_guard',
+    params: {
+      surface,
+      strict,
+    },
+    result: detail as unknown as Record<string, unknown>,
+    error: 'TASK_DB_JSON_INCONSISTENT',
+  });
+
+  const summary = parseError
+    ? `parseError=${parseError}`
+    : mismatches.map((item) => `${item.field}(db=${String(item.db)} taskJson=${String(item.taskJson)})`).join(', ');
+  console.error(`[m-team-pool] consistency mismatch task=${task.taskId} surface=${surface} ${summary}`);
+
+  if (strict) {
+    throw new Error(`TASK_DB_JSON_INCONSISTENT: ${summary}`);
+  }
+}
+
 function init(): void {
   if (!DB_PATH) return;
   fs.mkdirSync(getTasksDir(), { recursive: true });
@@ -146,9 +304,14 @@ function setTaskState(
   taskId: string,
   patch: TaskPatch,
 ): Task {
+  const current = getTaskRow(taskId);
+  if (current) {
+    verifyTaskDbJsonConsistency(normalizeTask(current), 'setTaskState:pre', true);
+  }
   updateTaskRow(taskId, patch);
   const updated = normalizeTask(getTaskRow(taskId)!);
   syncTaskJson(updated);
+  verifyTaskDbJsonConsistency(updated, 'setTaskState', true);
   return updated;
 }
 
@@ -185,6 +348,7 @@ export function publishTask(input: {
     insertTask(task);
     syncTaskJson(task);
   })();
+  verifyTaskDbJsonConsistency(task, 'publishTask', false);
 
   console.log(`[m-team-pool] task published: ${task.taskId} - ${task.description}`);
   return task.taskId;
@@ -230,6 +394,7 @@ export function claimTask(taskId: string, agentId: string): ClaimResult {
 
     const updatedTask = normalizeTask(getTaskRow(taskId)!);
     syncTaskJson(updatedTask);
+    verifyTaskDbJsonConsistency(updatedTask, 'claimTask', false);
     console.log(`[m-team-pool] ${agentId} claimed task ${taskId}`);
     return { success: true, taskId, task: updatedTask };
   })();

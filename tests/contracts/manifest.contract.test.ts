@@ -7,6 +7,7 @@ const EXPECTED_TOOL_NAMES = [
   'mteam_next_task',
   'mteam_relinquish_task',
   'mteam_get_task',
+  'mteam_get_task_for_publisher',
   'mteam_get_pending',
   'mteam_cancel_task',
   'mteam_get_agent_active',

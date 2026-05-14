@@ -1,3 +1,5 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import type {
   OpenClawPluginApi,
 } from 'openclaw/plugin-sdk/core';
@@ -236,6 +238,10 @@ export async function createPluginHarness(overrides: Partial<TestPluginConfig> =
         JSON.stringify(task.context),
         taskId,
       );
+
+      const taskJsonPath = path.join(workspace.tasksDir, taskId, 'task.json');
+      fs.mkdirSync(path.dirname(taskJsonPath), { recursive: true });
+      fs.writeFileSync(taskJsonPath, JSON.stringify(task, null, 2), 'utf8');
     },
   };
 }

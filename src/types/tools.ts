@@ -146,6 +146,14 @@ export const GetTaskParams = {
   required: ['taskId'] as const,
 } as const;
 
+export const GetTaskForPublisherParams = {
+  type: 'object' as const,
+  properties: {
+    taskId: { type: 'string', description: 'Task ID' },
+  },
+  required: ['taskId'] as const,
+} as const;
+
 export const GetAllTasksParams = {
   type: 'object' as const,
   properties: {
@@ -199,6 +207,10 @@ export interface GetAgentActiveParamsInterface {
 }
 
 export interface GetTaskParamsInterface {
+  taskId: string;
+}
+
+export interface GetTaskForPublisherParamsInterface {
   taskId: string;
 }
 

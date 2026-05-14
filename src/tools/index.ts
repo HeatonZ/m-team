@@ -12,7 +12,7 @@ import { register as registerRelinquish } from './relinquish.js';
 import { register as registerReject } from './reject.js';
 import { register as registerCancel } from './cancel.js';
 import { register as registerClose } from './close.js';
-import { registerGetPending, registerGetAgentActive, registerGetTask, registerGetAllTasks } from './query.js';
+import { registerGetPending, registerGetAgentActive, registerGetTask, registerGetTaskForPublisher, registerGetAllTasks } from './query.js';
 
 export { type MTeamPluginConfig };
 
@@ -31,6 +31,7 @@ export function registerTools(api: OpenClawPluginApi, config: MTeamPluginConfig)
     registerGetPending(api);
     registerGetAgentActive(api);
     registerGetTask(api);
+    registerGetTaskForPublisher(api, config);
     registerGetAllTasks(api);
 
     api.logger?.info('[m-team] registerTools done');

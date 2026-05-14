@@ -111,6 +111,76 @@ describe('publisher terminal actions e2e', () => {
     }
   });
 
+  test('reject tool blocks private workspace path leakage in reason/description', async () => {
+    const harness = await createPluginHarness();
+    try {
+      const publishResult = await harness.exec('mteam_publish_task', {
+        goal: 'Verify reject path scope guard',
+        description: 'Generate a report candidate',
+        taskType: 'general',
+        publisher: 'manager',
+      }) as ToolResult<PublishDetails>;
+      const taskId = extractDetails(publishResult)!.taskId;
+
+      harness.mutateTask(taskId, (task) => {
+        task.status = 'completed';
+        task.completedAt = Date.now();
+        task.updatedAt = task.completedAt;
+        task.executor = null;
+        task.lastExecutor = 'maker';
+      });
+
+      await expect(harness.exec('mteam_reject_task', {
+        taskId,
+        publisher: 'manager',
+        reason: 'Missing file in /home/hjl/.openclaw/workspace-manager/result.txt',
+        description: 'Regenerate artifact',
+      }, { agentId: 'manager' })).rejects.toThrow('REJECT_REASON_INVALID_PATH_SCOPE');
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  test('reject tool blocks evidence conflict when reason says missing but context files already contain that artifact', async () => {
+    const harness = await createPluginHarness();
+    try {
+      const publishResult = await harness.exec('mteam_publish_task', {
+        goal: 'Verify reject evidence conflict guard',
+        description: 'Produce final report artifact',
+        taskType: 'general',
+        publisher: 'manager',
+      }) as ToolResult<PublishDetails>;
+      const taskId = extractDetails(publishResult)!.taskId;
+
+      harness.mutateTask(taskId, (task) => {
+        task.status = 'completed';
+        task.completedAt = Date.now();
+        task.updatedAt = task.completedAt;
+        task.executor = null;
+        task.lastExecutor = 'maker';
+        task.context.push({
+          type: 'step',
+          executor: 'maker',
+          step: 'Produce final artifact',
+          output: {
+            summary: 'Artifact generated',
+            files: ['/mnt/d/workspace/m-team/tasks/task_foo/result.txt'],
+          },
+          completedAt: Date.now(),
+        });
+      });
+
+      await expect(harness.exec('mteam_reject_task', {
+        taskId,
+        publisher: 'manager',
+        reason: 'Artifact missing: /mnt/d/workspace/m-team/tasks/task_foo/result.txt (ENOENT)',
+        description: 'Recreate the missing file',
+      }, { agentId: 'manager' })).rejects.toThrow('REJECT_REASON_EVIDENCE_CONFLICT');
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   test('does not allow reject to revive a failed task back to pending', async () => {
     const harness = await createPluginHarness();
     try {

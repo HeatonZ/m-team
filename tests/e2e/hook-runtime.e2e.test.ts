@@ -101,6 +101,76 @@ describe('hook runtime e2e', () => {
     }
   });
 
+  test('publisher heartbeat read guard enforces task-scoped artifact paths', async () => {
+    const harness = await createPluginHarness({ dashboardEnabled: false });
+    const { api } = harness;
+    try {
+      const publishResult = await harness.exec('mteam_publish_task', {
+        goal: 'Verify publisher heartbeat read scope guard',
+        description: 'Generate result artifact in task workdir',
+        taskType: 'general',
+        publisher: 'manager',
+      }) as ToolResult<PublishDetails>;
+      const taskId = extractDetails(publishResult)!.taskId;
+
+      harness.mutateTask(taskId, (task) => {
+        task.context.push({
+          type: 'step',
+          executor: 'maker',
+          step: 'Produce artifact',
+          output: {
+            summary: 'Artifact generated',
+            files: [`/mnt/d/code/m-team/tasks/${taskId}/result.txt`],
+          },
+          completedAt: Date.now(),
+        });
+      });
+
+      await harness.exec(
+        'mteam_get_task_for_publisher',
+        { taskId },
+        { agentId: 'manager', sessionKey: 'agent:manager:discord:heartbeat' },
+      );
+
+      const privateWorkspaceRead = api.__hooks.before_tool_call
+        .map((hook) => hook({
+          toolName: 'read',
+          params: { path: '/home/hjl/.openclaw/workspace-manager/result.txt' },
+        } as never, {
+          agentId: 'manager',
+          sessionKey: 'agent:manager:discord:heartbeat',
+        } as never))
+        .find(Boolean) as { block?: boolean; blockReason?: string } | undefined;
+      expect(privateWorkspaceRead?.block).toBe(true);
+      expect(privateWorkspaceRead?.blockReason).toContain('private workspace');
+
+      const outOfScopeRead = api.__hooks.before_tool_call
+        .map((hook) => hook({
+          toolName: 'read',
+          params: { path: '/tmp/not-task-artifact.txt' },
+        } as never, {
+          agentId: 'manager',
+          sessionKey: 'agent:manager:discord:heartbeat',
+        } as never))
+        .find(Boolean) as { block?: boolean; blockReason?: string } | undefined;
+      expect(outOfScopeRead?.block).toBe(true);
+      expect(outOfScopeRead?.blockReason).toContain('outside task-scoped artifacts');
+
+      const inScopeRead = api.__hooks.before_tool_call
+        .map((hook) => hook({
+          toolName: 'read',
+          params: { path: `/mnt/d/code/m-team/tasks/${taskId}/result.txt` },
+        } as never, {
+          agentId: 'manager',
+          sessionKey: 'agent:manager:discord:heartbeat',
+        } as never))
+        .find(Boolean) as { block?: boolean; blockReason?: string } | undefined;
+      expect(inScopeRead?.block).not.toBe(true);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   test('agent_end returns the task to the pool with next description and later completes when final result is present', async () => {
     const harness = await createPluginHarness({ dashboardEnabled: false });
     try {

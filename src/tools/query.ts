@@ -3,6 +3,8 @@
  */
 
 import type { OpenClawPluginApi } from 'openclaw/plugin-sdk';
+import type { OpenClawPluginToolContext } from '../types/openclaw-hooks.js';
+import type { MTeamPluginConfig } from '../config.js';
 import { textResult, readTaskId } from './shared.js';
 import { getPendingTasks, getAgentActiveTask, getTask, getAllTasks, getTaskRowsByStatus } from '../pool/index.js';
 import { buildExecutorTaskView, buildExecutorTaskViewList, formatTaskAsText, formatTaskLine, formatTaskListAsText } from './helpers.js';
@@ -10,12 +12,14 @@ import {
   GetPendingParams,
   GetAgentActiveParams,
   GetTaskParams,
+  GetTaskForPublisherParams,
   GetAllTasksParams,
 } from '../types/tools.js';
 import type {
   GetPendingParamsInterface,
   GetAgentActiveParamsInterface,
   GetTaskParamsInterface,
+  GetTaskForPublisherParamsInterface,
   GetAllTasksParamsInterface,
 } from '../types/tools.js';
 
@@ -64,6 +68,10 @@ export function registerGetAgentActive(api: OpenClawPluginApi): void {
   });
 }
 
+type PublisherQueryToolParams = GetTaskForPublisherParamsInterface & {
+  toolContext?: OpenClawPluginToolContext;
+};
+
 export function registerGetTask(api: OpenClawPluginApi): void {
   api.logger?.info('[m-team] registering mteam_get_task');
   api.registerTool({
@@ -78,6 +86,73 @@ export function registerGetTask(api: OpenClawPluginApi): void {
         return textResult(`Task ${taskId} not found`, { task: null });
       }
       return textResult(formatTaskAsText(task), { task: buildExecutorTaskView(task) });
+    },
+  });
+}
+
+export function registerGetTaskForPublisher(api: OpenClawPluginApi, config: MTeamPluginConfig): void {
+  api.logger?.info('[m-team] registering mteam_get_task_for_publisher');
+  const publishers = new Set(config.publishers ?? []);
+  api.registerTool({
+    name: 'mteam_get_task_for_publisher',
+    label: 'Get task detail for publisher',
+    description: 'Show publisher acceptance view including goal, full context and artifacts',
+    parameters: GetTaskForPublisherParams,
+    async execute(_toolCallId: string, rawParams: unknown) {
+      const params = rawParams as PublisherQueryToolParams;
+      const taskId = readTaskId(rawParams, 'taskId', { required: true })!;
+      const task = getTask(taskId);
+      if (!task) {
+        return textResult(`Task ${taskId} not found`, { task: null });
+      }
+
+      const callerAgentId = params.toolContext?.agentId?.trim();
+      if (!callerAgentId || !publishers.has(callerAgentId)) {
+        return textResult('forbidden: publisher identity required', {
+          blocked: true,
+          reason: 'PUBLISHER_IDENTITY_REQUIRED',
+        });
+      }
+
+      if (task.publisher !== callerAgentId) {
+        return textResult(`forbidden: task publisher mismatch (task.publisher=${task.publisher}, caller=${callerAgentId})`, {
+          blocked: true,
+          reason: 'PUBLISHER_TASK_OWNERSHIP_REQUIRED',
+        });
+      }
+
+      const stepContext = task.context
+        .filter((entry) => entry.type === 'step')
+        .map((entry) => ({
+          type: entry.type,
+          executor: entry.executor,
+          step: entry.step,
+          output: {
+            ...(entry.output?.summary ? { summary: entry.output.summary } : {}),
+            ...(entry.output?.files?.length ? { files: entry.output.files } : {}),
+            ...(entry.output?.unresolvedIssues?.length ? { unresolvedIssues: entry.output.unresolvedIssues } : {}),
+            ...(entry.output?.error ? { error: entry.output.error } : {}),
+          },
+          completedAt: entry.completedAt,
+        }));
+
+      const details = {
+        taskId: task.taskId,
+        taskType: task.taskType,
+        goal: task.goal,
+        description: task.description,
+        status: task.status,
+        priority: task.priority,
+        publisher: task.publisher,
+        executor: task.executor,
+        lastExecutor: task.lastExecutor,
+        createdAt: task.createdAt,
+        updatedAt: task.updatedAt,
+        completedAt: task.completedAt,
+        context: stepContext,
+      };
+
+      return textResult(formatTaskAsText(task, { includeGoal: true }), { task: details });
     },
   });
 }

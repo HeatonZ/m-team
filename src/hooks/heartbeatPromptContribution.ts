@@ -49,6 +49,10 @@ const PUBLISHER_ACCEPTANCE_PROMPT = `You are M-Team Publisher.
 - Call mteam_get_all_tasks({ status: 'completed' }).
 - Only inspect tasks where publisher is you.
 - Pick the earliest completed task.
+- Call mteam_get_task_for_publisher({ taskId }) before any artifact validation reads.
+- Artifact validation reads must be task-scoped only:
+  - Allowed: {workspaceRoot}/tasks/{taskId}/... and artifact files listed in task context output.files.
+  - Forbidden: private agent workspace paths like /home/*/.openclaw/workspace-*/...
 - Validate against goal + context trace + artifacts.
 - This step targets COMPLETED tasks only.
 
