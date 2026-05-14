@@ -4,6 +4,7 @@ import type {
 } from 'openclaw/plugin-sdk/core';
 import type { PluginHookAfterToolCallEvent, OpenClawPluginToolContext } from '../types/openclaw-hooks.js';
 import { writeTaskLog } from '../pool/db.js';
+import { resolveAgentIdFromContext } from '../identity.js';
 
 const TOOL_ACTION_MAP: Record<string, string> = {
   mteam_publish_task: 'publish',
@@ -24,6 +25,7 @@ export function registerAfterToolCallHook(api: OpenClawPluginApi): void {
     ): void => {
       const { toolName, params, result, error } = event;
       const { agentId, sessionKey } = ctx;
+      const resolvedAgentId = resolveAgentIdFromContext({ agentId, sessionKey });
 
       const action = TOOL_ACTION_MAP[toolName];
       if (!action) return;
@@ -36,7 +38,7 @@ export function registerAfterToolCallHook(api: OpenClawPluginApi): void {
           const publishedTaskId = resultObj?.details?.taskId ?? 'unknown';
           const task = publishedTaskId !== 'unknown' ? getTask(publishedTaskId) : null;
           const taskPublisher = task?.publisher?.trim();
-          const contextAgentId = agentId?.trim();
+          const contextAgentId = resolvedAgentId;
           if (taskPublisher && contextAgentId && taskPublisher !== contextAgentId) {
             api.logger?.error?.(`[m-team] publish ownership mismatch taskId=${publishedTaskId} taskPublisher=${taskPublisher} contextAgentId=${contextAgentId} sessionKey=${sessionKey ?? 'missing-session-key'}`);
           }
@@ -44,7 +46,7 @@ export function registerAfterToolCallHook(api: OpenClawPluginApi): void {
             taskId: publishedTaskId,
             action,
             sessionKey: sessionKey ?? undefined,
-            agentId: agentId ?? undefined,
+            agentId: resolvedAgentId ?? undefined,
             params: {
               description: params.description as string | undefined,
               goal: params.goal as string | undefined,
@@ -61,7 +63,7 @@ export function registerAfterToolCallHook(api: OpenClawPluginApi): void {
           taskId: taskId ?? 'unknown',
           action,
           sessionKey: sessionKey ?? undefined,
-          agentId: (params.agentId as string) ?? agentId ?? undefined,
+          agentId: (params.agentId as string) ?? resolvedAgentId ?? undefined,
           params: params as Record<string, unknown> | undefined,
           result: result as Record<string, unknown> | undefined,
           error: error ?? undefined,

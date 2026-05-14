@@ -205,7 +205,11 @@ export async function createPluginHarness(overrides: Partial<TestPluginConfig> =
     runHeartbeat: (agentId: string) => {
       let result: PluginHeartbeatPromptContributionResult | undefined;
       for (const hook of api.__hooks.heartbeat_prompt_contribution) {
-        const next = hook({ agentId } as PluginHeartbeatPromptContributionEvent, {});
+        const next = hook({
+          agentId,
+          sessionKey: `agent:${agentId}:heartbeat`,
+          heartbeatName: 'default',
+        } as PluginHeartbeatPromptContributionEvent, {});
         if (next) result = next;
       }
       return result;

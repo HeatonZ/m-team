@@ -17,26 +17,50 @@ describe('publisher acceptance full chain e2e', () => {
       await harness.exec('mteam_claim_task', { taskId, agentId: 'maker' }, { agentId: 'maker' });
       (harness.api as unknown as { runtime: { agentEndJudge: Function } }).runtime.agentEndJudge = async () => ({
         decision: 'complete',
-        reason: '整体 goal 已满足',
-        summary: '最终结果文件已形成',
+        reason: 'goal satisfied',
+        summary: 'final artifact ready',
         confidence: 'high',
       });
 
       await harness.runAgentEnd(
         {
           success: true,
-          messages: [{ role: 'assistant', content: '最终结果：已输出 /mnt/d/code/hermes/final-result.md。' }],
+          messages: [{ role: 'assistant', content: `Final output: /mnt/d/code/m-team/tasks/${taskId}/final-result.md` }],
         } as never,
         { agentId: 'maker', sessionKey: `agent:maker:m-team:${taskId}:test-session` },
       );
 
+      harness.mutateTask(taskId, (task) => {
+        const last = task.context.at(-1);
+        if (!last || last.type !== 'step') return;
+        last.output = {
+          ...(last.output ?? {}),
+          files: [`/mnt/d/code/m-team/tasks/${taskId}/final-result.md`],
+        };
+      });
+
       expect(harness.readTask(taskId)?.status).toBe('completed');
       expect(harness.runHeartbeat('manager')?.appendContext).toContain('COMPLETED');
+
+      await harness.exec(
+        'mteam_get_task_for_publisher',
+        { taskId },
+        { agentId: 'manager', sessionKey: 'agent:manager:discord:heartbeat' },
+      );
+      const guardApi = harness.api;
+      for (const hook of guardApi.__hooks.before_tool_call) {
+        hook({
+          toolName: 'read',
+          params: { path: `/mnt/d/code/m-team/tasks/${taskId}/final-result.md` },
+        } as never, {
+          sessionKey: 'agent:manager:discord:heartbeat',
+        } as never);
+      }
 
       const closeResult = await harness.exec(
         'mteam_close_task',
         { taskId, publisher: 'manager' },
-        { agentId: 'manager', sessionKey: 'agent:manager:discord:heartbeat' },
+        { sessionKey: 'agent:manager:discord:heartbeat' },
       ) as ToolResult<{ success: boolean }>;
 
       expect(extractDetails(closeResult)?.success).toBe(true);
@@ -60,37 +84,61 @@ describe('publisher acceptance full chain e2e', () => {
       await harness.exec('mteam_claim_task', { taskId, agentId: 'maker' }, { agentId: 'maker' });
       (harness.api as unknown as { runtime: { agentEndJudge: Function } }).runtime.agentEndJudge = async () => ({
         decision: 'complete',
-        reason: 'executor 认为已完成',
-        summary: '已提交候选报告',
+        reason: 'executor marked complete',
+        summary: 'candidate report submitted',
         confidence: 'medium',
       });
 
       await harness.runAgentEnd(
         {
           success: true,
-          messages: [{ role: 'assistant', content: '最终结果：已输出 /mnt/d/code/hermes/candidate-report.md。' }],
+          messages: [{ role: 'assistant', content: `Final output: /mnt/d/code/m-team/tasks/${taskId}/candidate-report.md` }],
         } as never,
         { agentId: 'maker', sessionKey: `agent:maker:m-team:${taskId}:test-session` },
       );
 
+      harness.mutateTask(taskId, (task) => {
+        const last = task.context.at(-1);
+        if (!last || last.type !== 'step') return;
+        last.output = {
+          ...(last.output ?? {}),
+          files: [`/mnt/d/code/m-team/tasks/${taskId}/candidate-report.md`],
+        };
+      });
+
       expect(harness.readTask(taskId)?.status).toBe('completed');
+
+      await harness.exec(
+        'mteam_get_task_for_publisher',
+        { taskId },
+        { agentId: 'manager', sessionKey: 'agent:manager:discord:heartbeat' },
+      );
+      const guardApi = harness.api;
+      for (const hook of guardApi.__hooks.before_tool_call) {
+        hook({
+          toolName: 'read',
+          params: { path: `/mnt/d/code/m-team/tasks/${taskId}/candidate-report.md` },
+        } as never, {
+          sessionKey: 'agent:manager:discord:heartbeat',
+        } as never);
+      }
 
       const rejectResult = await harness.exec(
         'mteam_reject_task',
         {
           taskId,
           publisher: 'manager',
-          reason: '验收驳回：缺少价格对比证据',
-          description: '补齐价格对比截图并重新提交候选报告',
+          reason: 'missing pricing comparison evidence',
+          description: 'add pricing comparison screenshots and resubmit report',
         },
-        { agentId: 'manager', sessionKey: 'agent:manager:discord:heartbeat' },
+        { sessionKey: 'agent:manager:discord:heartbeat' },
       ) as ToolResult<{ task?: Record<string, unknown> }>;
 
       expect(extractDetails(rejectResult)?.task).toBeTruthy();
       const task = harness.readTask(taskId);
       expect(task?.status).toBe('pending');
-      expect(task?.description).toBe('补齐价格对比截图并重新提交候选报告');
-      expect(task?.context.at(-1)?.step).toContain('验收驳回');
+      expect(task?.description).toBe('add pricing comparison screenshots and resubmit report');
+      expect(task?.context.at(-1)?.step).toContain('missing pricing comparison evidence');
     } finally {
       await harness.cleanup();
     }
@@ -112,12 +160,12 @@ describe('publisher acceptance full chain e2e', () => {
         task.updatedAt = Date.now() - 2 * 60 * 60 * 1000;
       });
 
-      expect(harness.runHeartbeat('manager')?.appendContext).toContain('1 小时');
+      expect(harness.runHeartbeat('manager')?.appendContext).toContain('1 hour');
 
       const relinquishResult = await harness.exec(
         'mteam_relinquish_task',
-        { taskId, reason: '超时放回任务池' },
-        { agentId: 'manager', sessionKey: 'agent:manager:discord:heartbeat' },
+        { taskId, reason: 'timeout return to pending' },
+        { sessionKey: 'agent:manager:discord:heartbeat' },
       ) as ToolResult<{ success: boolean }>;
 
       expect(extractDetails(relinquishResult)?.success).toBe(true);

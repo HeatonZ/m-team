@@ -19,6 +19,7 @@ import type {
 } from '../types/openclaw-hooks.js';
 import { getTask } from '../pool/index.js';
 import type { Task } from '../schema/task.js';
+import { resolveAgentIdFromContext, resolvePublisherFromParamsAndContext } from '../identity.js';
 
 interface RegisterOptions {
   publishers: string[];
@@ -156,13 +157,20 @@ export function registerSessionGuardHook(
       ctx: OpenClawPluginToolContext,
     ): PluginHookBeforeToolCallResult => {
       const { toolName, params } = event;
+      const adjustedParams = params as Record<string, unknown>;
+      let paramsAdjusted = false;
       const { sessionKey, agentId } = ctx;
-      const isExecutorTaskSession = Boolean(sessionKey?.startsWith(`agent:${agentId}:m-team:task_`));
+      const resolvedAgentId = resolveAgentIdFromContext({ agentId, sessionKey });
+      const isExecutorTaskSession = Boolean(
+        sessionKey
+        && resolvedAgentId
+        && sessionKey.startsWith(`agent:${resolvedAgentId}:m-team:task_`),
+      );
       const isHeartbeatSession = Boolean(sessionKey?.endsWith(':heartbeat'));
       const isPublisherHeartbeat = Boolean(
         isHeartbeatSession
-        && agentId
-        && publishers.has(agentId),
+        && resolvedAgentId
+        && publishers.has(resolvedAgentId),
       );
 
       if (isPublisherHeartbeat && sessionKey && toolName === 'mteam_get_task_for_publisher') {
@@ -281,10 +289,10 @@ export function registerSessionGuardHook(
         };
       }
 
-      if (toolName === 'mteam_publish_task' && (!agentId || !publishers.has(agentId))) {
+      if (toolName === 'mteam_publish_task' && (!resolvedAgentId || !publishers.has(resolvedAgentId))) {
         return {
           block: true,
-          blockReason: `mteam_publish_task is restricted to configured publishers. agent=${agentId ?? 'unknown'} is not allowed.`,
+          blockReason: `mteam_publish_task is restricted to configured publishers. agent=${resolvedAgentId ?? 'unknown'} is not allowed.`,
         };
       }
 
@@ -293,16 +301,40 @@ export function registerSessionGuardHook(
         || toolName === 'mteam_reject_task'
         || toolName === 'mteam_cancel_task'
       ) {
-        const callPublisher = (params as Record<string, unknown>).publisher as string | undefined;
-        if (callPublisher && callPublisher !== agentId) {
+        const callPublisher = resolvePublisherFromParamsAndContext({
+          publisher: adjustedParams.publisher as string | undefined,
+          agentId: resolvedAgentId,
+          sessionKey,
+        });
+        if (toolName === 'mteam_reject_task') {
+          const reason = adjustedParams.reason;
+          const description = adjustedParams.description;
+          if (typeof reason !== 'string' || !reason.trim() || typeof description !== 'string' || !description.trim()) {
+            return {
+              block: true,
+              blockReason: 'mteam_reject_task requires non-empty reason and description.',
+            };
+          }
+        }
+        if (!callPublisher) {
           return {
             block: true,
-            blockReason: `${toolName} 无权操作: only task publisher can call this tool. publisher=${callPublisher}, agent=${agentId ?? 'unknown'}.`,
+            blockReason: `${toolName} requires publisher identity. Provide publisher or use a sessionKey with agent identity.`,
+          };
+        }
+        if (!adjustedParams.publisher) {
+          adjustedParams.publisher = callPublisher;
+          paramsAdjusted = true;
+        }
+        if (callPublisher && callPublisher !== resolvedAgentId) {
+          return {
+            block: true,
+            blockReason: `${toolName} 无权操作: only task publisher can call this tool. publisher=${callPublisher}, agent=${resolvedAgentId ?? 'unknown'}.`,
           };
         }
       }
 
-      return {};
+      return paramsAdjusted ? { params: adjustedParams } : {};
     },
   );
 }

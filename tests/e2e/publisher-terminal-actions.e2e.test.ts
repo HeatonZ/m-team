@@ -272,6 +272,63 @@ describe('publisher terminal actions e2e', () => {
     }
   });
 
+  test('publisher-facing actions can omit publisher when sessionKey identity is available', async () => {
+    const harness = await createPluginHarness();
+    try {
+      const publishResult = await harness.exec('mteam_publish_task', {
+        goal: 'verify publisher fallback for close/cancel',
+        description: 'create a completed task for close check',
+        taskType: 'general',
+        publisher: 'manager',
+      }, {
+        agentId: 'manager',
+        sessionKey: 'agent:manager:main',
+      }) as ToolResult<PublishDetails>;
+      const closeTaskId = extractDetails(publishResult)!.taskId;
+
+      harness.mutateTask(closeTaskId, (task) => {
+        task.status = 'completed';
+        task.completedAt = Date.now();
+        task.updatedAt = task.completedAt;
+        task.executor = null;
+      });
+
+      const closeResult = await harness.exec('mteam_close_task', {
+        taskId: closeTaskId,
+      }, {
+        sessionKey: 'agent:manager:main',
+      }) as ToolResult<{ success?: boolean; blocked?: boolean }>;
+
+      expect(extractDetails(closeResult)?.blocked).not.toBe(true);
+      expect(extractDetails(closeResult)?.success).toBe(true);
+      expect(harness.readTask(closeTaskId)?.status).toBe('closed');
+
+      const second = await harness.exec('mteam_publish_task', {
+        goal: 'verify publisher fallback for cancel',
+        description: 'create cancellable task',
+        taskType: 'general',
+        publisher: 'manager',
+      }, {
+        agentId: 'manager',
+        sessionKey: 'agent:manager:main',
+      }) as ToolResult<PublishDetails>;
+      const cancelTaskId = extractDetails(second)!.taskId;
+
+      const cancelResult = await harness.exec('mteam_cancel_task', {
+        taskId: cancelTaskId,
+        reason: 'fallback cancel path',
+      }, {
+        sessionKey: 'agent:manager:main',
+      }) as ToolResult<{ success?: boolean; blocked?: boolean }>;
+
+      expect(extractDetails(cancelResult)?.blocked).not.toBe(true);
+      expect(extractDetails(cancelResult)?.success).toBe(true);
+      expect(harness.readTask(cancelTaskId)?.status).toBe('cancelled');
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   test('blocks heartbeat session from publishing new tasks', async () => {
     const harness = await createPluginHarness();
     try {

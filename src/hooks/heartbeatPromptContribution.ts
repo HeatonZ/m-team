@@ -12,6 +12,7 @@ import type {
 } from '../types/openclaw-hooks.js';
 import { getAgentActiveTask } from '../pool/index.js';
 import { buildTaskTypeGuidanceBlock } from '../task-type.js';
+import { resolveAgentIdFromContext } from '../identity.js';
 
 interface RegisterOptions {
   executors: string[];
@@ -86,7 +87,10 @@ export function registerHeartbeatPromptContributionHook(
       event: PluginHeartbeatPromptContributionEvent,
       _ctx: unknown,
     ): PluginHeartbeatPromptContributionResult | undefined => {
-      const { agentId } = event;
+      const agentId = resolveAgentIdFromContext({
+        agentId: event.agentId,
+        sessionKey: event.sessionKey,
+      });
       if (!agentId) return undefined;
 
       if (publishers.has(agentId)) {

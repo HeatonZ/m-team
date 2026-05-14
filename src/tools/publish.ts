@@ -11,6 +11,7 @@ import { formatTaskAsText } from './helpers.js';
 import { formatPublishNotifications, sendNotifications } from '../notifications.js';
 import { PublishTaskParams } from '../types/tools.js';
 import type { PublishTaskParamsInterface } from '../types/tools.js';
+import { resolveAgentIdFromContext } from '../identity.js';
 import {
   TASK_CONTRACT_LIMITS,
   hasDescriptionGoalDrift,
@@ -23,10 +24,13 @@ function inferPublisher(rawParams: PublishTaskParamsInterface, toolContext?: Ope
   const explicitPublisher = rawParams.publisher?.trim();
   if (explicitPublisher) return explicitPublisher;
 
-  const contextAgentId = toolContext?.agentId?.trim();
+  const contextAgentId = resolveAgentIdFromContext({
+    agentId: toolContext?.agentId,
+    sessionKey: toolContext?.sessionKey,
+  });
   if (contextAgentId) return contextAgentId;
 
-  throw new Error('mteam_publish_task 缺少 publisher');
+  throw new Error('mteam_publish_task missing publisher');
 }
 
 type PublishToolParams = PublishTaskParamsInterface & {
@@ -80,8 +84,12 @@ export function register(api: OpenClawPluginApi, config: MTeamPluginConfig): voi
       const params = rawParams as PublishToolParams;
       const toolContext = params.toolContext;
       const publisher = inferPublisher(params, toolContext);
+      const contextAgentId = resolveAgentIdFromContext({
+        agentId: toolContext?.agentId,
+        sessionKey: toolContext?.sessionKey,
+      });
 
-      api.logger?.info?.(`[m-team] publish execute sessionKey=${toolContext?.sessionKey ?? 'missing-session-key'} agentId=${toolContext?.agentId?.trim() ?? 'missing-agent-id'} rawPublisher=${params.publisher?.trim() ?? 'missing'} effectivePublisher=${publisher}`);
+      api.logger?.info?.(`[m-team] publish execute sessionKey=${toolContext?.sessionKey ?? 'missing-session-key'} agentId=${contextAgentId ?? 'missing-agent-id'} rawPublisher=${params.publisher?.trim() ?? 'missing'} effectivePublisher=${publisher}`);
 
       const { description, goal, taskType, priority } = params;
       if (!taskType) {

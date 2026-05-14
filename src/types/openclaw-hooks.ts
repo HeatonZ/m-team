@@ -57,7 +57,9 @@ export interface PluginHookAfterToolCallEvent {
 }
 
 export interface PluginHeartbeatPromptContributionEvent {
+  sessionKey?: string;
   agentId?: string;
+  heartbeatName?: string;
 }
 
 export interface PluginHeartbeatPromptContributionResult {

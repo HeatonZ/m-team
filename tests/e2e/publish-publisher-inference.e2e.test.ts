@@ -42,7 +42,30 @@ describe('publish publisher inference', () => {
           },
           { sessionKey: 'agent:unknown:direct:ou_test_missing_agent' } as never,
         ),
-      ).rejects.toThrow('mteam_publish_task 缺少 publisher');
+      ).rejects.toThrow('mteam_publish_task missing publisher');
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  test('infers publisher from sessionKey when toolContext.agentId is missing', async () => {
+    const harness = await createPluginHarness({ dashboardEnabled: false });
+    try {
+      const result = await harness.getTool('mteam_publish_task').execute(
+        'test-tool-call',
+        {
+          goal: 'verify sessionKey publisher inference',
+          description: 'capture publisher value from sessionKey fallback',
+          taskType: 'general',
+          priority: 'high',
+          toolContext: { sessionKey: 'agent:manager:direct:ou_test_sessionkey_fallback' },
+        } as never,
+        undefined as never,
+      ) as ToolResult<{ taskId: string }>;
+
+      const taskId = extractDetails(result)!.taskId;
+      const task = harness.readTask(taskId);
+      expect(task?.publisher).toBe('manager');
     } finally {
       await harness.cleanup();
     }

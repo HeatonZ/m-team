@@ -4,6 +4,7 @@
 
 import type { OpenClawPluginApi } from 'openclaw/plugin-sdk';
 import type { MTeamPluginConfig } from '../config.js';
+import type { OpenClawPluginToolContext } from '../types/openclaw-hooks.js';
 import { textResult, failedTextResult, readTaskId } from './shared.js';
 import { nextTask } from '../pool/index.js';
 import { formatTaskAsText } from './helpers.js';
@@ -11,6 +12,11 @@ import { formatNextNotifications, sendNotifications } from '../notifications.js'
 import { NextTaskParams } from '../types/tools.js';
 import type { NextTaskParamsInterface } from '../types/tools.js';
 import { VALID_TASK_TYPES, type TaskType } from '../schema/task.js';
+import { resolveAgentIdFromContext } from '../identity.js';
+
+type NextToolParams = Partial<NextTaskParamsInterface> & {
+  toolContext?: OpenClawPluginToolContext;
+};
 
 function normalizeContextOutput(raw: unknown): Record<string, unknown> | undefined {
   if (raw === null || raw === undefined) return undefined;
@@ -48,9 +54,26 @@ export function register(
     label: 'Move to next step',
     description: 'Finish current step, set next step description, and return task to pending',
     parameters: NextTaskParams,
-    async execute(_toolCallId: string, rawParams: NextTaskParamsInterface) {
+    async execute(_toolCallId: string, rawParams: NextToolParams) {
       const taskId = readTaskId(rawParams, 'taskId', { required: true })!;
-      const { agentId, contextStep, contextOutput, description, nextTaskType } = rawParams;
+      const agentId = rawParams.agentId?.trim()
+        ?? resolveAgentIdFromContext({
+          agentId: rawParams.toolContext?.agentId,
+          sessionKey: rawParams.toolContext?.sessionKey,
+        });
+      const { contextStep, contextOutput, description, nextTaskType } = rawParams;
+      if (!agentId) {
+        return failedTextResult('AGENT_ID_REQUIRED: provide agentId or use a sessionKey that contains agent identity', {
+          success: false,
+          reason: 'AGENT_ID_REQUIRED',
+        });
+      }
+      if (!contextStep || !description) {
+        return failedTextResult('INVALID_INPUT: contextStep and description are required', {
+          success: false,
+          reason: 'INVALID_INPUT',
+        });
+      }
       const normalizedContextOutput = normalizeContextOutput(contextOutput) ?? {};
       const normalizedNextTaskType = normalizeTaskType(nextTaskType);
 

@@ -11,8 +11,13 @@ import { formatRelinquishNotifications } from '../notifications.js';
 import { sendNotifications } from '../notifications.js';
 import { RelinquishTaskParams } from '../types/tools.js';
 import type { RelinquishTaskParamsInterface } from '../types/tools.js';
+import { resolveAgentIdFromContext } from '../identity.js';
 
 const STALE_RUNNING_TASK_TIMEOUT_MS = 60 * 60 * 1000;
+
+type RelinquishToolParams = Partial<RelinquishTaskParamsInterface> & {
+  toolContext?: { sessionKey?: string; agentId?: string };
+};
 
 export function register(
   api: OpenClawPluginApi,
@@ -24,18 +29,39 @@ export function register(
     label: 'Relinquish task',
     description: 'Executor relinquishes a running task back to pending',
     parameters: RelinquishTaskParams,
-    async execute(_toolCallId: string, rawParams: RelinquishTaskParamsInterface) {
+    async execute(_toolCallId: string, rawParams: RelinquishToolParams) {
       const taskId = readTaskId(rawParams, 'taskId', { required: true })!;
-      const { executorId, reason } = rawParams;
-      const toolContext = (rawParams as RelinquishTaskParamsInterface & {
-        toolContext?: { sessionKey?: string; agentId?: string };
-      }).toolContext;
+      const { reason } = rawParams;
+      const toolContext = rawParams.toolContext;
+      const executorId = rawParams.executorId?.trim()
+        ?? resolveAgentIdFromContext({
+          agentId: toolContext?.agentId,
+          sessionKey: toolContext?.sessionKey,
+        });
+      if (!executorId) {
+        return failedTextResult('AGENT_ID_REQUIRED: provide executorId or use a sessionKey that contains agent identity', {
+          success: false,
+          reason: 'AGENT_ID_REQUIRED',
+        });
+      }
+      const contextAgentId = resolveAgentIdFromContext({
+        agentId: toolContext?.agentId,
+        sessionKey: toolContext?.sessionKey,
+      });
 
       const isPublisherHeartbeat = Boolean(
         toolContext?.sessionKey?.endsWith(':heartbeat')
-        && toolContext?.agentId
-        && config.publishers?.includes(toolContext.agentId),
+        && contextAgentId
+        && config.publishers?.includes(contextAgentId),
       );
+      let executorIdForOperation = executorId;
+
+      if (!isPublisherHeartbeat && !executorIdForOperation) {
+        return failedTextResult('AGENT_ID_REQUIRED: provide executorId or use a sessionKey that contains agent identity', {
+          success: false,
+          reason: 'AGENT_ID_REQUIRED',
+        });
+      }
 
       if (isPublisherHeartbeat) {
         const task = getTask(taskId);
@@ -54,9 +80,10 @@ export function register(
             requiredMs: STALE_RUNNING_TASK_TIMEOUT_MS,
           });
         }
+        executorIdForOperation = task.executor ?? executorIdForOperation ?? undefined;
       }
 
-      const result = relinquishTask(taskId, executorId, reason ?? 'executor_relinquish');
+      const result = relinquishTask(taskId, executorIdForOperation, reason ?? 'executor_relinquish');
       if (!result.success) {
         return failedTextResult(result.reason || 'Operation failed', { success: result.success, reason: result.reason });
       }

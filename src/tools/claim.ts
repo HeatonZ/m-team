@@ -4,12 +4,18 @@
 
 import type { OpenClawPluginApi } from 'openclaw/plugin-sdk';
 import type { MTeamPluginConfig } from '../config.js';
+import type { OpenClawPluginToolContext } from '../types/openclaw-hooks.js';
 import { textResult, failedTextResult, readTaskId } from './shared.js';
 import { claimTask, getTask, relinquishTask } from '../pool/index.js';
 import { buildExecutorTaskView, formatTaskAsText } from './helpers.js';
 import { formatClaimNotifications, sendNotifications } from '../notifications.js';
 import type { ClaimTaskParamsInterface } from '../types/tools.js';
 import { ClaimTaskParams } from '../types/tools.js';
+import { resolveAgentIdFromContext } from '../identity.js';
+
+type ClaimToolParams = Partial<ClaimTaskParamsInterface> & {
+  toolContext?: OpenClawPluginToolContext;
+};
 
 export function register(api: OpenClawPluginApi, config: MTeamPluginConfig): void {
   api.logger?.info('[m-team] registering mteam_claim_task');
@@ -18,9 +24,27 @@ export function register(api: OpenClawPluginApi, config: MTeamPluginConfig): voi
     label: 'Claim task',
     description: 'Claim a pending task and start an executor session inside the plugin',
     parameters: ClaimTaskParams,
-    async execute(_toolCallId: string, rawParams: ClaimTaskParamsInterface) {
-      const { taskId, agentId } = rawParams;
+    async execute(_toolCallId: string, rawParams: ClaimToolParams) {
+      const taskId = rawParams.taskId;
+      const agentId = rawParams.agentId?.trim()
+        ?? resolveAgentIdFromContext({
+          agentId: rawParams.toolContext?.agentId,
+          sessionKey: rawParams.toolContext?.sessionKey,
+        });
+
       readTaskId(rawParams, 'taskId', { required: true });
+      if (!agentId) {
+        return failedTextResult('AGENT_ID_REQUIRED: provide agentId or use a sessionKey that contains agent identity', {
+          success: false,
+          reason: 'AGENT_ID_REQUIRED',
+        });
+      }
+      if (!taskId) {
+        return failedTextResult('TASK_ID_REQUIRED', {
+          success: false,
+          reason: 'TASK_ID_REQUIRED',
+        });
+      }
 
       const result = claimTask(taskId, agentId);
       if (!result.success) {

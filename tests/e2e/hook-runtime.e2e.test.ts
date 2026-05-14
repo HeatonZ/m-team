@@ -214,6 +214,40 @@ describe('hook runtime e2e', () => {
     }
   });
 
+  test('publisher heartbeat allows mteam_get_task_for_publisher when agentId is missing but sessionKey has agent identity', async () => {
+    const harness = await createPluginHarness({ dashboardEnabled: false });
+    try {
+      const publishResult = await harness.exec('mteam_publish_task', {
+        goal: 'verify sessionKey identity fallback for publisher query',
+        description: 'create one completed task',
+        taskType: 'general',
+        publisher: 'manager',
+      }, { agentId: 'manager' }) as ToolResult<PublishDetails>;
+      const taskId = extractDetails(publishResult)!.taskId;
+
+      harness.mutateTask(taskId, (task) => {
+        task.status = 'completed';
+        task.completedAt = Date.now();
+        task.updatedAt = task.completedAt;
+        task.executor = null;
+      });
+
+      const queryResult = await harness.getTool('mteam_get_task_for_publisher').execute(
+        'test-tool-call',
+        {
+          taskId,
+          toolContext: { sessionKey: 'agent:manager:discord:heartbeat' },
+        } as never,
+      ) as ToolResult<{ task?: Record<string, unknown>; blocked?: boolean; reason?: string }>;
+
+      const details = extractDetails(queryResult);
+      expect(details?.blocked).not.toBe(true);
+      expect(details?.task?.taskId).toBe(taskId);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   test('agent_end returns the task to the pool with next description and later completes when final result is present', async () => {
     const harness = await createPluginHarness({ dashboardEnabled: false });
     try {

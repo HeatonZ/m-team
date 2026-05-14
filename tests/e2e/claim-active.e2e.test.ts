@@ -44,4 +44,47 @@ describe('claim/active e2e', () => {
       await harness.cleanup();
     }
   });
+
+  test('claim/get_pending/get_agent_active can fall back to sessionKey when agentId param is omitted', async () => {
+    const harness = await createPluginHarness();
+    try {
+      const publishResult = await harness.exec('mteam_publish_task', {
+        goal: 'verify sessionKey fallback for executor tools',
+        description: 'prepare one simple step',
+        taskType: 'general',
+        publisher: 'manager',
+      }) as ToolResult<PublishDetails>;
+      const taskId = extractDetails(publishResult)!.taskId;
+
+      const claimResult = await harness.getTool('mteam_claim_task').execute(
+        'test-tool-call',
+        {
+          taskId,
+          toolContext: { sessionKey: 'agent:maker:manual' },
+        } as never,
+      ) as ToolResult<{ taskId?: string }>;
+
+      expect(extractDetails(claimResult)?.taskId).toBe(taskId);
+      expect(harness.readTask(taskId)?.executor).toBe('maker');
+
+      const pendingResult = await harness.getTool('mteam_get_pending').execute(
+        'test-tool-call',
+        {
+          toolContext: { sessionKey: 'agent:maker:manual' },
+        } as never,
+      ) as ToolResult<{ blocked?: boolean; pending?: unknown[] }>;
+      expect(extractDetails(pendingResult)?.blocked).not.toBe(true);
+
+      const activeResult = await harness.getTool('mteam_get_agent_active').execute(
+        'test-tool-call',
+        {
+          toolContext: { sessionKey: 'agent:maker:manual' },
+        } as never,
+      ) as ToolResult<{ blocked?: boolean; activeTask?: Record<string, unknown> | null }>;
+      expect(extractDetails(activeResult)?.blocked).not.toBe(true);
+      expect(extractDetails(activeResult)?.activeTask?.taskId).toBe(taskId);
+    } finally {
+      await harness.cleanup();
+    }
+  });
 });
