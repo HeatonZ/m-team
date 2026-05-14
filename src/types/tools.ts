@@ -88,10 +88,11 @@ export const RejectTaskParams = {
   type: 'object' as const,
   properties: {
     taskId: { type: 'string', description: 'Task ID' },
+    publisher: { type: 'string', description: 'Publisher; must match original publisher' },
     reason: { type: 'string', description: 'Rejection reason' },
     description: { type: 'string', description: DESCRIPTION_INLINE_HINT },
   },
-  required: ['taskId', 'reason', 'description'] as const,
+  required: ['taskId', 'publisher', 'reason', 'description'] as const,
 } as const;
 
 export const NextTaskParams = {
@@ -169,6 +170,7 @@ export interface CloseTaskParamsInterface {
 
 export interface RejectTaskParamsInterface {
   taskId: string;
+  publisher: string;
   reason: string;
   description: string;
 }

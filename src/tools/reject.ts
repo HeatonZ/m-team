@@ -6,7 +6,6 @@
 import type { OpenClawPluginApi } from 'openclaw/plugin-sdk';
 import type { MTeamPluginConfig } from '../config.js';
 import { textResult, readTaskId } from './shared.js';
-import type { OpenClawPluginToolContext } from '../types/openclaw-hooks.js';
 import { rejectTask } from '../pool/index.js';
 import { formatTaskAsText } from './helpers.js';
 import { formatRejectNotifications } from '../notifications.js';
@@ -27,11 +26,9 @@ export function register(
     parameters: RejectTaskParams,
     async execute(_toolCallId: string, rawParams: RejectTaskParamsInterface) {
       const taskId = readTaskId(rawParams, 'taskId', { required: true })!;
-      const { reason, description } = rawParams;
-      const toolContext = (rawParams as RejectTaskParamsInterface & { toolContext?: OpenClawPluginToolContext }).toolContext;
-      const publisher = toolContext?.agentId?.trim();
+      const { reason, description, publisher } = rawParams;
       if (!publisher) {
-        throw new Error('mteam_reject_task missing publisher identity from tool context');
+        throw new Error('mteam_reject_task missing publisher');
       }
 
       const nextDescription = sanitizeSingleLine(description);

@@ -67,6 +67,7 @@ describe('publisher terminal actions e2e', () => {
       });
       const rejectResult = await harness.exec('mteam_reject_task', {
         taskId: rejectTaskId,
+        publisher: 'manager',
         reason: '验收驳回：输出不完整',
         description: '补齐缺失字段并重新提交',
       }) as ToolResult<{ task?: Record<string, unknown> }>;
@@ -101,6 +102,7 @@ describe('publisher terminal actions e2e', () => {
 
       await expect(harness.exec('mteam_reject_task', {
         taskId,
+        publisher: 'manager',
         reason: 'Need rework',
         description: 'first fix fields; then republish',
       }, { agentId: 'manager' })).rejects.toThrow('REJECT_DESCRIPTION_MULTI_STEP');
@@ -131,6 +133,7 @@ describe('publisher terminal actions e2e', () => {
 
       const rejectResult = await harness.exec('mteam_reject_task', {
         taskId,
+        publisher: 'manager',
         reason: '验收驳回：这条路径不应复活 failed 任务',
         description: '不要执行这一步',
       }, {

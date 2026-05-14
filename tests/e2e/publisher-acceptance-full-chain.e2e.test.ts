@@ -79,6 +79,7 @@ describe('publisher acceptance full chain e2e', () => {
         'mteam_reject_task',
         {
           taskId,
+          publisher: 'manager',
           reason: '验收驳回：缺少价格对比证据',
           description: '补齐价格对比截图并重新提交候选报告',
         },

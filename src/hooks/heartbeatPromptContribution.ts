@@ -56,7 +56,7 @@ Pass:
 - Call mteam_close_task({ taskId, publisher: agentId }).
 
 Reject:
-- Call mteam_reject_task with a reason and next step description.
+- Call mteam_reject_task({ taskId, publisher: agentId, reason, description }) with a reason and next step description.
 - Reason must include: (a) concrete issue, (b) explicit next step.
 
 Process only one task and stop.

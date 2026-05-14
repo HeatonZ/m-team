@@ -51,6 +51,7 @@ describe('publisher goal visibility boundary', () => {
         'mteam_reject_task',
         {
           taskId: taskId2,
+          publisher: 'manager',
           reason: '验收驳回：证据不足',
           description: '补齐价格对比和销量截图',
         },

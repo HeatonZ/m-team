@@ -115,6 +115,7 @@ function createTestApi(config: TestPluginConfig): OpenClawPluginApi & { __regist
         },
       },
       agentEndJudge: async () => null,
+      agentEndFactsCleaner: async (input: { output?: unknown }) => (input?.output ?? {}),
     },
     on(hookName: keyof HookMap, handler: unknown) {
       const list = hooks[hookName];

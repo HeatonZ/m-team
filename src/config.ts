@@ -18,6 +18,7 @@ export interface MTeamPluginConfig {
   dashboardEnabled?: boolean;
   dashboardPort?: number;
   agentEndJudgeAgentId?: string;
+  agentEndFactsModel?: string;
   agentEndJudgeModel?: string;
   agentEndJudgeTimeoutMs?: number;
 }
