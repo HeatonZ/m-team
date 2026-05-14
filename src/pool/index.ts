@@ -2,7 +2,7 @@
  * M-Team task pool public API.
  */
 
-import { openDb, getTaskRow, getTaskRowByExecutor } from './db';
+import { openDb, getDb, getTaskRow as _db_getTaskRow, getTaskRowByExecutor as _db_getTaskRowByExecutor } from './db';
 import { getTaskRowsByStatus as _db_getTaskRowsByStatus, getAllTaskRows as _db_getAllTaskRows } from './db';
 import { TaskStatus, type Task } from '../schema/task';
 import { setWorkspaceRoot, DB_PATH } from './operations';
@@ -27,6 +27,7 @@ import {
 } from './operations';
 
 export { setWorkspaceRoot, DB_PATH };
+export { openDb, getDb };
 export { publishTask, claimTask, updateTask, relinquishTask, nextTask, cancelTask, completeTask, failTask, closeTask };
 export { rejectTask };
 export type { ClaimResult, CancelResult, RelinquishResult, CompleteResult, CloseResult, ContextStepInput };
@@ -42,9 +43,13 @@ export function getTaskRowsByStatus(status: string): Task[] {
   return _db_getTaskRowsByStatus(status);
 }
 
-export function getAllTasks(): Task[] {
+export function getAllTaskRows(): Task[] {
   init();
   return _db_getAllTaskRows();
+}
+
+export function getAllTasks(): Task[] {
+  return getAllTaskRows();
 }
 
 export function getRunningTasks(): Task[] {
@@ -62,12 +67,22 @@ export function getPendingTasks(agentId?: string | null): Task[] {
 
 export function getAgentActiveTask(agentId: string): Task | null {
   init();
-  return getTaskRowByExecutor(agentId);
+  return _db_getTaskRowByExecutor(agentId);
+}
+
+export function getTaskRowByExecutor(agentId: string): Task | null {
+  init();
+  return _db_getTaskRowByExecutor(agentId);
 }
 
 export function getTask(taskId: string): Task | null {
   init();
-  return getTaskRow(taskId);
+  return _db_getTaskRow(taskId);
+}
+
+export function getTaskRow(taskId: string): Task | null {
+  init();
+  return _db_getTaskRow(taskId);
 }
 
 export function getCompletedTasks(): Task[] {
