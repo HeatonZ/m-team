@@ -118,7 +118,7 @@ function normalizeSummary(raw: unknown): string | undefined {
     .join(' ')
     .trim();
   stripped = stripped
-    .replace(/[。；;，,]\s*(任务完成|已完成任务|task complete(?:d)?|goal achieved)\s*$/iu, '')
+    .replace(/[。；;!?]\s*(任务完成|已完成任务|task complete(?:d)?|goal achieved)\s*$/iu, '')
     .replace(/\s*(任务完成|已完成任务|task complete(?:d)?|goal achieved)\s*$/iu, '')
     .trim();
   return stripped || undefined;
@@ -127,8 +127,8 @@ function normalizeSummary(raw: unknown): string | undefined {
 function normalizeFileToken(raw: string): string {
   let text = raw.trim();
   text = text.replace(/^[`"'“”‘’]+/u, '').replace(/[`"'“”‘’]+$/u, '');
-  text = text.replace(/\s*[（(][^()]{0,40}(?:现有|内容|行|line|追加|两行)[^()]*[)）]\s*$/iu, '');
-  text = text.replace(/[`，。；：,;!?]+$/u, '');
+  text = text.replace(/\s*[(（][^()]{0,40}(?:现有|内容|行|line|追加|两行)[^()]*[)）]\s*$/iu, '');
+  text = text.replace(/[`，。；：;!?]+$/u, '');
   text = text.trim();
   if (text.length > TASK_CONTRACT_LIMITS.filePathMaxLength) {
     text = text.slice(0, TASK_CONTRACT_LIMITS.filePathMaxLength).trim();
@@ -180,7 +180,7 @@ function isValidIssue(issue: string): boolean {
 function normalizeIssues(raw: unknown): string[] {
   const source = Array.isArray(raw)
     ? raw
-    : (typeof raw === 'string' && raw.trim() ? raw.split(/[;\n；]/) : []);
+    : (typeof raw === 'string' && raw.trim() ? raw.split(/[;\n，、]/) : []);
 
   const seen = new Set<string>();
   const output: string[] = [];
