@@ -321,6 +321,18 @@ function latestIssue(task: Task): string | null {
   return clipInline(step?.output?.error ?? step?.output?.unresolvedIssues?.[0] ?? null);
 }
 
+function acceptanceSummary(task: Task): string | null {
+  return clipInline(task.acceptance?.summary ?? null);
+}
+
+function acceptanceFiles(task: Task, max = 3): string[] {
+  const files = task.acceptance?.files ?? [];
+  return files
+    .map((file) => clipInline(file, 180))
+    .filter((file): file is string => Boolean(file))
+    .slice(0, max);
+}
+
 function formatBasicNotification(
   task: Task,
   notifications: NotificationConfig[],
@@ -429,6 +441,8 @@ function formatNextOrRelinquishNotifications(
 }
 
 export function formatRejectNotifications(task: Task, notifications: NotificationConfig[]): FormattedNotification[] {
+  const summary = acceptanceSummary(task) ?? latestSummary(task);
+  const files = acceptanceFiles(task, 2);
   return formatBasicNotification(
     task,
     notifications,
@@ -439,7 +453,8 @@ export function formatRejectNotifications(task: Task, notifications: Notificatio
       `publisher=${task.publisher}`,
       `executor=${effectiveAgent}`,
       `step=${clipInline(task.description)}`,
-      ...(latestSummary(task) ? [`summary=${latestSummary(task)}`] : []),
+      ...(summary ? [`summary=${summary}`] : []),
+      ...(files.length ? [`acceptanceFiles=${files.join(', ')}`] : []),
       ...(latestIssue(task) ? [`issue=${latestIssue(task)}`] : []),
       ...(duration ? [`elapsed=${duration}`] : []),
     ],
@@ -471,6 +486,8 @@ export function formatFailNotifications(task: Task, notifications: NotificationC
 
 export function formatTaskNotifications(task: Task, notifications: NotificationConfig[]): FormattedNotification[] {
   if (task.status !== 'completed') return [];
+  const summary = acceptanceSummary(task) ?? latestSummary(task);
+  const files = acceptanceFiles(task, 3);
   return formatBasicNotification(
     task,
     notifications,
@@ -481,7 +498,8 @@ export function formatTaskNotifications(task: Task, notifications: NotificationC
       `publisher=${task.publisher}`,
       `executor=${effectiveAgent}`,
       `step=${clipInline(task.description)}`,
-      ...(latestSummary(task) ? [`summary=${latestSummary(task)}`] : []),
+      ...(summary ? [`summary=${summary}`] : []),
+      ...(files.length ? [`acceptanceFiles=${files.join(', ')}`] : []),
       ...(duration ? [`elapsed=${duration}`] : []),
     ],
   );
@@ -489,6 +507,8 @@ export function formatTaskNotifications(task: Task, notifications: NotificationC
 
 export function formatCloseNotifications(task: Task, notifications: NotificationConfig[]): FormattedNotification[] {
   if (task.status !== 'closed') return [];
+  const summary = acceptanceSummary(task) ?? latestSummary(task);
+  const files = acceptanceFiles(task, 3);
   return formatBasicNotification(
     task,
     notifications,
@@ -500,9 +520,9 @@ export function formatCloseNotifications(task: Task, notifications: Notification
       `executor=${effectiveAgent}`,
       `goal=${clipInline(task.goal)}`,
       `finalStep=${clipInline(task.description)}`,
-      ...(latestSummary(task) ? [`summary=${latestSummary(task)}`] : []),
+      ...(summary ? [`summary=${summary}`] : []),
+      ...(files.length ? [`acceptanceFiles=${files.join(', ')}`] : []),
       ...(duration ? [`totalElapsed=${duration}`] : []),
     ],
   );
 }
-

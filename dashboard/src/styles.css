@@ -508,7 +508,7 @@ h2 {
 }
 
 .detail-grid-bottom {
-  grid-template-columns: 1fr 1.2fr;
+  grid-template-columns: 1fr 1fr 1.2fr;
 }
 
 .detail-panel {
@@ -530,6 +530,11 @@ h2 {
 .detail-panel-warning {
   background: rgba(69, 26, 3, 0.22);
   border-color: rgba(245, 158, 11, 0.22);
+}
+
+.detail-panel-acceptance {
+  background: rgba(6, 78, 59, 0.22);
+  border-color: rgba(16, 185, 129, 0.24);
 }
 
 .detail-panel-wide {

@@ -36,6 +36,7 @@ export const TaskDetailModal: FC<TaskDetailModalProps> = ({ task, onClose }) => 
   const latest = getLatestStep(task);
   const latestIssues = getLatestIssues(task);
   const risk = getTaskRiskLevel(task);
+  const acceptance = task.acceptance;
 
   return (
     <div className="modal-backdrop open" onClick={(e) => e.target === e.currentTarget && onClose()}>
@@ -109,6 +110,23 @@ export const TaskDetailModal: FC<TaskDetailModalProps> = ({ task, onClose }) => 
                 <pre className="modal-pre">{renderJson(latest.output)}</pre>
               </details>
             ) : null}
+          </div>
+
+          <div className="detail-panel detail-panel-wide detail-panel-acceptance">
+            <h4>Acceptance snapshot</h4>
+            {acceptance ? (
+              <>
+                <Field label="Summary"><span className="field-value">{acceptance.summary || '-'}</span></Field>
+                <Field label="Task directory"><span className="field-value">{acceptance.taskDir || '-'}</span></Field>
+                <Field label="Files">
+                  <span className="field-value">{acceptance.files?.length ? acceptance.files.join(', ') : '-'}</span>
+                </Field>
+                <Field label="Updated at"><span className="field-value">{formatTime(acceptance.updatedAt)}</span></Field>
+                <Field label="Source"><span className="field-value">{acceptance.source || '-'}</span></Field>
+              </>
+            ) : (
+              <div className="empty compact-empty">No acceptance snapshot yet</div>
+            )}
           </div>
 
           <div className="detail-panel detail-panel-wide">

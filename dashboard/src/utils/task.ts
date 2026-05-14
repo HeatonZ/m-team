@@ -28,6 +28,7 @@ export function getLatestStep(task: Task): ContextStepEntry | undefined {
 }
 
 export function getLatestSummary(task: Task): string {
+  if (task.acceptance?.summary) return task.acceptance.summary;
   const latest = getLatestStep(task);
   return latest?.output?.summary || latest?.step || 'No latest summary.';
 }
@@ -37,6 +38,7 @@ export function getLatestIssues(task: Task): string[] {
 }
 
 export function getLatestFiles(task: Task): string[] {
+  if (task.acceptance?.files?.length) return task.acceptance.files;
   return getLatestStep(task)?.output?.files ?? [];
 }
 

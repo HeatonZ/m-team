@@ -61,6 +61,23 @@ function includesPrivateWorkspacePath(text: string): boolean {
 }
 
 function collectTaskArtifactFiles(task: Task): Set<string> {
+  const acceptanceFiles = task.acceptance?.files ?? [];
+  if (acceptanceFiles.length > 0) {
+    const files = new Set<string>();
+    const acceptanceTaskDir = normalizePathLike(task.acceptance?.taskDir ?? '');
+    for (const file of acceptanceFiles) {
+      const normalized = normalizePathLike(file);
+      if (!normalized) continue;
+      const resolved = normalized.startsWith('/') || /^[a-z]:\//.test(normalized)
+        ? normalized
+        : (acceptanceTaskDir ? normalizePathLike(`${acceptanceTaskDir}/${normalized}`) : normalized);
+      for (const variant of buildComparableVariants(resolved)) {
+        files.add(variant);
+      }
+    }
+    return files;
+  }
+
   const files = new Set<string>();
   for (const entry of task.context ?? []) {
     if (entry.type !== 'step') continue;

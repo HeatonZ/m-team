@@ -19,12 +19,21 @@ export interface ContextStepEntry {
 
 export type ContextEntry = ContextStepEntry;
 
+export interface AcceptanceSnapshot {
+  taskDir: string;
+  summary?: string;
+  files?: string[];
+  updatedAt: number;
+  source: string;
+}
+
 export interface Task {
   taskId: string;
   taskType?: TaskType;
   goal: string;
   description: string;
   context: ContextEntry[];
+  acceptance?: AcceptanceSnapshot;
   priority: TaskPriority;
   status: TaskStatus;
   publisher: string;
