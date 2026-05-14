@@ -58,7 +58,7 @@ describe('agent_end llm runtime extraction boundary', () => {
       usage: { output: 64 },
       content: [{ type: 'text', text: '' }],
     });
-    mockExtractVisible.mockReturnValue('{"decision":"next","reason":"需要下一步","nextDescription":"继续执行下一步","confidence":"high"}');
+    mockExtractVisible.mockReturnValue('{"decision":"next","reason":"需要下一步","nextDescription":"继续执行下一步","nextTaskType":"general","confidence":"high"}');
     mockExtractText.mockReturnValue('');
 
     const result = await judgeAgentEndWithLlm({

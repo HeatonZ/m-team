@@ -68,6 +68,7 @@ describe('agent_end edge cases e2e', () => {
         decision: 'next',
         reason: '继续补齐最终输出文件',
         nextDescription: '继续补齐最终输出文件',
+        nextTaskType: 'general',
         summary: '已核对候选列表，待补最终输出文件。',
         confidence: 'medium',
       });

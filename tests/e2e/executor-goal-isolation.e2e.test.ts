@@ -39,6 +39,7 @@ describe('executor goal isolation and completion discipline', () => {
         decision: 'next',
         reason: '继续补齐当前步骤的结构化结果',
         nextDescription: '继续补齐当前步骤的结构化结果',
+        nextTaskType: 'general',
         summary: '仅完成当前一步，不足以证明整体 goal',
       });
 

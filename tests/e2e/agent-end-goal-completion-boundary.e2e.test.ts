@@ -14,6 +14,7 @@ describe('agent_end task-goal completion boundary', () => {
         decision: 'next',
         reason: '第一步已完成，但还需要继续后续计算步骤。',
         nextDescription: '计算 1×1，并写入 /mnt/d/code/hermes/step2.json',
+        nextTaskType: 'general',
         summary: '已完成 1+1，并生成 step1.json。',
         confidence: 'high',
       });

@@ -16,6 +16,7 @@ describe('agent_end retry e2e', () => {
           decision: 'next',
           reason: '继续下一步',
           nextDescription: '继续补齐当前步骤缺失结果',
+          nextTaskType: 'general',
           confidence: 'high',
         };
       };

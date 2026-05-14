@@ -10,6 +10,7 @@ describe('agent_end observability e2e', () => {
         decision: 'next',
         reason: '还需要下一步继续处理',
         nextDescription: '继续补齐剩余 3 个候选商品',
+        nextTaskType: 'general',
         confidence: 'high',
       });
 

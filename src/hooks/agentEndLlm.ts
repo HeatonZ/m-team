@@ -154,7 +154,7 @@ function buildDecisionPrompt(params: {
     '1. complete only when step done + goal achieved + no unresolved issues + no next action.',
     '2. next when there is progress but goal not done, or a clear next action exists.',
     '2.1 For next, nextDescription is required, one-step, concise, actionable.',
-    '2.2 nextTaskType is optional when routing should change (general/coding/research/ops/data/design/content/ecommerce).',
+    '2.2 For next, nextTaskType is required (general/coding/research/ops/data/design/content/ecommerce).',
     '3. fail only when blocked or no safe executable next step.',
     '4. Avoid drift; judge against current description.',
     '5. Executor reports facts; agent_end decides next action.',
@@ -181,7 +181,7 @@ function buildDecisionPrompt(params: {
     '  "decision": "complete|next|fail",',
     '  "reason": "string in Chinese",',
     '  "nextDescription": "string in Chinese (required when decision=next)",',
-    '  "nextTaskType": "general|coding|research|ops|data|design|content|ecommerce" (optional),',
+    '  "nextTaskType": "general|coding|research|ops|data|design|content|ecommerce" (required when decision=next),',
     '  "summary": "string in Chinese (optional)",',
     '  "unresolvedIssues": ["string in Chinese", ...] (optional),',
     '  "confidence": "low|medium|high"',
@@ -255,6 +255,8 @@ function parseDecisionLoose(raw: string): AgentEndDecision | null {
     ? normalizeDecisionTaskType(extractQuotedField(raw, 'nextTaskType'))
     : undefined;
 
+  if (decision === 'next' && !nextTaskType) return null;
+
   const confidence = extractQuotedField(raw, 'confidence');
   const summary = extractQuotedField(raw, 'summary');
   const unresolvedIssues = extractArrayField(raw, 'unresolvedIssues');
@@ -303,6 +305,9 @@ function parseDecision(raw: string): AgentEndDecision | null {
 
       const confidence = parsed.confidence;
       const nextTaskType = decision === 'next' ? normalizeDecisionTaskType(parsed.nextTaskType) : undefined;
+      if (decision === 'next' && !nextTaskType) {
+        continue;
+      }
 
       return {
         decision: decision as AgentEndDecision['decision'],
@@ -374,6 +379,9 @@ export async function judgeAgentEndWithLlm(params: {
           ...judged,
           nextTaskType: judged.decision === 'next' ? normalizeDecisionTaskType(judgedRecord.nextTaskType) : undefined,
         };
+        if (normalizedJudged.decision === 'next' && !normalizedJudged.nextTaskType) {
+          return { ok: false, error: 'RUNTIME_AGENT_END_JUDGE_NEXT_WITHOUT_NEXT_TASK_TYPE', raw: JSON.stringify(judged) };
+        }
 
         return { ok: true, decision: normalizedJudged, raw: JSON.stringify(judged) };
       }

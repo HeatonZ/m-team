@@ -29,7 +29,7 @@ describe('agent_end llm raw extraction and empty output handling', () => {
     };
     const output: ContextStepOutput = { summary: 'ok', files: [], unresolvedIssues: [] };
 
-    const rawDecision = '{"decision":"next","reason":"还需要下一步","nextDescription":"继续执行下一步","confidence":"high"}';
+    const rawDecision = '{"decision":"next","reason":"还需要下一步","nextDescription":"继续执行下一步","nextTaskType":"general","confidence":"high"}';
 
     const result = await judgeAgentEndWithLlm({
       runtime: {

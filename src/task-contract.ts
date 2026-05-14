@@ -15,7 +15,7 @@ export const TASK_CONTRACT_LIMITS = {
 export const GOAL_INLINE_HINT = 'Final success state only (acceptance target), not step-by-step execution details.';
 export const DESCRIPTION_INLINE_HINT = 'Current baton only: one step, one action, single-line, executable now.';
 export const CONTEXT_OUTPUT_INLINE_HINT = 'Current baton output only: summary, files, unresolvedIssues, error.';
-export const AGENT_END_DECISION_INLINE_HINT = 'decision=complete|next|fail; next requires nextDescription; optional nextTaskType only when routing should change.';
+export const AGENT_END_DECISION_INLINE_HINT = 'decision=complete|next|fail; next requires nextDescription and nextTaskType.';
 
 const MULTI_STEP_PATTERN = /([;；]|然后|接着|最后|then\b|finally\b|step\s+\d+|步骤\s*\d+|(?:^|\s)\d+\.\s+)/iu;
 const DESCRIPTION_GOAL_DRIFT_PATTERN = /(整体任务|最终交付|全部完成|验收|close task)/iu;
@@ -63,7 +63,7 @@ export function buildAgentEndDecisionContractBlock(): string {
     '- decision: complete | next | fail.',
     '- reason: concise, factual, Chinese natural language.',
     '- nextDescription: required when decision=next, one-step current baton only.',
-    '- nextTaskType: optional and used only when routing should change.',
+    '- nextTaskType: required when decision=next, must be one of the allowed task types.',
     '- unresolvedIssues: at most 3 concise items in decision output.',
   ].join('\n');
 }

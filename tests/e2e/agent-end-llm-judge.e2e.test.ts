@@ -43,6 +43,7 @@ describe('agent_end llm judge e2e', () => {
         decision: 'next',
         reason: '还需下一棒继续',
         nextDescription: '继续补齐剩余 3 个候选商品',
+        nextTaskType: 'general',
         confidence: 'high',
       });
 
@@ -77,6 +78,7 @@ describe('agent_end llm judge e2e', () => {
         decision: 'next',
         reason: '把本轮发现的问题转成下一步处理动作',
         nextDescription: '补齐当前步骤缺失的结构化结果后重新提交',
+        nextTaskType: 'general',
         summary: '已完成初步整理，但证据不足',
         confidence: 'medium',
       });
@@ -143,6 +145,7 @@ describe('agent_end llm judge e2e', () => {
         decision: 'next',
         reason: '继续补齐本轮报告缺失的校验文件，并重新提交可验证结果',
         nextDescription: '继续补齐本轮报告缺失的校验文件，并重新提交可验证结果',
+        nextTaskType: 'general',
         summary: '已完成初步产出，但还需补一份校验文件',
         confidence: 'high',
       });
@@ -180,6 +183,7 @@ describe('agent_end llm judge e2e', () => {
         decision: 'next',
         reason: '继续当前步骤',
         nextDescription: '计算 1+1，结果写入 step1_result.md',
+        nextTaskType: 'general',
         confidence: 'medium',
       });
 

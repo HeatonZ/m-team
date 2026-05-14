@@ -117,6 +117,7 @@ describe('hook runtime e2e', () => {
         decision: 'next',
         reason: '还需继续补齐剩余候选。',
         nextDescription: '继续搜索宠物玩具，筛选 costPrice ≤ 5 RMB、规格数 ≤ 8，补齐剩余 3 个。',
+        nextTaskType: 'general',
         summary: '已完成首轮筛选，保留 2 个候选。',
         confidence: 'high',
       });
