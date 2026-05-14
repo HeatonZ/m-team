@@ -321,10 +321,50 @@ function resolveJudgeTimeoutMs(config?: MTeamPluginConfig): number {
 }
 
 export function registerAgentEndHook(api: OpenClawPluginApi, config?: MTeamPluginConfig): void {
+  const logAgentEndSkip = (
+    reason: string,
+    meta: {
+      sessionKey?: string;
+      agentId?: string;
+      taskId?: string | null;
+      taskStatus?: string;
+      messageCount?: number;
+      success?: boolean;
+    },
+  ): void => {
+    api.logger?.info?.(
+      `[m-team] agent_end skip reason=${reason} taskId=${meta.taskId ?? 'unknown'} status=${meta.taskStatus ?? 'n/a'} sessionKey=${meta.sessionKey ?? 'missing-session-key'} agentId=${meta.agentId ?? 'missing-agent-id'} success=${String(meta.success)} messageCount=${meta.messageCount ?? 0}`,
+    );
+  };
+
   api.on('agent_end', async (event: PluginHookAgentEndEvent, ctx: PluginHookAgentContext): Promise<void> => {
     const { sessionKey, agentId } = ctx;
+    const rawMessageCount = event.messages?.length ?? 0;
+    api.logger?.info?.(
+      `[m-team] agent_end received sessionKey=${sessionKey ?? 'missing-session-key'} agentId=${agentId ?? 'missing-agent-id'} success=${event.success} messageCount=${rawMessageCount}`,
+    );
+
     const taskId = parseTaskId(sessionKey ?? '');
-    if (!taskId || !isExecutorSessionForTask(sessionKey, agentId, taskId)) return;
+    if (!taskId) {
+      logAgentEndSkip('SESSION_TASK_ID_MISS', {
+        sessionKey,
+        agentId,
+        success: event.success,
+        messageCount: rawMessageCount,
+      });
+      return;
+    }
+
+    if (!isExecutorSessionForTask(sessionKey, agentId, taskId)) {
+      logAgentEndSkip('SESSION_NOT_EXECUTOR_TASK', {
+        sessionKey,
+        agentId,
+        taskId,
+        success: event.success,
+        messageCount: rawMessageCount,
+      });
+      return;
+    }
 
     const runtime = api.runtime as RuntimeWithTaskStorage;
     const task = await runtime.storage?.get?.<Task>(`mteam:task:${taskId}`).catch(() => null)
@@ -333,13 +373,31 @@ export function registerAgentEndHook(api: OpenClawPluginApi, config?: MTeamPlugi
 
     if (!task) {
       api.logger?.warn?.(`[m-team] agent_end task lookup miss taskId=${taskId} sessionKey=${sessionKey ?? 'missing-session-key'} agentId=${agentId ?? 'missing-agent-id'}`);
+      logAgentEndSkip('TASK_LOOKUP_MISS', {
+        sessionKey,
+        agentId,
+        taskId,
+        success: event.success,
+        messageCount: rawMessageCount,
+      });
       return;
     }
 
-    if (task.status !== TaskStatus.RUNNING) return;
+    if (task.status !== TaskStatus.RUNNING) {
+      logAgentEndSkip('TASK_NOT_RUNNING', {
+        sessionKey,
+        agentId,
+        taskId,
+        taskStatus: task.status,
+        success: event.success,
+        messageCount: rawMessageCount,
+      });
+      return;
+    }
 
     const nonSystemMessages = (event.messages ?? []).filter((msg: unknown) => (msg as Record<string, unknown>).role !== 'system');
     if (nonSystemMessages.length === 0) {
+      api.logger?.warn?.(`[m-team] agent_end fail reason=AGENT_END_MESSAGES_EMPTY taskId=${taskId} sessionKey=${sessionKey ?? 'missing-session-key'} agentId=${agentId ?? 'missing-agent-id'}`);
       const result = failTask(taskId, 'AGENT_END_MESSAGES_EMPTY', {
         step: task.description,
         output: {
@@ -366,6 +424,7 @@ export function registerAgentEndHook(api: OpenClawPluginApi, config?: MTeamPlugi
 
     if (!event.success) {
       const errorMsg = event.error ?? 'unknown_error';
+      api.logger?.warn?.(`[m-team] agent_end fail reason=${errorMsg} taskId=${taskId} sessionKey=${sessionKey ?? 'missing-session-key'} agentId=${agentId ?? 'missing-agent-id'}`);
       const result = failTask(taskId, errorMsg, {
         step: 'Execution failed',
         output: {
@@ -436,6 +495,7 @@ export function registerAgentEndHook(api: OpenClawPluginApi, config?: MTeamPlugi
 
     if (llmDecision?.ok) {
       const judged = llmDecision.decision;
+      api.logger?.info?.(`[m-team] agent_end llm decision taskId=${taskId} decision=${judged.decision} confidence=${judged.confidence} nextTaskType=${judged.nextTaskType ?? 'none'} sessionKey=${sessionKey ?? 'missing-session-key'} agentId=${agentId ?? 'missing-agent-id'}`);
 
       if (judged.decision === 'complete') {
         const result = completeTask(taskId, {
@@ -641,6 +701,8 @@ export function registerAgentEndHook(api: OpenClawPluginApi, config?: MTeamPlugi
     if (llmDecision && !llmDecision.ok) {
       api.logger?.warn?.(`[m-team] agent_end llm judge failed: ${llmDecision.error}${llmDecision.raw ? ` raw=${llmDecision.raw}` : ''}`);
     }
+
+    api.logger?.warn?.(`[m-team] agent_end fail-fast taskId=${taskId} reason=${failReason} sessionKey=${sessionKey ?? 'missing-session-key'} agentId=${agentId ?? 'missing-agent-id'}`);
 
     const result = failTask(taskId, failReason, {
       step: task.description,
