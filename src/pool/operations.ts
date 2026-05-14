@@ -286,6 +286,16 @@ function compareTaskSnapshots(dbSnapshot: TaskPersistenceSnapshot, jsonSnapshot:
 }
 
 function verifyTaskDbJsonConsistency(task: Task, surface: string, strict: boolean): void {
+  verifyTaskDbJsonConsistencyWithOptions(task, surface, {
+    strict,
+    allowTaskJsonMissing: false,
+  });
+}
+
+function verifyTaskDbJsonConsistencyWithOptions(task: Task, surface: string, options: {
+  strict: boolean;
+  allowTaskJsonMissing?: boolean;
+}): void {
   const taskPath = getTaskPath(task.taskId);
   const dbSnapshot = buildTaskSnapshot(task);
   let jsonSnapshot: TaskPersistenceSnapshot;
@@ -311,6 +321,10 @@ function verifyTaskDbJsonConsistency(task: Task, surface: string, strict: boolea
     };
   }
 
+  if (parseError && options.allowTaskJsonMissing && /ENOENT/i.test(parseError)) {
+    return;
+  }
+
   const mismatches = compareTaskSnapshots(dbSnapshot, jsonSnapshot);
   if (!parseError && mismatches.length === 0) return;
 
@@ -328,7 +342,8 @@ function verifyTaskDbJsonConsistency(task: Task, surface: string, strict: boolea
     action: 'consistency_guard',
     params: {
       surface,
-      strict,
+      strict: options.strict,
+      allowTaskJsonMissing: options.allowTaskJsonMissing === true,
     },
     result: detail as unknown as Record<string, unknown>,
     error: 'TASK_DB_JSON_INCONSISTENT',
@@ -339,7 +354,7 @@ function verifyTaskDbJsonConsistency(task: Task, surface: string, strict: boolea
     : mismatches.map((item) => `${item.field}(db=${String(item.db)} taskJson=${String(item.taskJson)})`).join(', ');
   console.error(`[m-team-pool] consistency mismatch task=${task.taskId} surface=${surface} ${summary}`);
 
-  if (strict) {
+  if (options.strict) {
     throw new Error(`TASK_DB_JSON_INCONSISTENT: ${summary}`);
   }
 }
@@ -373,7 +388,12 @@ function setTaskState(
 ): Task {
   const current = getTaskRow(taskId);
   if (current) {
-    verifyTaskDbJsonConsistency(normalizeTask(current), 'setTaskState:pre', true);
+    // Pre-check is advisory only for missing task.json (legacy/migrated tasks).
+    // Real divergence still fails fast.
+    verifyTaskDbJsonConsistencyWithOptions(normalizeTask(current), 'setTaskState:pre', {
+      strict: true,
+      allowTaskJsonMissing: true,
+    });
   }
   updateTaskRow(taskId, patch);
   const updated = normalizeTask(getTaskRow(taskId)!);
