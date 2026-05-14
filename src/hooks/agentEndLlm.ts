@@ -156,6 +156,8 @@ function buildDecisionPrompt(params: {
     '2.1 For next, nextDescription is required, one-step, concise, actionable.',
     '2.2 For next, nextTaskType is required (general/coding/research/ops/data/design/content/ecommerce).',
     '3. fail only when blocked or no safe executable next step.',
+    '3.1 If the issue is recoverable, prefer next over fail.',
+    '3.2 For recoverable issues, nextDescription must include both "repair action" and "re-run verification action" for current_description.',
     '4. Avoid drift; judge against current description.',
     '5. Executor reports facts; agent_end decides next action.',
     '6. nextDescription must contain only next current step.',

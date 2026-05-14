@@ -27,7 +27,54 @@ import { TASK_CONTRACT_LIMITS } from '../task-contract.js';
 const DEFAULT_AGENT_END_JUDGE_TIMEOUT_MS = 90_000;
 const RETRY_AGENT_END_JUDGE_TIMEOUT_MS = 30_000;
 const MAX_SAME_STEP_NEXT_WITHOUT_PROGRESS = 2;
+const MAX_AUTO_REPAIR_ATTEMPTS = 3;
+const AUTO_REPAIR_ISSUE_HINT_MAX_LENGTH = 48;
 const STEP_MAX_LENGTH = TASK_CONTRACT_LIMITS.descriptionMaxLength;
+
+type AgentEndDecisionPayload = AgentEndJudgeResult extends { ok: true; decision: infer D } ? D : never;
+type IssueCategory =
+  | 'missing_input'
+  | 'permission'
+  | 'dependency'
+  | 'timeout'
+  | 'network'
+  | 'validation'
+  | 'execution'
+  | 'unknown';
+
+type AutoRepairOutcome =
+  | {
+    mode: 'next';
+    source: 'complete_with_issues' | 'recoverable_fail';
+    reason: string;
+    issue: string;
+    issueCategory: IssueCategory;
+    previousAttempts: number;
+    maxAttempts: number;
+    nextDescription: string;
+    nextTaskType: Task['taskType'];
+  }
+  | {
+    mode: 'force_fail';
+    source: 'complete_with_issues' | 'recoverable_fail';
+    reason: string;
+    issue: string;
+    issueCategory: IssueCategory;
+    previousAttempts: number;
+    maxAttempts: number;
+  };
+
+const ISSUE_CATEGORY_PATTERNS: Array<{ category: IssueCategory; pattern: RegExp }> = [
+  { category: 'permission', pattern: /(permission|forbidden|denied|unauthorized|无权限|权限不足|禁止访问|拒绝访问)/iu },
+  { category: 'missing_input', pattern: /(not found|no such file|missing|ENOENT|缺少|不存在|未找到|找不到)/iu },
+  { category: 'dependency', pattern: /(dependency|module|package|import|依赖|模块|包缺失)/iu },
+  { category: 'timeout', pattern: /(timeout|timed out|超时)/iu },
+  { category: 'network', pattern: /(network|connection|dns|socket|econn|http|https|连接失败|网络异常)/iu },
+  { category: 'validation', pattern: /(validation|invalid|mismatch|assert|schema|校验失败|验证失败|不一致)/iu },
+  { category: 'execution', pattern: /(error|failed|exception|crash|exit code|non-zero|失败|错误|异常|崩溃)/iu },
+];
+
+const UNRECOVERABLE_ISSUE_PATTERN = /(无可执行下一步|无法继续(?:推进)?且无(?:替代|方案)|需要人工(?:决策|审批|介入)|目标冲突无法判定|需求不明确且无法确认|no safe executable next step|manual intervention required|human decision required)/iu;
 
 type RuntimeWithTaskStorage = PluginRuntime & {
   storage?: {
@@ -274,6 +321,94 @@ function isConciseCurrentStepDescription(text: string): boolean {
   return true;
 }
 
+function pickPrimaryIssue(output: ContextStepOutput, judgedIssues?: string[]): string | null {
+  const candidates = [
+    output.error,
+    ...(output.unresolvedIssues ?? []),
+    ...(judgedIssues ?? []),
+  ];
+
+  for (const candidate of candidates) {
+    if (typeof candidate !== 'string') continue;
+    const normalized = normalizeIssueLine(candidate);
+    if (!normalized || isNonIssueLine(normalized)) continue;
+    return normalized;
+  }
+
+  return null;
+}
+
+function categorizeIssue(issue: string): IssueCategory {
+  for (const item of ISSUE_CATEGORY_PATTERNS) {
+    if (item.pattern.test(issue)) return item.category;
+  }
+  return 'unknown';
+}
+
+function countRecentIssueAttempts(task: Task, category: IssueCategory): number {
+  const stepEntries = task.context.filter((entry): entry is Task['context'][number] & { type: 'step' } => entry.type === 'step');
+  if (stepEntries.length === 0) return 0;
+
+  let count = 0;
+  for (let i = stepEntries.length - 1; i >= 0; i--) {
+    const issue = pickPrimaryIssue(stepEntries[i].output ?? {});
+    if (!issue) break;
+    if (categorizeIssue(issue) !== category) break;
+    count++;
+  }
+
+  return count;
+}
+
+function buildAutoRepairNextDescription(task: Task, issue: string): string {
+  const issueHint = issue.slice(0, AUTO_REPAIR_ISSUE_HINT_MAX_LENGTH).trim();
+  const currentStep = sanitizeStepInstruction(task.description) || task.description.trim();
+  const candidate = `修复当前步骤问题：${issueHint}；完成后重跑“${currentStep}”并报告修复动作、验证结果、产物路径。`;
+  return sanitizeStepInstruction(candidate) || buildConservativeNextDescription(task);
+}
+
+function resolveAutoRepairOutcome(task: Task, output: ContextStepOutput, judged: AgentEndDecisionPayload): AutoRepairOutcome | null {
+  if (judged.decision !== 'complete' && judged.decision !== 'fail') return null;
+
+  const issue = pickPrimaryIssue(output, judged.unresolvedIssues);
+  if (!issue) return null;
+
+  const source = judged.decision === 'complete' ? 'complete_with_issues' : 'recoverable_fail';
+  if (source === 'recoverable_fail' && UNRECOVERABLE_ISSUE_PATTERN.test(`${issue}\n${judged.reason}`)) {
+    return null;
+  }
+
+  const issueCategory = categorizeIssue(issue);
+  const previousAttempts = countRecentIssueAttempts(task, issueCategory);
+
+  if (previousAttempts + 1 >= MAX_AUTO_REPAIR_ATTEMPTS) {
+    return {
+      mode: 'force_fail',
+      source,
+      issue,
+      issueCategory,
+      previousAttempts,
+      maxAttempts: MAX_AUTO_REPAIR_ATTEMPTS,
+      reason: `AUTO_REPAIR_BUDGET_EXCEEDED_${issueCategory.toUpperCase()}`,
+    };
+  }
+
+  const nextTaskType = judged.nextTaskType ?? task.taskType;
+  return {
+    mode: 'next',
+    source,
+    issue,
+    issueCategory,
+    previousAttempts,
+    maxAttempts: MAX_AUTO_REPAIR_ATTEMPTS,
+    nextTaskType,
+    nextDescription: buildAutoRepairNextDescription(task, issue),
+    reason: source === 'complete_with_issues'
+      ? 'AUTO_REPAIR_FROM_COMPLETE_WITH_ISSUES'
+      : 'AUTO_REPAIR_FROM_RECOVERABLE_FAIL',
+  };
+}
+
 function withJudgedSummary(base: ContextStepOutput, summary: string | undefined): ContextStepOutput {
   const nextSummary = stripGoalLevelLines(summary) ?? base.summary;
   return sanitizeStoredOutput({
@@ -333,6 +468,30 @@ function buildFactsCleanerLogData(factsCleaner: AgentEndFactsCleanerResult | nul
       error: factsCleaner.facts.error ?? null,
     },
   };
+}
+
+function buildAutoRepairLogData(outcome: AutoRepairOutcome | null): Record<string, unknown> | null {
+  if (!outcome) return null;
+
+  const base = {
+    mode: outcome.mode,
+    source: outcome.source,
+    reason: outcome.reason,
+    issue: outcome.issue,
+    issueCategory: outcome.issueCategory,
+    previousAttempts: outcome.previousAttempts,
+    maxAttempts: outcome.maxAttempts,
+  };
+
+  if (outcome.mode === 'next') {
+    return {
+      ...base,
+      nextDescription: outcome.nextDescription,
+      nextTaskType: outcome.nextTaskType,
+    };
+  }
+
+  return base;
 }
 
 function shouldRetryAgentEndJudge(error: string | undefined): boolean {
@@ -643,6 +802,135 @@ export function registerAgentEndHook(api: OpenClawPluginApi, config?: MTeamPlugi
     if (llmDecision?.ok) {
       const judged = llmDecision.decision;
       api.logger?.info?.(`[m-team] agent_end llm decision taskId=${taskId} decision=${judged.decision} confidence=${judged.confidence} nextTaskType=${judged.nextTaskType ?? 'none'} sessionKey=${sessionKey ?? 'missing-session-key'} agentId=${agentId ?? 'missing-agent-id'}`);
+      const autoRepairOutcome = resolveAutoRepairOutcome(task, cleanedOutput, judged);
+
+      if (autoRepairOutcome?.mode === 'next') {
+        api.logger?.info?.(
+          `[m-team] agent_end auto_repair next taskId=${taskId} source=${autoRepairOutcome.source} issueCategory=${autoRepairOutcome.issueCategory} attempt=${autoRepairOutcome.previousAttempts + 1}/${autoRepairOutcome.maxAttempts}`,
+        );
+
+        const result = nextTask(
+          taskId,
+          agentId ?? task.executor ?? 'unknown',
+          {
+            step: task.description,
+            output: withJudgedSummary(cleanedOutput, judged.summary),
+          },
+          autoRepairOutcome.nextDescription,
+          autoRepairOutcome.nextTaskType,
+        );
+
+        writeTaskLog({
+          taskId,
+          action: 'next',
+          sessionKey: sessionKey ?? undefined,
+          agentId: agentId ?? undefined,
+          result: {
+            success: result.success,
+            decision: 'next',
+            via: 'llm_auto_repair',
+            nextDescription: autoRepairOutcome.nextDescription,
+            nextTaskType: autoRepairOutcome.nextTaskType,
+            confidence: judged.confidence,
+            reason: judged.reason,
+            cleaner: {
+              ...buildFactsCleanerLogData(factsCleaner),
+              attempts: factsCleanerAttempts,
+            },
+            llm: {
+              ...buildLlmLogData(llmDecision),
+              attempts: llmJudgeAttempts,
+            },
+            autoRepair: buildAutoRepairLogData(autoRepairOutcome),
+            fallback: null,
+            evidence: {
+              summary: normalizedOutput.summary ?? '',
+              files: normalizedOutput.files ?? [],
+              unresolvedIssues: normalizedOutput.unresolvedIssues ?? [],
+              error: normalizedOutput.error ?? null,
+            },
+            cleanedFacts: {
+              summary: cleanedOutput.summary ?? '',
+              files: cleanedOutput.files ?? [],
+              unresolvedIssues: cleanedOutput.unresolvedIssues ?? [],
+              error: cleanedOutput.error ?? null,
+            },
+          },
+        });
+
+        if (autoRepairOutcome.nextTaskType !== task.taskType) {
+          api.logger?.info?.(`[m-team] agent_end taskType transition taskId=${taskId} ${task.taskType} -> ${autoRepairOutcome.nextTaskType}`);
+        }
+
+        if (result.task) {
+          await sendNotifications(formatNextNotifications(result.task, getNotifications()), api.logger ?? null).catch(() => null);
+        }
+        return;
+      }
+
+      if (autoRepairOutcome?.mode === 'force_fail') {
+        const failReason = autoRepairOutcome.reason;
+        const unresolvedIssues = [
+          autoRepairOutcome.issue,
+          failReason,
+        ].filter(Boolean);
+
+        api.logger?.warn?.(
+          `[m-team] agent_end auto_repair budget exceeded taskId=${taskId} issueCategory=${autoRepairOutcome.issueCategory} attempts=${autoRepairOutcome.previousAttempts + 1}/${autoRepairOutcome.maxAttempts}`,
+        );
+
+        const result = failTask(taskId, failReason, {
+          step: task.description,
+          output: withJudgedSummary({
+            ...cleanedOutput,
+            summary: cleanedOutput.summary ?? stripGoalLevelLines(text) ?? failReason,
+            error: failReason,
+            unresolvedIssues: unresolvedIssues.length ? unresolvedIssues : [failReason],
+          }, judged.summary),
+        });
+
+        writeTaskLog({
+          taskId,
+          action: 'fail',
+          sessionKey: sessionKey ?? undefined,
+          agentId: agentId ?? undefined,
+          result: {
+            success: result.success,
+            decision: 'fail',
+            via: 'llm_auto_repair_budget',
+            confidence: judged.confidence,
+            reason: judged.reason,
+            cleaner: {
+              ...buildFactsCleanerLogData(factsCleaner),
+              attempts: factsCleanerAttempts,
+            },
+            llm: {
+              ...buildLlmLogData(llmDecision),
+              attempts: llmJudgeAttempts,
+            },
+            autoRepair: buildAutoRepairLogData(autoRepairOutcome),
+            fallback: null,
+            evidence: {
+              summary: normalizedOutput.summary ?? '',
+              files: normalizedOutput.files ?? [],
+              unresolvedIssues: normalizedOutput.unresolvedIssues ?? [],
+              error: normalizedOutput.error ?? null,
+            },
+            cleanedFacts: {
+              summary: cleanedOutput.summary ?? '',
+              files: cleanedOutput.files ?? [],
+              unresolvedIssues: cleanedOutput.unresolvedIssues ?? [],
+              error: cleanedOutput.error ?? null,
+            },
+          },
+          error: failReason,
+        });
+
+        if (result.task) {
+          await sendNotifications(formatFailNotifications(result.task, getNotifications()), api.logger ?? null).catch(() => null);
+        }
+        return;
+      }
 
       if (judged.decision === 'complete') {
         const result = completeTask(taskId, {
