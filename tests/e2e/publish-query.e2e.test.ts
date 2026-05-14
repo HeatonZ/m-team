@@ -44,12 +44,16 @@ describe('publish/query e2e', () => {
       expect(getTaskDetails?.task).toHaveProperty('recentContext');
 
       const publisherTaskResult = await harness.exec('mteam_get_task_for_publisher', { taskId }, { agentId: 'manager' }) as ToolResult<{ task?: Record<string, unknown>; blocked?: boolean; reason?: string }>;
+      const publisherTaskText = extractText(publisherTaskResult);
       const publisherTaskDetails = extractDetails(publisherTaskResult);
       expect(publisherTaskDetails?.blocked).not.toBe(true);
       expect(publisherTaskDetails?.task?.goal).toBe('finish one candidate collection task');
-      const acceptance = publisherTaskDetails?.task?.acceptance as { taskDir?: string; artifactFiles?: string[] } | undefined;
+      const acceptance = publisherTaskDetails?.task?.acceptance as { taskDir?: string; files?: string[]; requiredReadRule?: string } | undefined;
+      expect(publisherTaskText).toContain('Publisher acceptance view');
+      expect(publisherTaskText).toContain('Goal: finish one candidate collection task');
       expect(acceptance?.taskDir).toContain(`/tasks/${taskId}`);
-      expect(Array.isArray(acceptance?.artifactFiles)).toBe(true);
+      expect(Array.isArray(acceptance?.files)).toBe(true);
+      expect(acceptance?.requiredReadRule).toContain('acceptance.taskDir');
 
       const nonPublisherTaskResult = await harness.exec('mteam_get_task_for_publisher', { taskId }, { agentId: 'maker' }) as ToolResult<{ blocked?: boolean; reason?: string }>;
       const nonPublisherDetails = extractDetails(nonPublisherTaskResult);

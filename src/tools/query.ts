@@ -10,6 +10,7 @@ import { textResult, readTaskId } from './shared.js';
 import { getPendingTasks, getAgentActiveTask, getTask, getAllTasks, getTaskRowsByStatus } from '../pool/index.js';
 import { buildExecutorTaskView, buildExecutorTaskViewList, formatTaskAsText, formatTaskLine, formatTaskListAsText } from './helpers.js';
 import { resolveAgentIdFromAny } from '../identity.js';
+import { type AcceptanceSnapshot } from '../schema/task.js';
 import {
   GetPendingParams,
   GetAgentActiveParams,
@@ -141,6 +142,44 @@ function collectPublisherArtifactFiles(task: NonNullable<ReturnType<typeof getTa
   return out;
 }
 
+function buildPublisherAcceptance(task: NonNullable<ReturnType<typeof getTask>>, workspaceRoot: string): AcceptanceSnapshot & {
+  requiredReadRule: string;
+} {
+  const fallbackTaskDir = normalizePathLike(path.join(workspaceRoot, 'tasks', task.taskId));
+  const taskDir = normalizePathLike(task.acceptance?.taskDir || fallbackTaskDir);
+  const files = (task.acceptance?.files?.length ? task.acceptance.files : collectPublisherArtifactFiles(task, taskDir)) ?? [];
+  const summary = task.acceptance?.summary;
+
+  return {
+    taskDir,
+    ...(summary ? { summary } : {}),
+    files,
+    updatedAt: task.acceptance?.updatedAt ?? task.updatedAt,
+    source: task.acceptance?.source ?? 'fallback',
+    requiredReadRule: 'Read at least one task-scoped path under acceptance.taskDir or acceptance.files before close/reject in heartbeat acceptance.',
+  };
+}
+
+function formatPublisherAcceptanceText(input: {
+  taskId: string;
+  status: string;
+  taskType: string;
+  goal: string;
+  acceptance: ReturnType<typeof buildPublisherAcceptance>;
+}): string {
+  const files = input.acceptance.files ?? [];
+  return [
+    'Publisher acceptance view',
+    `Task: ${input.taskId}`,
+    `Status: ${input.status}`,
+    `Type: ${input.taskType}`,
+    `Goal: ${input.goal}`,
+    `Acceptance summary: ${input.acceptance.summary ?? '(empty)'}`,
+    `TaskDir: ${input.acceptance.taskDir}`,
+    `Files (${files.length}): ${files.length ? files.join(', ') : '(none)'}`,
+  ].join('\n');
+}
+
 export function registerGetTask(api: OpenClawPluginApi): void {
   api.logger?.info('[m-team] registering mteam_get_task');
   api.registerTool({
@@ -199,46 +238,40 @@ export function registerGetTaskForPublisher(api: OpenClawPluginApi, config: MTea
         });
       }
 
-      const taskDir = normalizePathLike(path.join(workspaceRoot, 'tasks', task.taskId));
-      const artifactFiles = collectPublisherArtifactFiles(task, taskDir);
-
-      const stepContext = task.context
-        .filter((entry) => entry.type === 'step')
-        .map((entry) => ({
-          type: entry.type,
-          executor: entry.executor,
-          step: entry.step,
-          output: {
-            ...(entry.output?.summary ? { summary: entry.output.summary } : {}),
-            ...(entry.output?.files?.length ? { files: entry.output.files } : {}),
-            ...(entry.output?.unresolvedIssues?.length ? { unresolvedIssues: entry.output.unresolvedIssues } : {}),
-            ...(entry.output?.error ? { error: entry.output.error } : {}),
-          },
-          completedAt: entry.completedAt,
-        }));
+      const acceptance = buildPublisherAcceptance(task, workspaceRoot);
+      const includeContext = params.includeContext === true;
 
       const details = {
         taskId: task.taskId,
         taskType: task.taskType,
         goal: task.goal,
-        description: task.description,
         status: task.status,
-        priority: task.priority,
-        publisher: task.publisher,
-        executor: task.executor,
-        lastExecutor: task.lastExecutor,
-        createdAt: task.createdAt,
-        updatedAt: task.updatedAt,
-        completedAt: task.completedAt,
-        context: stepContext,
-        acceptance: {
-          taskDir,
-          artifactFiles,
-          requiredReadRule: 'Read at least one task-scoped path under taskDir or artifactFiles before close/reject in heartbeat acceptance.',
-        },
+        acceptance,
+        ...(includeContext ? {
+          context: task.context
+            .filter((entry) => entry.type === 'step')
+            .map((entry) => ({
+              type: entry.type,
+              executor: entry.executor,
+              step: entry.step,
+              output: {
+                ...(entry.output?.summary ? { summary: entry.output.summary } : {}),
+                ...(entry.output?.files?.length ? { files: entry.output.files } : {}),
+                ...(entry.output?.unresolvedIssues?.length ? { unresolvedIssues: entry.output.unresolvedIssues } : {}),
+                ...(entry.output?.error ? { error: entry.output.error } : {}),
+              },
+              completedAt: entry.completedAt,
+            })),
+        } : {}),
       };
 
-      return textResult(formatTaskAsText(task, { includeGoal: true }), { task: details });
+      return textResult(formatPublisherAcceptanceText({
+        taskId: task.taskId,
+        status: task.status,
+        taskType: task.taskType,
+        goal: task.goal,
+        acceptance,
+      }), { task: details });
     },
   });
 }

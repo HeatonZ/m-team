@@ -83,6 +83,14 @@ export interface ContextStepOutput {
   [key: string]: unknown;
 }
 
+export interface AcceptanceSnapshot {
+  taskDir: string;
+  summary?: string;
+  files?: string[];
+  updatedAt: number;
+  source: string;
+}
+
 function normalizeContextStepOutput(raw: unknown): ContextStepOutput {
   const output = (raw && typeof raw === 'object' ? raw : {}) as ContextStepOutput;
 
@@ -110,6 +118,37 @@ function normalizeContextStepOutput(raw: unknown): ContextStepOutput {
   };
 }
 
+function normalizeAcceptanceSnapshot(raw: unknown): AcceptanceSnapshot | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const snapshot = raw as Partial<AcceptanceSnapshot>;
+  const taskDirRaw = typeof snapshot.taskDir === 'string' ? snapshot.taskDir.trim() : '';
+  if (!taskDirRaw) return undefined;
+
+  const summary = typeof snapshot.summary === 'string'
+    ? clipText(normalizeText(snapshot.summary), SUMMARY_MAX_LENGTH)
+    : undefined;
+
+  const files = Array.isArray(snapshot.files)
+    ? uniqStrings(snapshot.files.filter((item): item is string => typeof item === 'string'), MAX_FILES, FILE_PATH_MAX_LENGTH)
+    : [];
+
+  const updatedAt = typeof snapshot.updatedAt === 'number' && Number.isFinite(snapshot.updatedAt)
+    ? snapshot.updatedAt
+    : Date.now();
+
+  const source = typeof snapshot.source === 'string' && snapshot.source.trim()
+    ? clipText(normalizeText(snapshot.source), 32)
+    : 'agent_end';
+
+  return {
+    taskDir: clipText(taskDirRaw, FILE_PATH_MAX_LENGTH),
+    ...(summary ? { summary } : {}),
+    ...(files.length ? { files } : {}),
+    updatedAt,
+    source,
+  };
+}
+
 export interface ContextStepEntry {
   type: 'step';
   executor: string;
@@ -126,6 +165,7 @@ export interface Task {
   goal: string;
   description: string;
   context: ContextEntry[];
+  acceptance?: AcceptanceSnapshot;
   priority: TaskPriority;
   publisher: string;
   status: TaskStatus;
@@ -156,10 +196,13 @@ export function normalizeTask(task: Task): Task {
     }))
     .filter((entry) => entry.step.length > 0);
 
+  const normalizedAcceptance = normalizeAcceptanceSnapshot(task.acceptance);
+
   return {
     ...task,
     description: sanitizeStepText(String(task.description ?? '')),
     context: normalizedContext,
+    ...(normalizedAcceptance ? { acceptance: normalizedAcceptance } : {}),
   };
 }
 
@@ -213,6 +256,7 @@ export interface TaskPatch {
   lastExecutor?: string | null;
   description?: string;
   context?: string;
+  acceptance?: string | null;
   completedAt?: number | null;
   updatedAt?: number;
 }

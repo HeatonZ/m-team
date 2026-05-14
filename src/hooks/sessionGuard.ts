@@ -118,20 +118,31 @@ function addAllowedPrefix(prefixes: Set<string>, rawPrefix: string): void {
 }
 
 function buildAcceptanceScope(task: Task, workspaceRoot: string): PublisherAcceptanceScope {
-  const taskDir = path.join(workspaceRoot, 'tasks', task.taskId);
+  const taskDir = task.acceptance?.taskDir || path.join(workspaceRoot, 'tasks', task.taskId);
   const allowedPrefixes = new Set<string>();
 
   addAllowedPrefix(allowedPrefixes, taskDir);
 
-  for (const entry of task.context ?? []) {
-    if (entry.type !== 'step') continue;
-    for (const file of entry.output?.files ?? []) {
-      const normalized = normalizePathLike(file);
-      if (!normalized) continue;
-      const resolved = normalized.startsWith('/') || /^[a-z]:\//.test(normalized)
-        ? normalized
-        : normalizePathLike(path.join(taskDir, normalized));
-      addAllowedPrefix(allowedPrefixes, resolved);
+  for (const file of task.acceptance?.files ?? []) {
+    const normalized = normalizePathLike(file);
+    if (!normalized) continue;
+    const resolved = normalized.startsWith('/') || /^[a-z]:\//.test(normalized)
+      ? normalized
+      : normalizePathLike(path.join(taskDir, normalized));
+    addAllowedPrefix(allowedPrefixes, resolved);
+  }
+
+  if (!(task.acceptance?.files?.length)) {
+    for (const entry of task.context ?? []) {
+      if (entry.type !== 'step') continue;
+      for (const file of entry.output?.files ?? []) {
+        const normalized = normalizePathLike(file);
+        if (!normalized) continue;
+        const resolved = normalized.startsWith('/') || /^[a-z]:\//.test(normalized)
+          ? normalized
+          : normalizePathLike(path.join(taskDir, normalized));
+        addAllowedPrefix(allowedPrefixes, resolved);
+      }
     }
   }
 

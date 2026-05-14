@@ -114,6 +114,13 @@ describe('hook runtime e2e', () => {
       const taskId = extractDetails(publishResult)!.taskId;
 
       harness.mutateTask(taskId, (task) => {
+        task.acceptance = {
+          taskDir: `/mnt/d/code/m-team/tasks/${taskId}`,
+          summary: 'Artifact generated',
+          files: [`/mnt/d/code/m-team/tasks/${taskId}/result.txt`],
+          updatedAt: Date.now(),
+          source: 'agent_end',
+        };
         task.context.push({
           type: 'step',
           executor: 'maker',
@@ -182,6 +189,13 @@ describe('hook runtime e2e', () => {
           task.updatedAt = task.completedAt;
           task.executor = null;
           task.lastExecutor = 'maker';
+          task.acceptance = {
+            taskDir: `/mnt/d/code/m-team/tasks/${closeTaskId}`,
+            summary: 'artifact generated',
+            files: [`/mnt/d/code/m-team/tasks/${closeTaskId}/result.txt`],
+            updatedAt: Date.now(),
+            source: 'agent_end',
+          };
           task.context.push({
             type: 'step',
             executor: 'maker',
@@ -230,6 +244,13 @@ describe('hook runtime e2e', () => {
         task.completedAt = Date.now();
         task.updatedAt = task.completedAt;
         task.executor = null;
+        task.acceptance = {
+          taskDir: `/mnt/d/code/m-team/tasks/${taskId}`,
+          summary: 'completed task snapshot',
+          files: [`/mnt/d/code/m-team/tasks/${taskId}/result.txt`],
+          updatedAt: Date.now(),
+          source: 'agent_end',
+        };
       });
 
       const queryResult = await harness.getTool('mteam_get_task_for_publisher').execute(

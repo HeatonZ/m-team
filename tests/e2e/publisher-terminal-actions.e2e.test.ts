@@ -43,6 +43,13 @@ describe('publisher terminal actions e2e', () => {
         task.updatedAt = task.completedAt;
         task.executor = null;
         task.lastExecutor = 'maker';
+        task.acceptance = {
+          taskDir: `/mnt/d/code/m-team/tasks/${closeTaskId}`,
+          summary: 'final file generated',
+          files: [`/mnt/d/code/m-team/tasks/${closeTaskId}/final.md`],
+          updatedAt: Date.now(),
+          source: 'agent_end',
+        };
       });
       const closeResult = await harness.exec('mteam_close_task', {
         taskId: closeTaskId,
@@ -64,6 +71,13 @@ describe('publisher terminal actions e2e', () => {
         task.updatedAt = task.completedAt;
         task.executor = null;
         task.lastExecutor = 'maker';
+        task.acceptance = {
+          taskDir: `/mnt/d/code/m-team/tasks/${rejectTaskId}`,
+          summary: 'candidate report submitted',
+          files: [`/mnt/d/code/m-team/tasks/${rejectTaskId}/report.md`],
+          updatedAt: Date.now(),
+          source: 'agent_end',
+        };
       });
       const rejectResult = await harness.exec('mteam_reject_task', {
         taskId: rejectTaskId,
@@ -98,6 +112,13 @@ describe('publisher terminal actions e2e', () => {
         task.updatedAt = task.completedAt;
         task.executor = null;
         task.lastExecutor = 'maker';
+        task.acceptance = {
+          taskDir: `/mnt/d/code/m-team/tasks/${taskId}`,
+          summary: 'scope check artifact',
+          files: [`/mnt/d/code/m-team/tasks/${taskId}/artifact.md`],
+          updatedAt: Date.now(),
+          source: 'agent_end',
+        };
       });
 
       await expect(harness.exec('mteam_reject_task', {
@@ -128,6 +149,13 @@ describe('publisher terminal actions e2e', () => {
         task.updatedAt = task.completedAt;
         task.executor = null;
         task.lastExecutor = 'maker';
+        task.acceptance = {
+          taskDir: `/mnt/d/code/m-team/tasks/${taskId}`,
+          summary: 'candidate report ready',
+          files: [`/mnt/d/code/m-team/tasks/${taskId}/report.md`],
+          updatedAt: Date.now(),
+          source: 'agent_end',
+        };
       });
 
       await expect(harness.exec('mteam_reject_task', {
@@ -158,6 +186,13 @@ describe('publisher terminal actions e2e', () => {
         task.updatedAt = task.completedAt;
         task.executor = null;
         task.lastExecutor = 'maker';
+        task.acceptance = {
+          taskDir: '/mnt/d/workspace/m-team/tasks/task_foo',
+          summary: 'artifact generated',
+          files: ['/mnt/d/workspace/m-team/tasks/task_foo/result.txt'],
+          updatedAt: Date.now(),
+          source: 'agent_end',
+        };
         task.context.push({
           type: 'step',
           executor: 'maker',
@@ -291,6 +326,13 @@ describe('publisher terminal actions e2e', () => {
         task.completedAt = Date.now();
         task.updatedAt = task.completedAt;
         task.executor = null;
+        task.acceptance = {
+          taskDir: `/mnt/d/code/m-team/tasks/${closeTaskId}`,
+          summary: 'completed for fallback close',
+          files: [`/mnt/d/code/m-team/tasks/${closeTaskId}/result.md`],
+          updatedAt: Date.now(),
+          source: 'agent_end',
+        };
       });
 
       const closeResult = await harness.exec('mteam_close_task', {

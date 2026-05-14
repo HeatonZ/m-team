@@ -19,6 +19,7 @@ import {
   TaskPriority,
   type Task,
   type TaskPatch,
+  type AcceptanceSnapshot,
   type ContextStepEntry,
   type ContextStepOutput,
   createTask,
@@ -100,6 +101,57 @@ function sanitizeContextOutput(output: ContextStepOutput | undefined): ContextSt
   };
 }
 
+function normalizePathLike(input: string): string {
+  return input
+    .trim()
+    .replace(/^['"]+|['"]+$/g, '')
+    .replace(/\\/g, '/')
+    .replace(/\/+/g, '/');
+}
+
+function isAbsolutePathLike(input: string): boolean {
+  return input.startsWith('/') || /^[a-zA-Z]:\//.test(input);
+}
+
+function collectAcceptanceFiles(taskId: string, context: ContextStepEntry[]): string[] {
+  const taskDir = path.join(WORKSPACE_ROOT, 'tasks', taskId);
+  const seen = new Set<string>();
+  const files: string[] = [];
+
+  for (const entry of context) {
+    for (const rawFile of entry.output?.files ?? []) {
+      const normalized = normalizePathLike(rawFile);
+      if (!normalized) continue;
+      const resolved = isAbsolutePathLike(normalized)
+        ? normalized
+        : normalizePathLike(path.join(taskDir, normalized));
+      if (!resolved || seen.has(resolved)) continue;
+      seen.add(resolved);
+      files.push(resolved);
+      if (files.length >= MAX_FILES) return files;
+    }
+  }
+
+  return files;
+}
+
+function buildAcceptanceSnapshot(task: Task, context: ContextStepEntry[]): AcceptanceSnapshot {
+  const taskDir = normalizePathLike(path.join(WORKSPACE_ROOT, 'tasks', task.taskId));
+  const latest = context.length ? context[context.length - 1] : null;
+  const summary = latest?.output?.summary
+    ? clipText(normalizeText(latest.output.summary), SUMMARY_MAX_LENGTH)
+    : undefined;
+  const files = collectAcceptanceFiles(task.taskId, context);
+
+  return {
+    taskDir,
+    ...(summary ? { summary } : {}),
+    ...(files.length ? { files } : {}),
+    updatedAt: Date.now(),
+    source: 'agent_end',
+  };
+}
+
 export function setWorkspaceRoot(root: string): void {
   WORKSPACE_ROOT = root;
   DB_PATH = path.join(root, 'queue', 'm-team.db');
@@ -125,6 +177,7 @@ interface TaskPersistenceSnapshot {
   status: string | null;
   description: string | null;
   taskType: string | null;
+  acceptance: string | null;
   updatedAt: number | null;
   contextLength: number | null;
   lastExecutor: string | null;
@@ -151,6 +204,7 @@ function buildTaskSnapshot(task: Task): TaskPersistenceSnapshot {
     status: task.status ?? null,
     description: task.description ?? null,
     taskType: task.taskType ?? null,
+    acceptance: task.acceptance ? JSON.stringify(task.acceptance) : null,
     updatedAt: toNullableNumber(task.updatedAt),
     contextLength: Array.isArray(task.context) ? task.context.length : 0,
     lastExecutor: task.lastExecutor ?? null,
@@ -166,6 +220,7 @@ function buildTaskSnapshotFromJson(raw: unknown): TaskPersistenceSnapshot {
       status: null,
       description: null,
       taskType: null,
+      acceptance: null,
       updatedAt: null,
       contextLength: null,
       lastExecutor: null,
@@ -181,6 +236,7 @@ function buildTaskSnapshotFromJson(raw: unknown): TaskPersistenceSnapshot {
     status: toNullableString(record.status),
     description: toNullableString(record.description),
     taskType: toNullableString(record.taskType),
+    acceptance: record.acceptance ? JSON.stringify(record.acceptance) : null,
     updatedAt: toNullableNumber(record.updatedAt),
     contextLength: Array.isArray(contextValue) ? contextValue.length : null,
     lastExecutor: toNullableString(record.lastExecutor),
@@ -199,6 +255,7 @@ function compareTaskSnapshots(dbSnapshot: TaskPersistenceSnapshot, jsonSnapshot:
     'status',
     'description',
     'taskType',
+    'acceptance',
     'updatedAt',
     'contextLength',
     'lastExecutor',
@@ -236,6 +293,7 @@ function verifyTaskDbJsonConsistency(task: Task, surface: string, strict: boolea
       status: null,
       description: null,
       taskType: null,
+      acceptance: null,
       updatedAt: null,
       contextLength: null,
       lastExecutor: null,
@@ -428,6 +486,7 @@ export function updateTask(
   return setTaskState(taskId, {
     ...(status ? { status: status as Task['status'] } : {}),
     ...(description ? { description: sanitizeStep(description, task.description) } : {}),
+    ...((status as TaskStatus | null) === TaskStatus.PENDING ? { acceptance: null } : {}),
     ...(updatedAt ? { updatedAt } : { updatedAt: Date.now() }),
     context: JSON.stringify(context),
   });
@@ -456,6 +515,7 @@ export function cancelTask(taskId: string, _publisher?: string, reason?: string)
     task: setTaskState(taskId, {
       status: TaskStatus.CANCELLED,
       executor: null,
+      acceptance: null,
       updatedAt: Date.now(),
       context: JSON.stringify(context),
     }),
@@ -485,6 +545,7 @@ export function relinquishTask(taskId: string, executorId?: string, reason?: str
       status: TaskStatus.PENDING,
       executor: null,
       lastExecutor: task.executor,
+      acceptance: null,
       updatedAt: Date.now(),
       context: JSON.stringify(context),
     }),
@@ -522,6 +583,7 @@ export function nextTask(
       lastExecutor: executorId,
       description: nextDescription,
       ...(nextTaskType ? { taskType: nextTaskType } : {}),
+      acceptance: null,
       updatedAt: Date.now(),
       context: JSON.stringify(context),
     }),
@@ -567,6 +629,7 @@ export function rejectTask(
       status: TaskStatus.PENDING,
       executor: null,
       description: sanitizeStep(description?.trim() || task.description, task.description),
+      acceptance: null,
       updatedAt: Date.now(),
       context: JSON.stringify(context),
     }),
@@ -583,6 +646,7 @@ export function completeTask(
   if (task.status !== TaskStatus.RUNNING) return { success: false, reason: `TASK_NOT_RUNNING_${task.status}` };
 
   const context = appendContext(task, task.executor, contextEntry);
+  const acceptance = buildAcceptanceSnapshot(task, context);
 
   return {
     success: true,
@@ -591,6 +655,7 @@ export function completeTask(
       completedAt: Date.now(),
       executor: null,
       lastExecutor: task.executor ?? task.lastExecutor,
+      acceptance: JSON.stringify(acceptance),
       updatedAt: Date.now(),
       context: JSON.stringify(context),
     }),
@@ -624,6 +689,7 @@ export function failTask(
       completedAt: Date.now(),
       executor: null,
       lastExecutor: task.executor ?? task.lastExecutor,
+      acceptance: null,
       updatedAt: Date.now(),
       context: JSON.stringify(context),
     }),

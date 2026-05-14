@@ -37,6 +37,13 @@ describe('publisher acceptance full chain e2e', () => {
           ...(last.output ?? {}),
           files: [`/mnt/d/code/m-team/tasks/${taskId}/final-result.md`],
         };
+        task.acceptance = {
+          taskDir: `/mnt/d/code/m-team/tasks/${taskId}`,
+          summary: 'final artifact ready',
+          files: [`/mnt/d/code/m-team/tasks/${taskId}/final-result.md`],
+          updatedAt: Date.now(),
+          source: 'agent_end',
+        };
       });
 
       expect(harness.readTask(taskId)?.status).toBe('completed');
@@ -103,6 +110,13 @@ describe('publisher acceptance full chain e2e', () => {
         last.output = {
           ...(last.output ?? {}),
           files: [`/mnt/d/code/m-team/tasks/${taskId}/candidate-report.md`],
+        };
+        task.acceptance = {
+          taskDir: `/mnt/d/code/m-team/tasks/${taskId}`,
+          summary: 'candidate report submitted',
+          files: [`/mnt/d/code/m-team/tasks/${taskId}/candidate-report.md`],
+          updatedAt: Date.now(),
+          source: 'agent_end',
         };
       });
 

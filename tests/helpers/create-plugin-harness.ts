@@ -232,7 +232,7 @@ export async function createPluginHarness(overrides: Partial<TestPluginConfig> =
       if (!task) throw new Error(`Task not found: ${taskId}`);
       mutator(task);
       const db = getDb();
-      db.prepare('UPDATE tasks SET status = ?, completed_at = ?, updated_at = ?, executor = ?, last_executor = ?, description = ?, context = ? WHERE task_id = ?').run(
+      db.prepare('UPDATE tasks SET status = ?, completed_at = ?, updated_at = ?, executor = ?, last_executor = ?, description = ?, context = ?, acceptance = ? WHERE task_id = ?').run(
         task.status,
         task.completedAt,
         task.updatedAt,
@@ -240,6 +240,7 @@ export async function createPluginHarness(overrides: Partial<TestPluginConfig> =
         task.lastExecutor,
         task.description,
         JSON.stringify(task.context),
+        task.acceptance ? JSON.stringify(task.acceptance) : null,
         taskId,
       );
 

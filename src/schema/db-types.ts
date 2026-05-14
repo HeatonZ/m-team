@@ -16,6 +16,7 @@ export interface TaskRow {
   description: string;
   goal: string;
   context: string;
+  acceptance: string | null;
   priority: string;
   publisher: string;
   status: string;
@@ -34,6 +35,7 @@ export function serializeTask(input: Task): TaskRow {
     description: task.description,
     goal: task.goal,
     context: JSON.stringify(task.context),
+    acceptance: task.acceptance ? JSON.stringify(task.acceptance) : null,
     priority: task.priority,
     publisher: task.publisher,
     status: task.status,
@@ -52,6 +54,7 @@ export function deserializeTask(row: TaskRow): Task {
     description: row.description,
     goal: row.goal,
     context: JSON.parse(row.context),
+    acceptance: row.acceptance ? JSON.parse(row.acceptance) : undefined,
     priority: row.priority as TaskPriority,
     publisher: row.publisher,
     status: row.status as TaskStatus,

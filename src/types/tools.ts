@@ -150,6 +150,7 @@ export const GetTaskForPublisherParams = {
   type: 'object' as const,
   properties: {
     taskId: { type: 'string', description: 'Task ID' },
+    includeContext: { type: 'boolean', description: 'Optional debug flag. When true, include full step context.' },
   },
   required: ['taskId'] as const,
 } as const;
@@ -212,6 +213,7 @@ export interface GetTaskParamsInterface {
 
 export interface GetTaskForPublisherParamsInterface {
   taskId: string;
+  includeContext?: boolean;
 }
 
 export interface GetAllTasksParamsInterface {

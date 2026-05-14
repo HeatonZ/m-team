@@ -24,6 +24,13 @@ describe('publisher goal visibility boundary', () => {
         task.updatedAt = task.completedAt;
         task.executor = null;
         task.lastExecutor = 'maker';
+        task.acceptance = {
+          taskDir: `/mnt/d/code/m-team/tasks/${taskId}`,
+          summary: '完成首步并可验收',
+          files: [`/mnt/d/code/m-team/tasks/${taskId}/result.md`],
+          updatedAt: Date.now(),
+          source: 'agent_end',
+        };
       });
 
       const closeResult = await harness.exec('mteam_close_task', { taskId, publisher: 'manager' }, { agentId: 'manager' });
@@ -45,6 +52,13 @@ describe('publisher goal visibility boundary', () => {
         task.updatedAt = task.completedAt;
         task.executor = null;
         task.lastExecutor = 'maker';
+        task.acceptance = {
+          taskDir: `/mnt/d/code/m-team/tasks/${taskId2}`,
+          summary: '待补充证据',
+          files: [`/mnt/d/code/m-team/tasks/${taskId2}/draft.md`],
+          updatedAt: Date.now(),
+          source: 'agent_end',
+        };
       });
 
       const rejectResult = await harness.exec(
