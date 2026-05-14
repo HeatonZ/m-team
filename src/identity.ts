@@ -34,3 +34,19 @@ export function resolvePublisherFromParamsAndContext(input: {
 }): string | undefined {
   return normalizeAgentId(input.publisher) ?? resolveAgentIdFromContext(input);
 }
+
+export function resolveAgentIdFromAny(input: {
+  explicitAgentId?: string | null;
+  toolContextAgentId?: string | null;
+  explicitSessionKey?: string | null;
+  toolContextSessionKey?: string | null;
+  injectedCallerAgentId?: string | null;
+  injectedSessionKey?: string | null;
+}): string | undefined {
+  return normalizeAgentId(input.explicitAgentId)
+    ?? normalizeAgentId(input.toolContextAgentId)
+    ?? normalizeAgentId(input.injectedCallerAgentId)
+    ?? parseAgentIdFromSessionKey(input.explicitSessionKey)
+    ?? parseAgentIdFromSessionKey(input.toolContextSessionKey)
+    ?? parseAgentIdFromSessionKey(input.injectedSessionKey);
+}

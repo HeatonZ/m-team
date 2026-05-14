@@ -9,7 +9,7 @@ import type { MTeamPluginConfig } from '../config.js';
 import { textResult, readTaskId } from './shared.js';
 import { getPendingTasks, getAgentActiveTask, getTask, getAllTasks, getTaskRowsByStatus } from '../pool/index.js';
 import { buildExecutorTaskView, buildExecutorTaskViewList, formatTaskAsText, formatTaskLine, formatTaskListAsText } from './helpers.js';
-import { resolveAgentIdFromContext } from '../identity.js';
+import { resolveAgentIdFromAny } from '../identity.js';
 import {
   GetPendingParams,
   GetAgentActiveParams,
@@ -32,12 +32,19 @@ export function registerGetPending(api: OpenClawPluginApi): void {
     label: 'Get pending tasks',
     description: 'List pending tasks that can be claimed by the current agent',
     parameters: GetPendingParams,
-    async execute(_toolCallId: string, rawParams: GetPendingParamsInterface & { toolContext?: OpenClawPluginToolContext }) {
-      const agentId = rawParams.agentId?.trim()
-        ?? resolveAgentIdFromContext({
-          agentId: rawParams.toolContext?.agentId,
-          sessionKey: rawParams.toolContext?.sessionKey,
-        });
+    async execute(_toolCallId: string, rawParams: GetPendingParamsInterface & {
+      toolContext?: OpenClawPluginToolContext;
+      __mteamCallerAgentId?: string;
+      __mteamSessionKey?: string;
+    }) {
+      const agentId = resolveAgentIdFromAny({
+        explicitAgentId: rawParams.agentId,
+        toolContextAgentId: rawParams.toolContext?.agentId,
+        explicitSessionKey: (rawParams as Record<string, unknown>).sessionKey as string | undefined,
+        toolContextSessionKey: rawParams.toolContext?.sessionKey,
+        injectedCallerAgentId: rawParams.__mteamCallerAgentId,
+        injectedSessionKey: rawParams.__mteamSessionKey,
+      });
       if (!agentId) {
         return textResult('agent identity required', { pending: [], blocked: true, reason: 'AGENT_ID_REQUIRED' });
       }
@@ -66,12 +73,19 @@ export function registerGetAgentActive(api: OpenClawPluginApi): void {
     label: 'Get active task',
     description: 'Show the running task for the current agent',
     parameters: GetAgentActiveParams,
-    async execute(_toolCallId: string, rawParams: GetAgentActiveParamsInterface & { toolContext?: OpenClawPluginToolContext }) {
-      const agentId = rawParams.agentId?.trim()
-        ?? resolveAgentIdFromContext({
-          agentId: rawParams.toolContext?.agentId,
-          sessionKey: rawParams.toolContext?.sessionKey,
-        });
+    async execute(_toolCallId: string, rawParams: GetAgentActiveParamsInterface & {
+      toolContext?: OpenClawPluginToolContext;
+      __mteamCallerAgentId?: string;
+      __mteamSessionKey?: string;
+    }) {
+      const agentId = resolveAgentIdFromAny({
+        explicitAgentId: rawParams.agentId,
+        toolContextAgentId: rawParams.toolContext?.agentId,
+        explicitSessionKey: (rawParams as Record<string, unknown>).sessionKey as string | undefined,
+        toolContextSessionKey: rawParams.toolContext?.sessionKey,
+        injectedCallerAgentId: rawParams.__mteamCallerAgentId,
+        injectedSessionKey: rawParams.__mteamSessionKey,
+      });
       if (!agentId) {
         return textResult('agent identity required', { activeTask: null, blocked: true, reason: 'AGENT_ID_REQUIRED' });
       }
@@ -86,6 +100,8 @@ export function registerGetAgentActive(api: OpenClawPluginApi): void {
 
 type PublisherQueryToolParams = GetTaskForPublisherParamsInterface & {
   toolContext?: OpenClawPluginToolContext;
+  __mteamCallerAgentId?: string;
+  __mteamSessionKey?: string;
 };
 
 const DEFAULT_WORKSPACE_ROOT = '/mnt/d/code/m-team';
@@ -160,10 +176,15 @@ export function registerGetTaskForPublisher(api: OpenClawPluginApi, config: MTea
         return textResult(`Task ${taskId} not found`, { task: null });
       }
 
-      const callerAgentId = resolveAgentIdFromContext({
-        agentId: params.toolContext?.agentId,
-        sessionKey: params.toolContext?.sessionKey,
+      const callerAgentId = resolveAgentIdFromAny({
+        explicitAgentId: (params as Record<string, unknown>).agentId as string | undefined,
+        toolContextAgentId: params.toolContext?.agentId,
+        explicitSessionKey: (params as Record<string, unknown>).sessionKey as string | undefined,
+        toolContextSessionKey: params.toolContext?.sessionKey,
+        injectedCallerAgentId: params.__mteamCallerAgentId,
+        injectedSessionKey: params.__mteamSessionKey,
       });
+      api.logger?.info?.(`[m-team] get_task_for_publisher identity resolved caller=${callerAgentId ?? 'missing'} toolCtxAgent=${params.toolContext?.agentId?.trim() ?? 'missing'} toolCtxSession=${params.toolContext?.sessionKey ?? 'missing'} injectedAgent=${params.__mteamCallerAgentId ?? 'missing'} injectedSession=${params.__mteamSessionKey ?? 'missing'}`);
       if (!callerAgentId || !publishers.has(callerAgentId)) {
         return textResult('forbidden: publisher identity required', {
           blocked: true,

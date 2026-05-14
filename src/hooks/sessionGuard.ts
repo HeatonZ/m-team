@@ -173,6 +173,17 @@ export function registerSessionGuardHook(
         && publishers.has(resolvedAgentId),
       );
 
+      if (toolName.startsWith('mteam_')) {
+        if (resolvedAgentId && typeof adjustedParams.__mteamCallerAgentId !== 'string') {
+          adjustedParams.__mteamCallerAgentId = resolvedAgentId;
+          paramsAdjusted = true;
+        }
+        if (sessionKey && typeof adjustedParams.__mteamSessionKey !== 'string') {
+          adjustedParams.__mteamSessionKey = sessionKey;
+          paramsAdjusted = true;
+        }
+      }
+
       if (isPublisherHeartbeat && sessionKey && toolName === 'mteam_get_task_for_publisher') {
         const inspectedTaskId = typeof params.taskId === 'string' ? params.taskId : null;
         if (inspectedTaskId) {
