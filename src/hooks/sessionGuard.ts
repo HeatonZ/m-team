@@ -67,38 +67,6 @@ function buildComparableVariants(pathLike: string): Set<string> {
   return variants;
 }
 
-function collectTaskArtifactPrefixes(task: Task, workspaceRoot: string): Set<string> {
-  const prefixes = new Set<string>();
-  const taskDir = path.join(workspaceRoot, 'tasks', task.taskId);
-
-  for (const variant of buildComparableVariants(taskDir)) {
-    const withSlash = variant.endsWith('/') ? variant : `${variant}/`;
-    prefixes.add(withSlash);
-  }
-
-  for (const entry of task.context ?? []) {
-    if (entry.type !== 'step') continue;
-    for (const file of entry.output?.files ?? []) {
-      const normalized = normalizePathLike(file);
-      if (!normalized) continue;
-
-      if (normalized.startsWith('/') || /^[a-z]:\//.test(normalized)) {
-        for (const variant of buildComparableVariants(normalized)) {
-          prefixes.add(variant);
-        }
-        continue;
-      }
-
-      const combined = path.join(taskDir, normalized);
-      for (const variant of buildComparableVariants(combined)) {
-        prefixes.add(variant);
-      }
-    }
-  }
-
-  return prefixes;
-}
-
 function extractReadPath(params: Record<string, unknown>): string | null {
   const candidates = ['path', 'filePath', 'filepath'];
   for (const key of candidates) {
@@ -131,13 +99,55 @@ function isPrivateWorkspacePath(rawPath: string): boolean {
   return false;
 }
 
+interface PublisherAcceptanceScope {
+  taskId: string;
+  allowedPrefixes: Set<string>;
+  hasValidatedArtifactRead: boolean;
+}
+
+function addAllowedPrefix(prefixes: Set<string>, rawPrefix: string): void {
+  const normalized = normalizePathLike(rawPrefix);
+  if (!normalized) return;
+  for (const variant of buildComparableVariants(normalized)) {
+    if (!variant) continue;
+    prefixes.add(variant);
+    const withSlash = variant.endsWith('/') ? variant : `${variant}/`;
+    prefixes.add(withSlash);
+  }
+}
+
+function buildAcceptanceScope(task: Task, workspaceRoot: string): PublisherAcceptanceScope {
+  const taskDir = path.join(workspaceRoot, 'tasks', task.taskId);
+  const allowedPrefixes = new Set<string>();
+
+  addAllowedPrefix(allowedPrefixes, taskDir);
+
+  for (const entry of task.context ?? []) {
+    if (entry.type !== 'step') continue;
+    for (const file of entry.output?.files ?? []) {
+      const normalized = normalizePathLike(file);
+      if (!normalized) continue;
+      const resolved = normalized.startsWith('/') || /^[a-z]:\//.test(normalized)
+        ? normalized
+        : normalizePathLike(path.join(taskDir, normalized));
+      addAllowedPrefix(allowedPrefixes, resolved);
+    }
+  }
+
+  return {
+    taskId: task.taskId,
+    allowedPrefixes,
+    hasValidatedArtifactRead: false,
+  };
+}
+
 export function registerSessionGuardHook(
   api: OpenClawPluginApi,
   options: RegisterOptions,
 ): void {
   const publishers = new Set(options.publishers ?? []);
   const workspaceRoot = options.workspaceRoot ?? DEFAULT_WORKSPACE_ROOT;
-  const heartbeatTaskBySession = new Map<string, string>();
+  const acceptanceScopeBySession = new Map<string, PublisherAcceptanceScope>();
 
   api.on(
     'before_tool_call',
@@ -158,7 +168,12 @@ export function registerSessionGuardHook(
       if (isPublisherHeartbeat && sessionKey && toolName === 'mteam_get_task_for_publisher') {
         const inspectedTaskId = typeof params.taskId === 'string' ? params.taskId : null;
         if (inspectedTaskId) {
-          heartbeatTaskBySession.set(sessionKey, inspectedTaskId);
+          const task = getTask(inspectedTaskId);
+          if (task) {
+            acceptanceScopeBySession.set(sessionKey, buildAcceptanceScope(task, workspaceRoot));
+          } else {
+            acceptanceScopeBySession.delete(sessionKey);
+          }
         }
       }
 
@@ -166,13 +181,11 @@ export function registerSessionGuardHook(
         isPublisherHeartbeat
         && sessionKey
         && (
-          toolName === 'mteam_close_task'
-          || toolName === 'mteam_reject_task'
-          || toolName === 'mteam_cancel_task'
+          toolName === 'mteam_cancel_task'
           || toolName === 'mteam_relinquish_task'
         )
       ) {
-        heartbeatTaskBySession.delete(sessionKey);
+        acceptanceScopeBySession.delete(sessionKey);
       }
 
       if (
@@ -213,27 +226,43 @@ export function registerSessionGuardHook(
           };
         }
 
-        const inspectedTaskId = sessionKey ? heartbeatTaskBySession.get(sessionKey) : undefined;
-        if (!inspectedTaskId) {
+        const acceptanceScope = sessionKey ? acceptanceScopeBySession.get(sessionKey) : undefined;
+        if (!acceptanceScope) {
           return {
             block: true,
             blockReason: `Publisher heartbeat (${sessionKey}) must call mteam_get_task_for_publisher first, then read only that task's artifacts.`,
           };
         }
 
-        const task = getTask(inspectedTaskId);
-        if (!task) {
+        if (!isPathWithinAllowedPrefixes(readPath, acceptanceScope.allowedPrefixes)) {
           return {
             block: true,
-            blockReason: `Publisher heartbeat (${sessionKey}) cannot load task ${inspectedTaskId}.`,
+            blockReason: `Publisher heartbeat read blocked: ${readPath} is outside task-scoped artifacts for ${acceptanceScope.taskId}.`,
           };
         }
 
-        const allowedPrefixes = collectTaskArtifactPrefixes(task, workspaceRoot);
-        if (!isPathWithinAllowedPrefixes(readPath, allowedPrefixes)) {
+        acceptanceScope.hasValidatedArtifactRead = true;
+      }
+
+      if (
+        isPublisherHeartbeat
+        && sessionKey
+        && (
+          toolName === 'mteam_close_task'
+          || toolName === 'mteam_reject_task'
+        )
+      ) {
+        const acceptanceScope = acceptanceScopeBySession.get(sessionKey);
+        if (!acceptanceScope) {
           return {
             block: true,
-            blockReason: `Publisher heartbeat read blocked: ${readPath} is outside task-scoped artifacts for ${task.taskId}.`,
+            blockReason: `Publisher heartbeat (${sessionKey}) must call mteam_get_task_for_publisher before ${toolName}.`,
+          };
+        }
+        if (!acceptanceScope.hasValidatedArtifactRead) {
+          return {
+            block: true,
+            blockReason: `Publisher heartbeat (${sessionKey}) must read at least one task artifact under tasks/${acceptanceScope.taskId} before ${toolName}.`,
           };
         }
       }

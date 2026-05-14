@@ -1,7 +1,8 @@
-﻿/**
+/**
  * Read-only query tools.
  */
 
+import path from 'node:path';
 import type { OpenClawPluginApi } from 'openclaw/plugin-sdk';
 import type { OpenClawPluginToolContext } from '../types/openclaw-hooks.js';
 import type { MTeamPluginConfig } from '../config.js';
@@ -72,6 +73,43 @@ type PublisherQueryToolParams = GetTaskForPublisherParamsInterface & {
   toolContext?: OpenClawPluginToolContext;
 };
 
+const DEFAULT_WORKSPACE_ROOT = '/mnt/d/code/m-team';
+
+function normalizePathLike(input: string): string {
+  return input
+    .trim()
+    .replace(/^['"]+|['"]+$/g, '')
+    .replace(/\\/g, '/')
+    .replace(/\/+/g, '/');
+}
+
+function isAbsolutePathLike(input: string): boolean {
+  return input.startsWith('/') || /^[a-zA-Z]:\//.test(input);
+}
+
+function collectPublisherArtifactFiles(task: NonNullable<ReturnType<typeof getTask>>, taskDir: string): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+
+  for (const entry of task.context ?? []) {
+    if (entry.type !== 'step') continue;
+    for (const rawFile of entry.output?.files ?? []) {
+      const normalizedRaw = normalizePathLike(rawFile);
+      if (!normalizedRaw) continue;
+
+      const resolved = isAbsolutePathLike(normalizedRaw)
+        ? normalizedRaw
+        : normalizePathLike(path.join(taskDir, normalizedRaw));
+
+      if (!resolved || seen.has(resolved)) continue;
+      seen.add(resolved);
+      out.push(resolved);
+    }
+  }
+
+  return out;
+}
+
 export function registerGetTask(api: OpenClawPluginApi): void {
   api.logger?.info('[m-team] registering mteam_get_task');
   api.registerTool({
@@ -93,6 +131,7 @@ export function registerGetTask(api: OpenClawPluginApi): void {
 export function registerGetTaskForPublisher(api: OpenClawPluginApi, config: MTeamPluginConfig): void {
   api.logger?.info('[m-team] registering mteam_get_task_for_publisher');
   const publishers = new Set(config.publishers ?? []);
+  const workspaceRoot = config.workspaceRoot ?? DEFAULT_WORKSPACE_ROOT;
   api.registerTool({
     name: 'mteam_get_task_for_publisher',
     label: 'Get task detail for publisher',
@@ -120,6 +159,9 @@ export function registerGetTaskForPublisher(api: OpenClawPluginApi, config: MTea
           reason: 'PUBLISHER_TASK_OWNERSHIP_REQUIRED',
         });
       }
+
+      const taskDir = normalizePathLike(path.join(workspaceRoot, 'tasks', task.taskId));
+      const artifactFiles = collectPublisherArtifactFiles(task, taskDir);
 
       const stepContext = task.context
         .filter((entry) => entry.type === 'step')
@@ -150,6 +192,11 @@ export function registerGetTaskForPublisher(api: OpenClawPluginApi, config: MTea
         updatedAt: task.updatedAt,
         completedAt: task.completedAt,
         context: stepContext,
+        acceptance: {
+          taskDir,
+          artifactFiles,
+          requiredReadRule: 'Read at least one task-scoped path under taskDir or artifactFiles before close/reject in heartbeat acceptance.',
+        },
       };
 
       return textResult(formatTaskAsText(task, { includeGoal: true }), { task: details });

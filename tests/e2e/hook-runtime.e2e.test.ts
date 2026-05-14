@@ -166,6 +166,49 @@ describe('hook runtime e2e', () => {
         } as never))
         .find(Boolean) as { block?: boolean; blockReason?: string } | undefined;
       expect(inScopeRead?.block).not.toBe(true);
+
+      const closeWithoutReadHarness = await createPluginHarness({ dashboardEnabled: false });
+      try {
+        const publish = await closeWithoutReadHarness.exec('mteam_publish_task', {
+          goal: 'Need one artifact read before close',
+          description: 'Generate artifact',
+          taskType: 'general',
+          publisher: 'manager',
+        }, { agentId: 'manager' }) as ToolResult<PublishDetails>;
+        const closeTaskId = extractDetails(publish)!.taskId;
+        closeWithoutReadHarness.mutateTask(closeTaskId, (task) => {
+          task.status = 'completed';
+          task.completedAt = Date.now();
+          task.updatedAt = task.completedAt;
+          task.executor = null;
+          task.lastExecutor = 'maker';
+          task.context.push({
+            type: 'step',
+            executor: 'maker',
+            step: 'Generate artifact',
+            output: {
+              files: [`/mnt/d/code/m-team/tasks/${closeTaskId}/result.txt`],
+            },
+            completedAt: Date.now(),
+          });
+        });
+
+        await closeWithoutReadHarness.exec(
+          'mteam_get_task_for_publisher',
+          { taskId: closeTaskId },
+          { agentId: 'manager', sessionKey: 'agent:manager:discord:heartbeat' },
+        );
+
+        const closeBlocked = await closeWithoutReadHarness.exec(
+          'mteam_close_task',
+          { taskId: closeTaskId, publisher: 'manager' },
+          { agentId: 'manager', sessionKey: 'agent:manager:discord:heartbeat' },
+        ) as ToolResult<{ blocked?: boolean; reason?: string }>;
+        expect(extractDetails(closeBlocked)?.blocked).toBe(true);
+        expect(extractText(closeBlocked)).toContain('must read at least one task artifact');
+      } finally {
+        await closeWithoutReadHarness.cleanup();
+      }
     } finally {
       await harness.cleanup();
     }

@@ -1,4 +1,4 @@
-﻿/**
+/**
  * M-Team hook: heartbeat_prompt_contribution
  *
  * - Executor heartbeat: claim-only guidance.
@@ -50,9 +50,11 @@ const PUBLISHER_ACCEPTANCE_PROMPT = `You are M-Team Publisher.
 - Only inspect tasks where publisher is you.
 - Pick the earliest completed task.
 - Call mteam_get_task_for_publisher({ taskId }) before any artifact validation reads.
+- Use acceptance.taskDir + acceptance.artifactFiles from mteam_get_task_for_publisher as the only read scope.
 - Artifact validation reads must be task-scoped only:
-  - Allowed: {workspaceRoot}/tasks/{taskId}/... and artifact files listed in task context output.files.
+  - Allowed: acceptance.taskDir and acceptance.artifactFiles.
   - Forbidden: private agent workspace paths like /home/*/.openclaw/workspace-*/...
+- Before mteam_close_task or mteam_reject_task, perform at least one successful read inside acceptance scope.
 - Validate against goal + context trace + artifacts.
 - This step targets COMPLETED tasks only.
 

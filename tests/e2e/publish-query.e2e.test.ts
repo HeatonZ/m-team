@@ -47,6 +47,9 @@ describe('publish/query e2e', () => {
       const publisherTaskDetails = extractDetails(publisherTaskResult);
       expect(publisherTaskDetails?.blocked).not.toBe(true);
       expect(publisherTaskDetails?.task?.goal).toBe('finish one candidate collection task');
+      const acceptance = publisherTaskDetails?.task?.acceptance as { taskDir?: string; artifactFiles?: string[] } | undefined;
+      expect(acceptance?.taskDir).toContain(`/tasks/${taskId}`);
+      expect(Array.isArray(acceptance?.artifactFiles)).toBe(true);
 
       const nonPublisherTaskResult = await harness.exec('mteam_get_task_for_publisher', { taskId }, { agentId: 'maker' }) as ToolResult<{ blocked?: boolean; reason?: string }>;
       const nonPublisherDetails = extractDetails(nonPublisherTaskResult);
