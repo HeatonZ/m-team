@@ -1,4 +1,4 @@
-﻿---
+---
 name: m-team-executor
 description: Use when an M-Team task has already been claimed and the current agent is now responsible for executing the current baton. First identify whether you are in task-intake mode, execution mode, final-message mode, or blocking mode, then read only the matching reference file. Use when the agent must continue from recent context, perform only the current description, and leave a transcript that lets agent_end decide next, complete, or fail.
 ---
