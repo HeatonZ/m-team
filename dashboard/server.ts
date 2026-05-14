@@ -18,6 +18,7 @@ import {
   getTask as getTaskById,
   getDashboardLogs,
   countDashboardLogs,
+  editTaskById,
 } from './src/db.ts';
 
 const _scriptPath = import.meta.url
@@ -60,10 +61,61 @@ function json(res: http.ServerResponse, status: number, data: unknown) {
   send(res, status, JSON.stringify(data), 'application/json');
 }
 
+async function readJsonBody(req: http.IncomingMessage): Promise<Record<string, unknown>> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of req) {
+    chunks.push(typeof chunk === 'string' ? Buffer.from(chunk) : chunk);
+  }
+  const raw = Buffer.concat(chunks).toString('utf8').trim();
+  if (!raw) return {};
+  const parsed = JSON.parse(raw);
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error('body must be an object');
+  }
+  return parsed as Record<string, unknown>;
+}
+
+const VALID_STATUSES = new Set(['pending', 'running', 'completed', 'closed', 'failed', 'cancelled']);
+const VALID_TYPES = new Set(['general', 'coding', 'research', 'ops', 'data', 'design', 'content', 'ecommerce']);
+const VALID_PRIORITIES = new Set(['high', 'normal', 'low']);
+
+function normalizeEditablePatch(input: Record<string, unknown>) {
+  const patch: Record<string, unknown> = {};
+
+  if (typeof input.goal === 'string') patch.goal = input.goal;
+  if (typeof input.description === 'string') patch.description = input.description;
+  if (typeof input.publisher === 'string') patch.publisher = input.publisher;
+  if (typeof input.executor === 'string' || input.executor === null) patch.executor = input.executor;
+  if (typeof input.lastExecutor === 'string' || input.lastExecutor === null) patch.lastExecutor = input.lastExecutor;
+
+  if (typeof input.status === 'string') {
+    if (!VALID_STATUSES.has(input.status)) {
+      throw new Error(`invalid status: ${input.status}`);
+    }
+    patch.status = input.status;
+  }
+
+  if (typeof input.taskType === 'string') {
+    if (!VALID_TYPES.has(input.taskType)) {
+      throw new Error(`invalid taskType: ${input.taskType}`);
+    }
+    patch.taskType = input.taskType;
+  }
+
+  if (typeof input.priority === 'string') {
+    if (!VALID_PRIORITIES.has(input.priority)) {
+      throw new Error(`invalid priority: ${input.priority}`);
+    }
+    patch.priority = input.priority;
+  }
+
+  return patch;
+}
+
 async function handle(req: http.IncomingMessage, res: http.ServerResponse) {
   // CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, PATCH, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   if (req.method === 'OPTIONS') {
     res.writeHead(204);
@@ -117,6 +169,24 @@ async function handle(req: http.IncomingMessage, res: http.ServerResponse) {
         const task = getTaskById(taskMatch[1]);
         if (!task) return json(res, 404, { error: 'not found' });
         return json(res, 200, task);
+      }
+
+      // PATCH /api/tasks/:id
+      if (taskMatch && req.method === 'PATCH') {
+        try {
+          const body = await readJsonBody(req);
+          const patch = normalizeEditablePatch(body);
+          if (Object.keys(patch).length === 0) {
+            return json(res, 400, { error: 'empty patch', message: 'No editable fields provided' });
+          }
+
+          const updated = editTaskById(taskMatch[1], patch);
+          if (!updated) return json(res, 404, { error: 'not found' });
+          return json(res, 200, { ok: true, task: updated });
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          return json(res, 400, { error: 'invalid patch', message });
+        }
       }
 
       // GET /api/logs?taskId=...&action=...&page=1&pageSize=20

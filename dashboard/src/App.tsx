@@ -6,6 +6,7 @@ import { TaskColumn } from './components/TaskColumn';
 import { HistoryTab } from './components/HistoryTab';
 import { LogsTab } from './components/LogsTab';
 import { TaskDetailModal } from './components/TaskDetailModal';
+import { TaskEditModal } from './components/TaskEditModal';
 import { usePendingTasks, useRunningTasks, useHistoryTasks } from './hooks/useTasks';
 import { fetchTaskDetail } from './api/client';
 import { getHeatBucket, getLatestSummary, getTaskRiskLevel, isBlockedTask } from './utils/task';
@@ -60,6 +61,7 @@ function filterByKeyword(tasks: Task[], keyword: string) {
 export function App() {
   const [mainTab, setMainTab] = useState<MainTab>('board');
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+  const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [activeHistoryStatus, setActiveHistoryStatus] = useState<TaskStatus>('completed');
   const [boardFilter, setBoardFilter] = useState<BoardFilter>('all');
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('all');
@@ -287,6 +289,17 @@ export function App() {
       <TaskDetailModal
         task={selectedTask}
         onClose={() => setSelectedTask(null)}
+        onEdit={(task) => setEditingTask(task)}
+      />
+
+      <TaskEditModal
+        task={editingTask}
+        onClose={() => setEditingTask(null)}
+        onSaved={(task) => {
+          setEditingTask(null);
+          setSelectedTask(task);
+          handleRefresh();
+        }}
       />
     </div>
   );

@@ -7,6 +7,7 @@ import { getLatestIssues, getLatestStep, getTaskRiskLevel } from '../utils/task'
 interface TaskDetailModalProps {
   task: Task | null;
   onClose: () => void;
+  onEdit: (task: Task) => void;
 }
 
 function getFlowSummary(task: Task) {
@@ -29,7 +30,7 @@ function renderJson(value: unknown): string {
   }
 }
 
-export const TaskDetailModal: FC<TaskDetailModalProps> = ({ task, onClose }) => {
+export const TaskDetailModal: FC<TaskDetailModalProps> = ({ task, onClose, onEdit }) => {
   if (!task) return null;
 
   const steps = task.context as ContextStepEntry[];
@@ -42,6 +43,7 @@ export const TaskDetailModal: FC<TaskDetailModalProps> = ({ task, onClose }) => 
     <div className="modal-backdrop open" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className="modal modal-xl">
         <button className="modal-close" onClick={onClose}>×</button>
+        <button className="tab task-detail-edit-btn" onClick={() => onEdit(task)}>Edit task</button>
 
         <div className="modal-hero">
           <div>
@@ -151,7 +153,6 @@ export const TaskDetailModal: FC<TaskDetailModalProps> = ({ task, onClose }) => 
             )}
           </div>
         </div>
-
       </div>
     </div>
   );

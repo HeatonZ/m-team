@@ -250,6 +250,9 @@ export function validateTask(task: unknown): ValidationResult {
 }
 
 export interface TaskPatch {
+  goal?: string;
+  priority?: TaskPriority;
+  publisher?: string;
   taskType?: TaskType;
   status?: TaskStatus;
   executor?: string | null;

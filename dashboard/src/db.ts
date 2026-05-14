@@ -12,6 +12,7 @@ import {
   getTaskRowByExecutor,
   getTaskLogs,
   countTaskLogs,
+  editTask,
 } from 'm-team/pool';
 import { TaskStatus } from 'm-team/schema/task';
 
@@ -103,4 +104,20 @@ export function countDashboardLogs(query: DashboardLogQuery) {
   ensureInit();
   const { taskId, action, ...advanced } = query;
   return countTaskLogs(taskId, action, advanced);
+}
+
+export interface EditTaskPatch {
+  goal?: string;
+  description?: string;
+  status?: Task['status'];
+  taskType?: Task['taskType'];
+  priority?: Task['priority'];
+  publisher?: string;
+  executor?: string | null;
+  lastExecutor?: string | null;
+}
+
+export function editTaskById(taskId: string, patch: EditTaskPatch): Task | null {
+  ensureInit();
+  return editTask(taskId, patch);
 }

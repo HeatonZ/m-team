@@ -17,6 +17,9 @@ import {
 import {
   TaskStatus,
   TaskPriority,
+  VALID_PRIORITIES,
+  VALID_TASK_TYPES,
+  TASK_STATUSES,
   type Task,
   type TaskPatch,
   type AcceptanceSnapshot,
@@ -59,6 +62,12 @@ function sanitizeGoal(raw: string): string {
   const normalized = normalizeText(raw);
   if (!normalized) return 'Complete the requested task';
   return clipText(normalized, GOAL_MAX_LENGTH);
+}
+
+function sanitizePublisher(raw: string): string {
+  const normalized = normalizeText(raw);
+  if (!normalized) return 'user';
+  return clipText(normalized, 80);
 }
 
 function uniqStrings(items: string[], maxItems: number, maxLength: number): string[] {
@@ -716,4 +725,105 @@ export function closeTask(taskId: string, publisher?: string): CloseResult {
       updatedAt: Date.now(),
     }),
   };
+}
+
+export interface EditTaskInput {
+  goal?: string;
+  description?: string;
+  status?: Task['status'];
+  taskType?: Task['taskType'];
+  priority?: Task['priority'];
+  publisher?: string;
+  executor?: string | null;
+  lastExecutor?: string | null;
+}
+
+export function editTask(taskId: string, patch: EditTaskInput): Task | null {
+  init();
+  const task = getTaskRow(taskId);
+  if (!task) return null;
+
+  const patchData: TaskPatch = {};
+
+  if (typeof patch.goal === 'string') {
+    patchData.goal = sanitizeGoal(patch.goal);
+  }
+
+  if (typeof patch.description === 'string') {
+    patchData.description = sanitizeStep(patch.description, task.description);
+  }
+
+  if (typeof patch.taskType === 'string') {
+    if (!VALID_TASK_TYPES.includes(patch.taskType)) {
+      throw new Error(`INVALID_TASK_TYPE_${patch.taskType}`);
+    }
+    patchData.taskType = patch.taskType;
+  }
+
+  if (typeof patch.priority === 'string') {
+    if (!VALID_PRIORITIES.includes(patch.priority)) {
+      throw new Error(`INVALID_PRIORITY_${patch.priority}`);
+    }
+    patchData.priority = patch.priority;
+  }
+
+  if (typeof patch.publisher === 'string') {
+    patchData.publisher = sanitizePublisher(patch.publisher);
+  }
+
+  if (patch.executor !== undefined) {
+    if (patch.executor === null) patchData.executor = null;
+    else patchData.executor = sanitizePublisher(patch.executor);
+  }
+
+  if (patch.lastExecutor !== undefined) {
+    if (patch.lastExecutor === null) patchData.lastExecutor = null;
+    else patchData.lastExecutor = sanitizePublisher(patch.lastExecutor);
+  }
+
+  if (typeof patch.status === 'string') {
+    if (!TASK_STATUSES.includes(patch.status)) {
+      throw new Error(`INVALID_STATUS_${patch.status}`);
+    }
+    patchData.status = patch.status;
+
+    switch (patch.status) {
+      case TaskStatus.PENDING:
+        if (patch.executor === undefined) patchData.executor = null;
+        patchData.completedAt = null;
+        patchData.acceptance = null;
+        break;
+      case TaskStatus.RUNNING:
+        patchData.completedAt = null;
+        patchData.acceptance = null;
+        break;
+      case TaskStatus.COMPLETED: {
+        patchData.completedAt = task.completedAt ?? Date.now();
+        if (patch.executor === undefined) patchData.executor = null;
+        if (!task.acceptance) {
+          patchData.acceptance = JSON.stringify(buildAcceptanceSnapshot(task, task.context ?? []));
+        }
+        break;
+      }
+      case TaskStatus.CLOSED:
+        patchData.completedAt = task.completedAt ?? Date.now();
+        if (patch.executor === undefined) patchData.executor = null;
+        break;
+      case TaskStatus.FAILED:
+      case TaskStatus.CANCELLED:
+        patchData.completedAt = task.completedAt ?? Date.now();
+        if (patch.executor === undefined) patchData.executor = null;
+        patchData.acceptance = null;
+        break;
+    }
+  }
+
+  if (Object.keys(patchData).length === 0) {
+    return normalizeTask(task);
+  }
+
+  return setTaskState(taskId, {
+    ...patchData,
+    updatedAt: Date.now(),
+  });
 }

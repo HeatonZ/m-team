@@ -2,6 +2,10 @@ export type TaskStatus = 'pending' | 'running' | 'completed' | 'closed' | 'faile
 export type TaskPriority = 'high' | 'normal' | 'low';
 export type TaskType = 'general' | 'coding' | 'research' | 'ops' | 'data' | 'design' | 'content' | 'ecommerce';
 
+export const TASK_STATUSES: TaskStatus[] = ['pending', 'running', 'completed', 'closed', 'failed', 'cancelled'];
+export const TASK_PRIORITIES: TaskPriority[] = ['high', 'normal', 'low'];
+export const TASK_TYPES: TaskType[] = ['general', 'coding', 'research', 'ops', 'data', 'design', 'content', 'ecommerce'];
+
 export interface ContextStepOutput {
   summary?: string;
   files?: string[];

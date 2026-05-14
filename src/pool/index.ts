@@ -18,6 +18,7 @@ import {
   completeTask,
   failTask,
   closeTask,
+  editTask,
   type ClaimResult,
   type CancelResult,
   type RelinquishResult,
@@ -28,7 +29,7 @@ import {
 
 export { setWorkspaceRoot, DB_PATH };
 export { openDb, getDb };
-export { publishTask, claimTask, updateTask, relinquishTask, nextTask, cancelTask, completeTask, failTask, closeTask };
+export { publishTask, claimTask, updateTask, relinquishTask, nextTask, cancelTask, completeTask, failTask, closeTask, editTask };
 export { rejectTask };
 export type { ClaimResult, CancelResult, RelinquishResult, CompleteResult, CloseResult, ContextStepInput };
 export { getTaskLogs, countTaskLogs } from './db';
