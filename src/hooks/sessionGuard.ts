@@ -19,7 +19,7 @@ import type {
 } from '../types/openclaw-hooks.js';
 import { getTask } from '../pool/index.js';
 import type { Task } from '../schema/task.js';
-import { resolveAgentIdFromContext, resolvePublisherFromParamsAndContext } from '../identity.js';
+import { normalizeAgentId, resolveAgentIdFromContext, resolvePublisherFromParamsAndContext } from '../identity.js';
 
 interface RegisterOptions {
   publishers: string[];
@@ -98,6 +98,16 @@ function isPrivateWorkspacePath(rawPath: string): boolean {
     if (variant.includes(PRIVATE_WORKSPACE_SEGMENT)) return true;
   }
   return false;
+}
+
+function isPublisherPlaceholder(raw: string | undefined): boolean {
+  if (!raw) return false;
+  const normalized = raw.trim().toLowerCase();
+  return normalized === 'publisher'
+    || normalized === '${publisher}'
+    || normalized === '<publisher>'
+    || normalized === 'current_publisher'
+    || normalized === 'current-publisher';
 }
 
 interface PublisherAcceptanceScope {
@@ -323,6 +333,12 @@ export function registerSessionGuardHook(
         || toolName === 'mteam_reject_task'
         || toolName === 'mteam_cancel_task'
       ) {
+        const explicitPublisher = normalizeAgentId(typeof adjustedParams.publisher === 'string' ? adjustedParams.publisher : undefined);
+        if (resolvedAgentId && (!explicitPublisher || isPublisherPlaceholder(explicitPublisher))) {
+          adjustedParams.publisher = resolvedAgentId;
+          paramsAdjusted = true;
+        }
+
         const callPublisher = resolvePublisherFromParamsAndContext({
           publisher: adjustedParams.publisher as string | undefined,
           agentId: resolvedAgentId,

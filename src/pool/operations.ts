@@ -118,12 +118,61 @@ function normalizePathLike(input: string): string {
     .replace(/\/+/g, '/');
 }
 
+function normalizeComparablePath(input: string): string {
+  return normalizePathLike(input).toLowerCase();
+}
+
+function tryToWslPath(pathLike: string): string | null {
+  const normalized = normalizeComparablePath(pathLike);
+  const match = normalized.match(/^([a-z]):\/(.*)$/);
+  if (!match) return null;
+  const [, drive, rest] = match;
+  return `/mnt/${drive}/${rest}`;
+}
+
+function tryToWindowsPath(pathLike: string): string | null {
+  const normalized = normalizeComparablePath(pathLike);
+  const match = normalized.match(/^\/mnt\/([a-z])\/(.*)$/);
+  if (!match) return null;
+  const [, drive, rest] = match;
+  return `${drive}:/${rest}`;
+}
+
+function buildComparablePathVariants(pathLike: string): Set<string> {
+  const variants = new Set<string>();
+  const normalized = normalizeComparablePath(pathLike);
+  if (!normalized) return variants;
+  variants.add(normalized);
+  const asWsl = tryToWslPath(normalized);
+  if (asWsl) variants.add(asWsl);
+  const asWindows = tryToWindowsPath(normalized);
+  if (asWindows) variants.add(asWindows);
+  return variants;
+}
+
+function isPathWithinTaskDir(pathLike: string, taskDir: string): boolean {
+  const pathVariants = buildComparablePathVariants(pathLike);
+  const taskDirVariants = buildComparablePathVariants(taskDir);
+  if (pathVariants.size === 0 || taskDirVariants.size === 0) return false;
+
+  for (const variant of pathVariants) {
+    for (const prefix of taskDirVariants) {
+      const normalizedPrefix = prefix.endsWith('/') ? prefix : `${prefix}/`;
+      if (variant === prefix || variant.startsWith(normalizedPrefix)) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
 function isAbsolutePathLike(input: string): boolean {
   return input.startsWith('/') || /^[a-zA-Z]:\//.test(input);
 }
 
 function collectAcceptanceFiles(taskId: string, context: ContextStepEntry[]): string[] {
-  const taskDir = path.join(WORKSPACE_ROOT, 'tasks', taskId);
+  const taskDir = normalizePathLike(path.join(WORKSPACE_ROOT, 'tasks', taskId));
   const seen = new Set<string>();
   const files: string[] = [];
 
@@ -134,8 +183,10 @@ function collectAcceptanceFiles(taskId: string, context: ContextStepEntry[]): st
       const resolved = isAbsolutePathLike(normalized)
         ? normalized
         : normalizePathLike(path.join(taskDir, normalized));
-      if (!resolved || seen.has(resolved)) continue;
-      seen.add(resolved);
+      if (!resolved || !isPathWithinTaskDir(resolved, taskDir)) continue;
+      const key = normalizeComparablePath(resolved);
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
       files.push(resolved);
       if (files.length >= MAX_FILES) return files;
     }

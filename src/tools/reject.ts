@@ -145,12 +145,13 @@ export function register(
     async execute(_toolCallId: string, rawParams: RejectTaskParamsInterface) {
       const taskId = readTaskId(rawParams, 'taskId', { required: true })!;
       const { reason, description, publisher } = rawParams;
-      if (!publisher) {
-        throw new Error('mteam_reject_task missing publisher');
-      }
       const task = getTask(taskId);
       if (!task) {
         return textResult('reject failed: TASK_NOT_FOUND', { success: false, reason: 'TASK_NOT_FOUND' });
+      }
+
+      if (!publisher) {
+        return textResult('reject failed: PUBLISHER_IDENTITY_REQUIRED', { success: false, reason: 'PUBLISHER_IDENTITY_REQUIRED' });
       }
 
       const nextDescription = sanitizeSingleLine(description);

@@ -69,30 +69,30 @@ export const CancelTaskParams = {
   type: 'object' as const,
   properties: {
     taskId: { type: 'string', description: 'Task ID' },
-    publisher: { type: 'string', description: 'Publisher; must match original publisher' },
+    publisher: { type: 'string', description: 'Optional override; defaults to current session agent identity' },
     reason: { type: 'string', description: 'Cancellation reason' },
   },
-  required: ['taskId', 'publisher'] as const,
+  required: ['taskId'] as const,
 } as const;
 
 export const CloseTaskParams = {
   type: 'object' as const,
   properties: {
     taskId: { type: 'string', description: 'Task ID' },
-    publisher: { type: 'string', description: 'Publisher; must match original publisher' },
+    publisher: { type: 'string', description: 'Optional override; defaults to current session agent identity' },
   },
-  required: ['taskId', 'publisher'] as const,
+  required: ['taskId'] as const,
 } as const;
 
 export const RejectTaskParams = {
   type: 'object' as const,
   properties: {
     taskId: { type: 'string', description: 'Task ID' },
-    publisher: { type: 'string', description: 'Publisher; must match original publisher' },
+    publisher: { type: 'string', description: 'Optional override; defaults to current session agent identity' },
     reason: { type: 'string', description: 'Rejection reason' },
     description: { type: 'string', description: DESCRIPTION_INLINE_HINT },
   },
-  required: ['taskId', 'publisher', 'reason', 'description'] as const,
+  required: ['taskId', 'reason', 'description'] as const,
 } as const;
 
 export const NextTaskParams = {
@@ -168,18 +168,18 @@ export const GetAllTasksParams = {
 
 export interface CancelTaskParamsInterface {
   taskId: string;
-  publisher: string;
+  publisher?: string;
   reason?: string;
 }
 
 export interface CloseTaskParamsInterface {
   taskId: string;
-  publisher: string;
+  publisher?: string;
 }
 
 export interface RejectTaskParamsInterface {
   taskId: string;
-  publisher: string;
+  publisher?: string;
   reason: string;
   description: string;
 }
