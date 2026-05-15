@@ -30,6 +30,7 @@ const MAX_SAME_STEP_NEXT_WITHOUT_PROGRESS = 2;
 const MAX_AUTO_REPAIR_ATTEMPTS = 3;
 const AUTO_REPAIR_ISSUE_HINT_MAX_LENGTH = 48;
 const STEP_MAX_LENGTH = TASK_CONTRACT_LIMITS.descriptionMaxLength;
+const ECOMMERCE_SIGNAL_PATTERN = /(listing|sku|offerid|collectbox|erp|采集箱|上架|选品|跨境|电商|店铺|妙手|商品|1688|亚马逊|temu|shopee|tiktok\s*shop|aliexpress|ebay|lazada)/iu;
 
 type AgentEndDecisionPayload = AgentEndJudgeResult extends { ok: true; decision: infer D } ? D : never;
 type IssueCategory =
@@ -283,6 +284,43 @@ function sanitizeStepInstruction(raw: string): string {
   text = text.replace(/[。；;]\s*继续如实汇报.*$/u, '').trim();
   text = text.replace(/^[-—–•+\s]+/u, '').trim();
   return text.length > STEP_MAX_LENGTH ? text.slice(0, STEP_MAX_LENGTH) : text;
+}
+
+function hasEcommerceSignal(text: string | undefined): boolean {
+  if (!text) return false;
+  return ECOMMERCE_SIGNAL_PATTERN.test(text);
+}
+
+function resolveNextTaskTypeWithDomainGuard(params: {
+  task: Task;
+  requestedNextTaskType: Task['taskType'] | undefined;
+  nextDescription: string;
+  transcript: string;
+  cleanedOutput: ContextStepOutput;
+}): {
+  taskType: Task['taskType'];
+  normalizedBy: 'none' | 'ecommerce_guard';
+} {
+  const requested = params.requestedNextTaskType ?? params.task.taskType;
+  if (params.task.taskType !== 'ecommerce') {
+    return { taskType: requested, normalizedBy: 'none' };
+  }
+
+  // Guardrail: ecommerce listing/copy baton should stay ecommerce even if LLM returns content.
+  // This keeps claim routing stable for cross-border operations workflows.
+  const hasDomainSignal = [
+    params.task.goal,
+    params.task.description,
+    params.nextDescription,
+    params.cleanedOutput.summary,
+    params.transcript,
+  ].some(hasEcommerceSignal);
+
+  if (requested === 'content' && hasDomainSignal) {
+    return { taskType: 'ecommerce', normalizedBy: 'ecommerce_guard' };
+  }
+
+  return { taskType: requested, normalizedBy: 'none' };
 }
 
 function buildConservativeNextDescription(task: Task): string {
@@ -809,6 +847,14 @@ export function registerAgentEndHook(api: OpenClawPluginApi, config?: MTeamPlugi
           `[m-team] agent_end auto_repair next taskId=${taskId} source=${autoRepairOutcome.source} issueCategory=${autoRepairOutcome.issueCategory} attempt=${autoRepairOutcome.previousAttempts + 1}/${autoRepairOutcome.maxAttempts}`,
         );
 
+        const resolvedNextTaskType = resolveNextTaskTypeWithDomainGuard({
+          task,
+          requestedNextTaskType: autoRepairOutcome.nextTaskType,
+          nextDescription: autoRepairOutcome.nextDescription,
+          transcript: text,
+          cleanedOutput,
+        });
+
         const result = nextTask(
           taskId,
           agentId ?? task.executor ?? 'unknown',
@@ -817,7 +863,7 @@ export function registerAgentEndHook(api: OpenClawPluginApi, config?: MTeamPlugi
             output: withJudgedSummary(cleanedOutput, judged.summary),
           },
           autoRepairOutcome.nextDescription,
-          autoRepairOutcome.nextTaskType,
+          resolvedNextTaskType.taskType,
         );
 
         writeTaskLog({
@@ -830,7 +876,9 @@ export function registerAgentEndHook(api: OpenClawPluginApi, config?: MTeamPlugi
             decision: 'next',
             via: 'llm_auto_repair',
             nextDescription: autoRepairOutcome.nextDescription,
-            nextTaskType: autoRepairOutcome.nextTaskType,
+            nextTaskType: resolvedNextTaskType.taskType,
+            requestedNextTaskType: autoRepairOutcome.nextTaskType,
+            taskTypeNormalizedBy: resolvedNextTaskType.normalizedBy,
             confidence: judged.confidence,
             reason: judged.reason,
             cleaner: {
@@ -858,8 +906,13 @@ export function registerAgentEndHook(api: OpenClawPluginApi, config?: MTeamPlugi
           },
         });
 
-        if (autoRepairOutcome.nextTaskType !== task.taskType) {
-          api.logger?.info?.(`[m-team] agent_end taskType transition taskId=${taskId} ${task.taskType} -> ${autoRepairOutcome.nextTaskType}`);
+        if (resolvedNextTaskType.normalizedBy !== 'none') {
+          api.logger?.info?.(
+            `[m-team] agent_end taskType normalized taskId=${taskId} from=${autoRepairOutcome.nextTaskType} to=${resolvedNextTaskType.taskType} by=${resolvedNextTaskType.normalizedBy}`,
+          );
+        }
+        if (resolvedNextTaskType.taskType !== task.taskType) {
+          api.logger?.info?.(`[m-team] agent_end taskType transition taskId=${taskId} ${task.taskType} -> ${resolvedNextTaskType.taskType}`);
         }
 
         if (result.task) {
@@ -984,6 +1037,13 @@ export function registerAgentEndHook(api: OpenClawPluginApi, config?: MTeamPlugi
         const llmNext = judged.nextDescription!.trim();
         const nextDescription = explicitNext
           ?? (isConciseCurrentStepDescription(llmNext) ? llmNext : buildConservativeNextDescription(task));
+        const resolvedNextTaskType = resolveNextTaskTypeWithDomainGuard({
+          task,
+          requestedNextTaskType: judged.nextTaskType,
+          nextDescription,
+          transcript: text,
+          cleanedOutput,
+        });
 
         if (!explicitNext && isSameCurrentStepDescription(task, nextDescription) && hasNoRealIssues(cleanedOutput) && !hasProblemReportSignal(text, cleanedOutput)) {
           const sameStepRepeatCount = countRecentSameStepWithoutIssues(task, task.description) + 1;
@@ -1048,13 +1108,13 @@ export function registerAgentEndHook(api: OpenClawPluginApi, config?: MTeamPlugi
         const result = nextTask(
           taskId,
           agentId ?? task.executor ?? 'unknown',
-          {
-            step: task.description,
-            output: withJudgedSummary(cleanedOutput, judged.summary),
-          },
-          nextDescription,
-          judged.nextTaskType,
-        );
+            {
+              step: task.description,
+              output: withJudgedSummary(cleanedOutput, judged.summary),
+            },
+            nextDescription,
+            resolvedNextTaskType.taskType,
+          );
 
         writeTaskLog({
           taskId,
@@ -1066,7 +1126,9 @@ export function registerAgentEndHook(api: OpenClawPluginApi, config?: MTeamPlugi
             decision: 'next',
             via: 'llm',
             nextDescription,
-            nextTaskType: judged.nextTaskType ?? null,
+            nextTaskType: resolvedNextTaskType.taskType,
+            requestedNextTaskType: judged.nextTaskType ?? null,
+            taskTypeNormalizedBy: resolvedNextTaskType.normalizedBy,
             confidence: judged.confidence,
             reason: judged.reason,
             cleaner: {
@@ -1093,8 +1155,13 @@ export function registerAgentEndHook(api: OpenClawPluginApi, config?: MTeamPlugi
           },
         });
 
-        if (judged.nextTaskType && judged.nextTaskType !== task.taskType) {
-          api.logger?.info?.(`[m-team] agent_end taskType transition taskId=${taskId} ${task.taskType} -> ${judged.nextTaskType}`);
+        if (resolvedNextTaskType.normalizedBy !== 'none') {
+          api.logger?.info?.(
+            `[m-team] agent_end taskType normalized taskId=${taskId} from=${judged.nextTaskType ?? task.taskType} to=${resolvedNextTaskType.taskType} by=${resolvedNextTaskType.normalizedBy}`,
+          );
+        }
+        if (resolvedNextTaskType.taskType !== task.taskType) {
+          api.logger?.info?.(`[m-team] agent_end taskType transition taskId=${taskId} ${task.taskType} -> ${resolvedNextTaskType.taskType}`);
         }
 
         if (result.task) {
