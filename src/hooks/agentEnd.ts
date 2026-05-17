@@ -603,20 +603,15 @@ export function registerAgentEndHook(api: OpenClawPluginApi, config?: MTeamPlugi
   api.on('agent_end', async (event: PluginHookAgentEndEvent, ctx: PluginHookAgentContext): Promise<void> => {
     const { sessionKey, agentId } = ctx;
     const rawMessageCount = event.messages?.length ?? 0;
-    api.logger?.info?.(
-      `[m-team] agent_end received sessionKey=${sessionKey ?? 'missing-session-key'} agentId=${agentId ?? 'missing-agent-id'} success=${event.success} messageCount=${rawMessageCount}`,
-    );
 
     const taskId = parseTaskId(sessionKey ?? '');
     if (!taskId) {
-      logAgentEndSkip('SESSION_TASK_ID_MISS', {
-        sessionKey,
-        agentId,
-        success: event.success,
-        messageCount: rawMessageCount,
-      });
       return;
     }
+    
+    api.logger?.info?.(
+      `[m-team] agent_end received sessionKey=${sessionKey ?? 'missing-session-key'} agentId=${agentId ?? 'missing-agent-id'} success=${event.success} messageCount=${rawMessageCount}`,
+    );
 
     if (!isExecutorSessionForTask(sessionKey, agentId, taskId)) {
       logAgentEndSkip('SESSION_NOT_EXECUTOR_TASK', {
